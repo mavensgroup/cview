@@ -1,8 +1,10 @@
+// src/preferences.rs
 use gtk4::{self as gtk, prelude::*};
 use gtk4::gdk;
 use std::rc::Rc;
 use std::cell::RefCell;
 use crate::state::AppState;
+use crate::elements::get_atom_properties;
 
 pub fn show_preferences_window(
     parent: &gtk::ApplicationWindow,
@@ -13,208 +15,216 @@ pub fn show_preferences_window(
         .title("Preferences")
         .transient_for(parent)
         .modal(false)
-        .default_width(360)
-        .default_height(450)
+        .default_width(380)
+        .default_height(600)
         .resizable(false)
         .build();
 
-    // Main container
     let main_vbox = gtk::Box::new(gtk::Orientation::Vertical, 0);
-
-    // The Tab Widget (Notebook)
     let notebook = gtk::Notebook::new();
-    notebook.set_vexpand(true); // Fill available space
+    notebook.set_vexpand(true);
 
-    // --- TAB 1: APPEARANCE ---
     let appearance_tab = build_appearance_tab(state.clone(), drawing_area.clone());
     notebook.append_page(&appearance_tab, Some(&gtk::Label::new(Some("Appearance"))));
 
-    // --- TAB 2: SYSTEM (Future Proofing) ---
-    // In the future, you can add physics/performance settings here.
-    let system_tab = build_system_tab();
-    notebook.append_page(&system_tab, Some(&gtk::Label::new(Some("System"))));
-
     main_vbox.append(&notebook);
 
-    // --- FOOTER (Close Button) ---
+    // Footer
     let footer_box = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-    // FIXED: Replaced set_margin_all with explicit setters
     footer_box.set_margin_top(10);
     footer_box.set_margin_bottom(10);
-    footer_box.set_margin_start(10);
     footer_box.set_margin_end(10);
     footer_box.set_halign(gtk::Align::End);
 
-    let close_btn = gtk::Button::with_label("Close");
+    let btn_close = gtk::Button::with_label("Close");
     let win_clone = window.clone();
-    close_btn.connect_clicked(move |_| win_clone.close());
-
-    footer_box.append(&close_btn);
+    btn_close.connect_clicked(move |_| win_clone.close());
+    footer_box.append(&btn_close);
     main_vbox.append(&footer_box);
 
     window.set_child(Some(&main_vbox));
     window.present();
 }
 
-/// Helper: Builds the "Appearance" Tab content
 fn build_appearance_tab(
     state: Rc<RefCell<AppState>>,
-    drawing_area: gtk::DrawingArea
-) -> gtk::Box {
-    let container = gtk::Box::new(gtk::Orientation::Vertical, 15);
-    // FIXED: Replaced set_margin_all
+    drawing_area: gtk::DrawingArea,
+) -> gtk::ScrolledWindow {
+    let scroll = gtk::ScrolledWindow::new();
+    scroll.set_hscrollbar_policy(gtk::PolicyType::Never);
+
+    let container = gtk::Box::new(gtk::Orientation::Vertical, 10);
     container.set_margin_top(15);
     container.set_margin_bottom(15);
     container.set_margin_start(15);
     container.set_margin_end(15);
 
-    // --- Helper for sliders ---
-    fn add_slider(
-        label: &str,
-        val: f64,
-        min: f64,
-        max: f64,
-        step: f64,
-        box_cont: &gtk::Box,
-        cb: impl Fn(f64) + 'static
-    ) {
-        let lbl = gtk::Label::new(Some(label));
-        lbl.set_halign(gtk::Align::Start);
-        lbl.set_margin_top(5);
-        box_cont.append(&lbl);
+    // --- 1. BSDF ---
+    let frame_mat = gtk::Frame::new(Some("Material"));
+    let vbox_mat = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    vbox_mat.set_margin_top(10); vbox_mat.set_margin_bottom(10);
+    vbox_mat.set_margin_start(10); vbox_mat.set_margin_end(10);
 
-        let sc = gtk::Scale::with_range(gtk::Orientation::Horizontal, min, max, step);
-        sc.set_value(val);
-        sc.set_margin_bottom(5);
-        sc.connect_value_changed(move |s| cb(s.value()));
-        box_cont.append(&sc);
-    }
-
-    // --- GROUP 1: ATOMS ---
-    let frame_atoms = gtk::Frame::new(Some("Atoms"));
-    let vbox_atoms = gtk::Box::new(gtk::Orientation::Vertical, 5);
-    // FIXED: Replaced set_margin_all
-    vbox_atoms.set_margin_top(10);
-    vbox_atoms.set_margin_bottom(10);
-    vbox_atoms.set_margin_start(10);
-    vbox_atoms.set_margin_end(10);
-
-    // 1.1 Scale
+    // Metallic
+    vbox_mat.append(&gtk::Label::new(Some("Metallic")));
+    let scale_met = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.0, 1.0, 0.01);
+    scale_met.set_value(state.borrow().style.metallic);
     let s = state.clone(); let da = drawing_area.clone();
-    add_slider("Size (Scale)", state.borrow().style.atom_scale, 0.1, 1.2, 0.05, &vbox_atoms, move |v| {
-        s.borrow_mut().style.atom_scale = v;
-        da.queue_draw();
-    });
+    scale_met.connect_value_changed(move |sc| { s.borrow_mut().style.metallic = sc.value(); da.queue_draw(); });
+    vbox_mat.append(&scale_met);
 
-    // 1.2 Shine
+    // Roughness
+    vbox_mat.append(&gtk::Label::new(Some("Roughness")));
+    let scale_rough = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.0, 1.0, 0.01);
+    scale_rough.set_value(state.borrow().style.roughness);
     let s = state.clone(); let da = drawing_area.clone();
-    add_slider("Shine / Glossiness", state.borrow().style.shine_strength, 0.0, 1.0, 0.1, &vbox_atoms, move |v| {
-        s.borrow_mut().style.shine_strength = v;
-        da.queue_draw();
-    });
+    scale_rough.connect_value_changed(move |sc| { s.borrow_mut().style.roughness = sc.value(); da.queue_draw(); });
+    vbox_mat.append(&scale_rough);
+
+    // Transmission
+    vbox_mat.append(&gtk::Label::new(Some("Transmission")));
+    let scale_trans = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.0, 1.0, 0.01);
+    scale_trans.set_value(state.borrow().style.transmission);
+    let s = state.clone(); let da = drawing_area.clone();
+    scale_trans.connect_value_changed(move |sc| { s.borrow_mut().style.transmission = sc.value(); da.queue_draw(); });
+    vbox_mat.append(&scale_trans);
+
+    frame_mat.set_child(Some(&vbox_mat));
+    container.append(&frame_mat);
+
+    // --- 2. ATOM COLORS (DYNAMIC LIST) ---
+    let frame_atoms = gtk::Frame::new(Some("Element Colors"));
+    let vbox_atoms = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    vbox_atoms.set_margin_top(10); vbox_atoms.set_margin_bottom(10);
+    vbox_atoms.set_margin_start(10); vbox_atoms.set_margin_end(10);
+
+    // Global Scale
+    let box_scale = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    box_scale.append(&gtk::Label::new(Some("Atom Size Scale")));
+    let scale_atom = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.1, 2.0, 0.05);
+    scale_atom.set_hexpand(true);
+    scale_atom.set_value(state.borrow().style.atom_scale);
+    let s = state.clone(); let da = drawing_area.clone();
+    scale_atom.connect_value_changed(move |sc| { s.borrow_mut().style.atom_scale = sc.value(); da.queue_draw(); });
+    box_scale.append(&scale_atom);
+    vbox_atoms.append(&box_scale);
 
     vbox_atoms.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
 
-    // 1.3 Uniform Color
-    let box_atom_col = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-    box_atom_col.set_margin_top(5);
+    // Dynamic Element List
+    let elements = if let Some(structure) = &state.borrow().structure {
+        let mut unique: Vec<String> = structure.atoms.iter().map(|a| a.element.clone()).collect();
+        unique.sort();
+        unique.dedup();
+        unique
+    } else {
+        vec![]
+    };
 
-    let check_uniform = gtk::CheckButton::with_label("Uniform Color");
-    check_uniform.set_active(state.borrow().style.use_uniform_atom_color);
+    if elements.is_empty() {
+        vbox_atoms.append(&gtk::Label::new(Some("(No structure loaded)")));
+    } else {
+        for elem in elements {
+            let row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
 
-    let btn_atom = gtk::ColorButton::new();
-    let (ar, ag, ab) = state.borrow().style.atom_color;
-    btn_atom.set_rgba(&gdk::RGBA::new(ar as f32, ag as f32, ab as f32, 1.0));
-    btn_atom.set_sensitive(state.borrow().style.use_uniform_atom_color);
-    btn_atom.set_hexpand(true);
-    btn_atom.set_halign(gtk::Align::End);
+            // Label (e.g., "C")
+            let lbl = gtk::Label::new(Some(&format!("Element {}", elem)));
+            lbl.set_width_chars(10);
+            lbl.set_xalign(0.0);
+            row.append(&lbl);
 
-    // Logic
-    let s = state.clone();
-    let da = drawing_area.clone();
-    let btn_atom_clone = btn_atom.clone();
-    check_uniform.connect_toggled(move |btn| {
-        let is_active = btn.is_active();
-        s.borrow_mut().style.use_uniform_atom_color = is_active;
-        btn_atom_clone.set_sensitive(is_active);
-        da.queue_draw();
-    });
+            // Current Color Lookup
+            let current_color = {
+                let st = state.borrow();
+                if let Some(c) = st.style.element_colors.get(&elem) {
+                    *c
+                } else {
+                    let (_, def) = get_atom_properties(&elem);
+                    def
+                }
+            };
 
-    let s = state.clone();
-    let da = drawing_area.clone();
-    btn_atom.connect_color_set(move |b| {
-        let c = b.rgba();
-        s.borrow_mut().style.atom_color = (c.red() as f64, c.green() as f64, c.blue() as f64);
-        da.queue_draw();
-    });
+            // Color Button
+            let btn = gtk::ColorButton::new();
+            btn.set_rgba(&gdk::RGBA::new(
+                current_color.0 as f32,
+                current_color.1 as f32,
+                current_color.2 as f32,
+                1.0
+            ));
 
-    box_atom_col.append(&check_uniform);
-    box_atom_col.append(&btn_atom);
-    vbox_atoms.append(&box_atom_col);
+            let s = state.clone();
+            let da = drawing_area.clone();
+            let elem_key = elem.clone();
+
+            btn.connect_color_set(move |b| {
+                let c = b.rgba();
+                let new_col = (c.red() as f64, c.green() as f64, c.blue() as f64);
+                s.borrow_mut().style.element_colors.insert(elem_key.clone(), new_col);
+                da.queue_draw();
+            });
+
+            row.append(&btn);
+
+            // Reset Button
+            let btn_reset = gtk::Button::with_label("Reset");
+            let s_r = state.clone();
+            let da_r = drawing_area.clone();
+            let elem_key_r = elem.clone();
+            let btn_col_ref = btn.clone(); // To update the color button visually
+
+            btn_reset.connect_clicked(move |_| {
+                // Remove from map
+                s_r.borrow_mut().style.element_colors.remove(&elem_key_r);
+
+                // Get default and update button visual
+                let (_, def) = get_atom_properties(&elem_key_r);
+                btn_col_ref.set_rgba(&gdk::RGBA::new(def.0 as f32, def.1 as f32, def.2 as f32, 1.0));
+
+                da_r.queue_draw();
+            });
+
+            row.append(&btn_reset);
+            vbox_atoms.append(&row);
+        }
+    }
+
     frame_atoms.set_child(Some(&vbox_atoms));
     container.append(&frame_atoms);
 
-
-    // --- GROUP 2: BONDS ---
+    // --- 3. BONDS ---
     let frame_bonds = gtk::Frame::new(Some("Bonds"));
-    let vbox_bonds = gtk::Box::new(gtk::Orientation::Vertical, 5);
-    // FIXED: Replaced set_margin_all
-    vbox_bonds.set_margin_top(10);
-    vbox_bonds.set_margin_bottom(10);
-    vbox_bonds.set_margin_start(10);
-    vbox_bonds.set_margin_end(10);
+    let vbox_bonds = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    vbox_bonds.set_margin_top(10); vbox_bonds.set_margin_bottom(10);
+    vbox_bonds.set_margin_start(10); vbox_bonds.set_margin_end(10);
 
-    // 2.1 Radius
+    let box_brad = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    box_brad.append(&gtk::Label::new(Some("Radius")));
+    let scale_brad = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.01, 0.5, 0.01);
+    scale_brad.set_hexpand(true);
+    scale_brad.set_value(state.borrow().style.bond_radius);
     let s = state.clone(); let da = drawing_area.clone();
-    add_slider("Thickness (Radius)", state.borrow().style.bond_radius, 0.01, 0.3, 0.01, &vbox_bonds, move |v| {
-        s.borrow_mut().style.bond_radius = v;
-        da.queue_draw();
-    });
+    scale_brad.connect_value_changed(move |sc| { s.borrow_mut().style.bond_radius = sc.value(); da.queue_draw(); });
+    box_brad.append(&scale_brad);
+    vbox_bonds.append(&box_brad);
 
-    vbox_bonds.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
-
-    // 2.2 Color
-    let box_bond_col = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-    box_bond_col.set_margin_top(5);
-
-    let lbl_bond_c = gtk::Label::new(Some("Color"));
-    lbl_bond_c.set_halign(gtk::Align::Start);
-
-    let btn_bond = gtk::ColorButton::new();
+    let box_bcol = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    box_bcol.append(&gtk::Label::new(Some("Color")));
+    let btn_bcol = gtk::ColorButton::new();
     let (br, bg, bb) = state.borrow().style.bond_color;
-    btn_bond.set_rgba(&gdk::RGBA::new(br as f32, bg as f32, bb as f32, 1.0));
-    btn_bond.set_hexpand(true);
-    btn_bond.set_halign(gtk::Align::End);
-
+    btn_bcol.set_rgba(&gdk::RGBA::new(br as f32, bg as f32, bb as f32, 1.0));
     let s = state.clone(); let da = drawing_area.clone();
-    btn_bond.connect_color_set(move |b| {
+    btn_bcol.connect_color_set(move |b| {
         let c = b.rgba();
         s.borrow_mut().style.bond_color = (c.red() as f64, c.green() as f64, c.blue() as f64);
         da.queue_draw();
     });
+    box_bcol.append(&btn_bcol);
+    vbox_bonds.append(&box_bcol);
 
-    box_bond_col.append(&lbl_bond_c);
-    box_bond_col.append(&btn_bond);
-    vbox_bonds.append(&box_bond_col);
     frame_bonds.set_child(Some(&vbox_bonds));
     container.append(&frame_bonds);
 
-    container
-}
-
-/// Helper: Builds a placeholder "System" Tab
-fn build_system_tab() -> gtk::Box {
-    let container = gtk::Box::new(gtk::Orientation::Vertical, 15);
-    // FIXED: Replaced set_margin_all
-    container.set_margin_top(20);
-    container.set_margin_bottom(20);
-    container.set_margin_start(20);
-    container.set_margin_end(20);
-
-    // Placeholder content
-    let lbl = gtk::Label::new(Some("System settings (Physics, Performance) will go here."));
-    lbl.set_opacity(0.5); // Make it look disabled/placeholder
-    container.append(&lbl);
-
-    container
+    scroll.set_child(Some(&container));
+    scroll
 }

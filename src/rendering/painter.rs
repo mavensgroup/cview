@@ -31,58 +31,82 @@ impl<'a> RenderPrimitive<'a> {
     }
 }
 
-// --- 2. Shaders & Helpers ---
+// --- 2. Principled BSDF Shaders ---
 
-/// Calculates a "fog" factor based on Z-depth.
-/// Returns 0.0 (far/foggy) to 1.0 (near/clear).
-fn calculate_fog(z: f64, min_z: f64, max_z: f64) -> f64 {
-    if (max_z - min_z).abs() < 0.001 { return 1.0; }
-    let norm = (z - min_z) / (max_z - min_z);
-    // Map to 0.5..1.0 so back items don't disappear completely
-    0.5 + (norm * 0.5)
-}
-
-fn set_publication_gradient(
+/// Creates a radial gradient simulating physically based materials
+fn set_principled_gradient(
     cr: &cairo::Context,
     cx: f64, cy: f64, r: f64,
     base_color: (f64, f64, f64),
-    fog: f64,
-    style: &crate::state::RenderStyle,
+    metallic: f64,
+    roughness: f64,
+    transmission: f64
 ) {
     let (red, green, blue) = base_color;
-    let fr = red * fog;
-    let fg = green * fog;
-    let fb = blue * fog;
+    let alpha = 1.0 - transmission;
 
-    // Advanced "Ceramic" Shader for Publication
+    // 1. Calculate Specular Color (The "Shine")
+    // Dielectrics (Plastic/Ceramic) always have white highlights.
+    // Metals have highlights tinted by their base color.
+    // Formula: Mix(White, BaseColor, Metallic)
+    let spec_r = 1.0 + (red - 1.0) * metallic;
+    let spec_g = 1.0 + (green - 1.0) * metallic;
+    let spec_b = 1.0 + (blue - 1.0) * metallic;
+
+    // 2. Calculate Highlight Size based on Roughness
+    // Smooth (0.0) = Tight point (0.05)
+    // Rough (1.0) = Broad diffuse spot (0.4)
+    let highlight_size = 0.05 + roughness * 0.35;
+
+    // 3. Light Source Offset (Top-Left for 3D effect)
+    let light_offset = 0.25;
+
     let pat = cairo::RadialGradient::new(
-        cx - r * 0.3, cy - r * 0.3, r * style.shine_hardness, // Focus point (Highlight)
-        cx, cy, r                                             // Extent
+        cx - r * light_offset, cy - r * light_offset, r * highlight_size, // Focus (Highlight)
+        cx, cy, r                                                         // Edge
     );
 
-    // Stop 0: Specular Highlight (White)
-    pat.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, style.shine_strength * fog);
+    // Stop 0: Specular Highlight
+    // Rougher surfaces scatter light, making the highlight dimmer/more diffuse
+    let shine_alpha = (1.0 - roughness * 0.5) * alpha;
+    pat.add_color_stop_rgba(0.0, spec_r, spec_g, spec_b, shine_alpha);
 
-    // Stop 0.3: True Color (Lit side)
-    pat.add_color_stop_rgb(0.3, fr, fg, fb);
+    // Stop 1: Lit Surface (Diffuse)
+    // Metals absorb more light in the diffuse component (darker body)
+    let lit_pos = 0.1 + roughness * 0.2;
+    pat.add_color_stop_rgba(lit_pos, red, green, blue, alpha);
 
-    // Stop 0.8: Shadow/Shading
-    pat.add_color_stop_rgb(0.8, fr * 0.6, fg * 0.6, fb * 0.6);
+    // Stop 2: Core Shadow (Ambient Occlusion)
+    // Metals have higher contrast shadows
+    let ambient_level = 0.4 - (metallic * 0.3);
+    pat.add_color_stop_rgba(0.85,
+        red * ambient_level,
+        green * ambient_level,
+        blue * ambient_level,
+        alpha
+    );
 
-    // Stop 1.0: Rim Shadow (Dark edges)
-    pat.add_color_stop_rgb(1.0, fr * 0.2, fg * 0.2, fb * 0.2);
+    // Stop 3: Rim / Edge
+    // Transmissive materials (glass) don't have dark rims
+    let rim_darkness = 0.1 * (1.0 - transmission);
+    pat.add_color_stop_rgba(1.0,
+        red * rim_darkness,
+        green * rim_darkness,
+        blue * rim_darkness,
+        alpha
+    );
 
     cr.set_source(&pat).unwrap();
 }
 
+/// Draws a bond as a cylinder impostor with material properties
 fn draw_cylinder_impostor(
     cr: &cairo::Context,
     p1: [f64; 3],
     p2: [f64; 3],
     radius: f64,
-    is_export: bool,
-    fog: f64,
-    style: &crate::state::RenderStyle,
+    color: (f64, f64, f64),
+    metallic: f64, roughness: f64, transmission: f64
 ) {
     let dx = p2[0] - p1[0];
     let dy = p2[1] - p1[1];
@@ -100,27 +124,32 @@ fn draw_cylinder_impostor(
     let c3x = p2[0] - nx * radius; let c3y = p2[1] - ny * radius;
     let c4x = p1[0] - nx * radius; let c4y = p1[1] - ny * radius;
 
-    // Linear Gradient for "Tube" effect
     let gradient = cairo::LinearGradient::new(c1x, c1y, c4x, c4y);
+    let (r, g, b) = color;
+    let alpha = 1.0 - transmission;
 
-    let (br, bg, bb) = style.bond_color;
+    // Specular mix for cylinder
+    let sr = 1.0 + (r - 1.0) * metallic;
+    let sg = 1.0 + (g - 1.0) * metallic;
+    let sb = 1.0 + (b - 1.0) * metallic;
 
-    if is_export {
-        // High-Quality Metallic Bond for Export
-        let r = br * fog;
-        let g = bg * fog;
-        let b = bb * fog;
+    let shadow = 0.3 - (metallic * 0.2);
 
-        gradient.add_color_stop_rgb(0.0, r*0.2, g*0.2, b*0.2);      // Edge
-        gradient.add_color_stop_rgb(0.4, r, g, b);                  // Body
-        gradient.add_color_stop_rgb(0.6, r*1.5, g*1.5, b*1.5);      // Specular Highlight
-        gradient.add_color_stop_rgb(0.9, r*0.2, g*0.2, b*0.2);      // Edge
-    } else {
-        // Screen Mode (Transparency enabled)
-        gradient.add_color_stop_rgba(0.0, br*0.4, bg*0.4, bb*0.4, fog);
-        gradient.add_color_stop_rgba(0.5, br, bg, bb, fog);
-        gradient.add_color_stop_rgba(1.0, br*0.2, bg*0.2, bb*0.2, fog);
-    }
+    // Edge (Shadow)
+    gradient.add_color_stop_rgba(0.0, r*shadow, g*shadow, b*shadow, alpha);
+    // Body
+    gradient.add_color_stop_rgba(0.3, r, g, b, alpha);
+
+    // Highlight Strip
+    let h_width = 0.05 + roughness * 0.2;
+    gradient.add_color_stop_rgba(0.5 - h_width, r, g, b, alpha);
+    gradient.add_color_stop_rgba(0.5, sr, sg, sb, alpha * (1.0 - roughness * 0.3));
+    gradient.add_color_stop_rgba(0.5 + h_width, r, g, b, alpha);
+
+    // Body
+    gradient.add_color_stop_rgba(0.7, r, g, b, alpha);
+    // Edge (Shadow)
+    gradient.add_color_stop_rgba(1.0, r*shadow, g*shadow, b*shadow, alpha);
 
     cr.set_source(&gradient).unwrap();
     cr.move_to(c1x, c1y);
@@ -129,13 +158,6 @@ fn draw_cylinder_impostor(
     cr.line_to(c4x, c4y);
     cr.close_path();
     cr.fill().unwrap();
-
-    // Optional: Tiny outlines for export definition
-    if is_export {
-        cr.set_source_rgba(0.0, 0.0, 0.0, 0.5 * fog);
-        cr.set_line_width(0.5);
-        cr.stroke().unwrap();
-    }
 }
 
 // --- 3. Main Drawing Functions ---
@@ -143,13 +165,8 @@ fn draw_cylinder_impostor(
 pub fn draw_unit_cell(cr: &cairo::Context, corners: &[[f64; 2]], is_export: bool) {
     if corners.len() != 8 { return; }
 
-    if is_export {
-        cr.set_source_rgb(0.1, 0.1, 0.1); // Solid Black/Dark Grey
-        cr.set_line_width(1.5);
-    } else {
-        cr.set_source_rgba(0.6, 0.6, 0.6, 0.3); // Faint on Screen
-        cr.set_line_width(1.0);
-    }
+    cr.set_source_rgba(0.0, 0.0, 0.0, 1.0);
+    cr.set_line_width(if is_export { 2.0 } else { 1.5 });
 
     let edges = [
         (0,1), (0,2), (0,4), (1,3), (1,5), (2,3),
@@ -165,13 +182,12 @@ pub fn draw_unit_cell(cr: &cairo::Context, corners: &[[f64; 2]], is_export: bool
     }
 }
 
-/// The Main Render Function: Sorts and Draws EVERYTHING
 pub fn draw_structure(
     cr: &cairo::Context,
     atoms: &[RenderAtom],
     state: &AppState,
     scale: f64,
-    is_export: bool
+    _is_export: bool
 ) {
     let cutoff_sq = state.bond_cutoff * state.bond_cutoff;
     let mut primitives: Vec<RenderPrimitive> = Vec::with_capacity(atoms.len() * 4);
@@ -181,34 +197,30 @@ pub fn draw_structure(
         primitives.push(RenderPrimitive::Atom(atom));
     }
 
-    // 2. Collect Bonds (Dynamically generated & Shortened)
+    // 2. Collect Bonds
     for (i, r1) in atoms.iter().enumerate() {
-        if r1.is_ghost { continue; }
+        if r1.is_ghost { continue; } // Don't generate bonds *starting* from ghosts (avoids duplicates)
         for (j, r2) in atoms.iter().enumerate() {
-            if i >= j { continue; }
+            if i >= j { continue; } // Avoid double counting and self-bonds
 
             let v_x = r2.screen_pos[0] - r1.screen_pos[0];
             let v_y = r2.screen_pos[1] - r1.screen_pos[1];
             let v_z = r2.screen_pos[2] - r1.screen_pos[2];
 
-            // Check distance (using scale-normalized coordinates)
+            // Normalize distance check by scale
             let d_x = v_x / scale;
             let d_y = v_y / scale;
-            let d_z = v_z; // Z is roughly in Angstrom scale already in this projection logic
+            let d_z = v_z;
 
             if (d_x*d_x + d_y*d_y + d_z*d_z) < cutoff_sq {
-                // Determine Radii
                 let (raw_r1, _) = get_atom_properties(&r1.element);
                 let (raw_r2, _) = get_atom_properties(&r2.element);
 
-                // Screen Radii (must match atom draw scale)
                 let r1_px = raw_r1 * state.style.atom_scale * scale;
                 let r2_px = raw_r2 * state.style.atom_scale * scale;
 
                 let full_dist = (v_x*v_x + v_y*v_y + v_z*v_z).sqrt();
 
-                // Shorten bonds so they start/end INSIDE the sphere but don't poke the face
-                // Shortening by 80% of radius ensures they disappear into the sphere
                 let off1 = r1_px * 0.8;
                 let off2 = r2_px * 0.8;
 
@@ -237,54 +249,45 @@ pub fn draw_structure(
         }
     }
 
-    // 3. Calculate Z-Range for Fog
-    let mut min_z = f64::MAX;
-    let mut max_z = f64::MIN;
-    for p in &primitives {
-        let z = p.z_depth();
-        if z < min_z { min_z = z; }
-        if z > max_z { max_z = z; }
-    }
-
-    // 4. SORT by Z-Depth (Painter's Algorithm: Back to Front)
+    // 3. Sort by Z-Depth (Painter's Algorithm)
+    // Draw furthest objects first
     primitives.sort_by(|a, b| {
         a.z_depth().partial_cmp(&b.z_depth()).unwrap_or(Ordering::Equal)
     });
 
-    // 5. Draw Loop
+    // 4. Draw Loop
     for prim in primitives {
         match prim {
             RenderPrimitive::Bond(bond) => {
-                let z = (bond.start[2] + bond.end[2]) / 2.0;
-                let fog = calculate_fog(z, min_z, max_z);
-                draw_cylinder_impostor(cr, bond.start, bond.end, bond.radius, is_export, fog, &state.style);
+                draw_cylinder_impostor(
+                    cr,
+                    bond.start, bond.end, bond.radius,
+                    state.style.bond_color,
+                    state.style.metallic, state.style.roughness, state.style.transmission
+                );
             },
             RenderPrimitive::Atom(atom) => {
-                let fog = calculate_fog(atom.screen_pos[2], min_z, max_z);
                 let (raw_r, default_rgb) = get_atom_properties(&atom.element);
 
-                // --- COLOR LOGIC: Check Uniform vs Element ---
-                let rgb = if state.style.use_uniform_atom_color {
-                    state.style.atom_color
-                } else {
-                    default_rgb
-                };
+                // PRIORITY:
+                // 1. Element Override (from HashMap)
+                // 2. Default CPK color
+                let rgb = state.style.element_colors
+                    .get(&atom.element)
+                    .copied()
+                    .unwrap_or(default_rgb);
 
                 let radius = raw_r * state.style.atom_scale * scale;
 
-                set_publication_gradient(cr, atom.screen_pos[0], atom.screen_pos[1], radius, rgb, fog, &state.style);
+                set_principled_gradient(
+                    cr,
+                    atom.screen_pos[0], atom.screen_pos[1], radius,
+                    rgb,
+                    state.style.metallic, state.style.roughness, state.style.transmission
+                );
 
                 cr.arc(atom.screen_pos[0], atom.screen_pos[1], radius, 0.0, 2.0 * PI);
-
-                if is_export {
-                    cr.fill_preserve().unwrap();
-                    // Crisp outline for publication
-                    cr.set_source_rgba(0.0, 0.0, 0.0, 0.8 * fog);
-                    cr.set_line_width(0.8);
-                    cr.stroke().unwrap();
-                } else {
-                    cr.fill().unwrap();
-                }
+                cr.fill().unwrap();
             }
         }
     }
@@ -314,13 +317,14 @@ pub fn draw_axes(cr: &cairo::Context, state: &AppState, width: f64, height: f64)
         ([0.0, 0.0, 1.0], (0.2, 0.4, 0.9), state.show_axis_z),
     ];
 
+    // Sort axes so the one pointing 'in' draws first
     let mut sorted_axes: Vec<_> = axes_data.iter().map(|(v, c, show)| {
         (rotate_vec(*v), c, show)
     }).collect();
 
     sorted_axes.sort_by(|(a,_,_), (b,_,_)| a[2].partial_cmp(&b[2]).unwrap());
 
-    cr.set_line_width(hud_size * 0.05);
+    cr.set_line_width(2.0);
     cr.set_line_cap(cairo::LineCap::Round);
 
     for (r, color, show) in sorted_axes {

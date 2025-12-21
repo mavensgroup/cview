@@ -1,29 +1,26 @@
+// src/state.rs
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap; // Import HashMap
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum RotationCenter {
-    Centroid,
-    UnitCell,
-}
+pub enum RotationCenter { Centroid, UnitCell }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum ExportFormat {
-    Png,
-    Pdf,
-}
+pub enum ExportFormat { Png, Pdf }
 
-// Updated RenderStyle with Atom Color settings
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)] // Removed Copy (HashMap is not Copy)
 pub struct RenderStyle {
     pub atom_scale: f64,
     pub bond_radius: f64,
     pub bond_color: (f64, f64, f64),
-    pub shine_strength: f64,
-    pub shine_hardness: f64,
 
-    // NEW: Atom Color Preferences
-    pub use_uniform_atom_color: bool, // Toggle switch
-    pub atom_color: (f64, f64, f64),  // The custom color
+    // Principled BSDF
+    pub metallic: f64,
+    pub roughness: f64,
+    pub transmission: f64,
+
+    // NEW: Per-Element Color Map (e.g., "C" -> (0.1, 0.1, 0.1))
+    pub element_colors: HashMap<String, (f64, f64, f64)>,
 }
 
 impl Default for RenderStyle {
@@ -32,12 +29,12 @@ impl Default for RenderStyle {
             atom_scale: 0.4,
             bond_radius: 0.12,
             bond_color: (0.5, 0.5, 0.5),
-            shine_strength: 0.9,
-            shine_hardness: 0.05,
+            metallic: 0.0,
+            roughness: 0.3,
+            transmission: 0.0,
 
-            // Default: Use Element Colors (CPK), but if toggled, use Silver
-            use_uniform_atom_color: false,
-            atom_color: (0.7, 0.7, 0.7),
+            // Start empty. If missing, we use the hardcoded defaults.
+            element_colors: HashMap::new(),
         }
     }
 }
@@ -54,7 +51,6 @@ pub struct AppState {
     pub rotation_mode: RotationCenter,
     pub load_conventional: bool,
     pub default_export_format: ExportFormat,
-
     pub style: RenderStyle,
 }
 

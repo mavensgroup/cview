@@ -1,3 +1,4 @@
+// src/config.rs
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -8,9 +9,8 @@ pub struct Config {
     pub rotation_mode: RotationCenter,
     pub load_conventional: bool,
     pub default_export_format: ExportFormat,
-    // We can choose to save style or not.
-    // Since you asked for it to be temporary, we won't strictly enforce loading it,
-    // but including it here allows future persistence if you change your mind.
+
+    // We save the style (colors, materials) so your changes persist
     #[serde(default)]
     pub style: RenderStyle,
 }
@@ -20,7 +20,7 @@ impl Default for Config {
         Self {
             rotation_mode: RotationCenter::Centroid,
             load_conventional: false,
-            default_export_format: ExportFormat::Png, // Fixed: Png instead of PNG
+            default_export_format: ExportFormat::Png,
             style: RenderStyle::default(),
         }
     }
@@ -43,7 +43,10 @@ pub fn save_config(state: &AppState) {
         rotation_mode: state.rotation_mode,
         load_conventional: state.load_conventional,
         default_export_format: state.default_export_format,
-        style: state.style,
+
+        // FIX: We must .clone() the style because it now contains a HashMap
+        // and cannot be implicitly copied.
+        style: state.style.clone(),
     };
 
     if let Ok(json) = serde_json::to_string_pretty(&config) {
