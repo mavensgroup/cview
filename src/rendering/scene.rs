@@ -1,12 +1,11 @@
+// src/rendering/scene.rs
 use crate::state::{AppState, RotationCenter};
 
+// FIXED: Clean struct definition
 pub struct RenderAtom {
     pub screen_pos: [f64; 3], // x, y, z (depth)
     pub element: String,
-
-    #[allow(dead_code)]
-    pub original_idx: usize,
-
+    pub original_index: usize, // Used for selection
     pub is_ghost: bool,
 }
 
@@ -54,7 +53,6 @@ pub fn calculate_scene(
     let mut min_y = f64::MAX; let mut max_y = f64::MIN;
 
     // --- 1. Calculate Lattice Corners ---
-    // We do this first to include them in the auto-zoom calculation
     let mut raw_corners = Vec::new();
     for x in 0..=1 {
         for y in 0..=1 {
@@ -72,7 +70,6 @@ pub fn calculate_scene(
     for &p in &raw_corners {
         let r = rotate(p);
         rotated_corners.push(r);
-        // Expand bounds to fit the box
         if r[0] < min_x { min_x = r[0]; }
         if r[0] > max_x { max_x = r[0]; }
         if r[1] < min_y { min_y = r[1]; }
@@ -119,7 +116,7 @@ pub fn calculate_scene(
             render_atoms.push(RenderAtom {
                 screen_pos: r_pos,
                 element: atom.element.clone(),
-                original_idx: i,
+                original_index: i, // FIXED: Correct field name
                 is_ghost: ghost,
             });
         }
@@ -141,9 +138,7 @@ pub fn calculate_scene(
         final_scale = scale_x.min(scale_y) * state.zoom;
     }
 
-    // Dynamic Margin for Export (prevents cutoff of atoms)
-    let export_margin = if is_export { final_scale * 3.0 } else { 0.0 };
-
+    let export_margin = if is_export { final_scale * 1.5 } else { 0.0 };
     let export_w = (max_x - min_x) * final_scale + export_margin;
     let export_h = (max_y - min_y) * final_scale + export_margin;
 
@@ -151,14 +146,11 @@ pub fn calculate_scene(
     let win_cy = if is_export { export_h / 2.0 } else { win_h / 2.0 };
 
     // --- 4. Apply Screen Transform ---
-
-    // Transform Atoms
     for atom in &mut render_atoms {
         atom.screen_pos[0] = (atom.screen_pos[0] - box_cx) * final_scale + win_cx;
         atom.screen_pos[1] = (atom.screen_pos[1] - box_cy) * final_scale + win_cy;
     }
 
-    // Transform Lattice Corners
     let final_corners: Vec<[f64; 2]> = rotated_corners.iter().map(|p| {
         [
             (p[0] - box_cx) * final_scale + win_cx,
@@ -166,7 +158,6 @@ pub fn calculate_scene(
         ]
     }).collect();
 
-    // Sort by Z (painter's algorithm)
     render_atoms.sort_by(|a, b| a.screen_pos[2].partial_cmp(&b.screen_pos[2]).unwrap());
 
     (render_atoms, final_corners, SceneBounds {
@@ -182,7 +173,6 @@ fn get_rotation_center(state: &AppState) -> [f64; 3] {
             let v = s.lattice;
             return [(v[0][0]+v[1][0]+v[2][0])*0.5, (v[0][1]+v[1][1]+v[2][1])*0.5, (v[0][2]+v[1][2]+v[2][2])*0.5];
         }
-        // Centroid
         let mut sum = [0.0; 3];
         for a in &s.atoms { sum[0]+=a.position[0]; sum[1]+=a.position[1]; sum[2]+=a.position[2]; }
         let n = s.atoms.len() as f64;

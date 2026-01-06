@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
 use crate::structure::{Atom, Structure};
+use std::io::Write;
 
 pub fn parse(path: &str) -> io::Result<Structure> {
     let path = Path::new(path);
@@ -236,4 +237,62 @@ fn parse_cif_val(line: &str) -> f64 {
 fn parse_cif_float(s: &str) -> f64 {
     let clean: String = s.chars().take_while(|c| *c != '(').collect();
     clean.parse().unwrap_or(0.0)
+}
+
+
+pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
+    let mut file = std::fs::File::create(path)?;
+
+    writeln!(file, "data_generated_by_cview")?;
+    writeln!(file, "_pd_phase_name 'Exported Structure'")?;
+    writeln!(file, "_symmetry_space_group_name_H-M 'P 1'")?;
+    writeln!(file, "_symmetry_Int_Tables_number 1")?;
+
+    // Calculate Cell Parameters (a, b, c, alpha, beta, gamma)
+    let a_vec = structure.lattice[0];
+    let b_vec = structure.lattice[1];
+    let c_vec = structure.lattice[2];
+
+    let a = (a_vec[0].powi(2) + a_vec[1].powi(2) + a_vec[2].powi(2)).sqrt();
+    let b = (b_vec[0].powi(2) + b_vec[1].powi(2) + b_vec[2].powi(2)).sqrt();
+    let c = (c_vec[0].powi(2) + c_vec[1].powi(2) + c_vec[2].powi(2)).sqrt();
+
+    // Dot products for angles
+    // alpha = angle between b and c
+    let b_dot_c = b_vec[0]*c_vec[0] + b_vec[1]*c_vec[1] + b_vec[2]*c_vec[2];
+    let a_dot_c = a_vec[0]*c_vec[0] + a_vec[1]*c_vec[1] + a_vec[2]*c_vec[2];
+    let a_dot_b = a_vec[0]*b_vec[0] + a_vec[1]*b_vec[1] + a_vec[2]*b_vec[2];
+
+    let to_deg = 180.0 / std::f64::consts::PI;
+    let alpha = (b_dot_c / (b * c)).acos() * to_deg;
+    let beta  = (a_dot_c / (a * c)).acos() * to_deg;
+    let gamma = (a_dot_b / (a * b)).acos() * to_deg;
+
+    writeln!(file, "_cell_length_a    {:.6}", a)?;
+    writeln!(file, "_cell_length_b    {:.6}", b)?;
+    writeln!(file, "_cell_length_c    {:.6}", c)?;
+    writeln!(file, "_cell_angle_alpha {:.6}", alpha)?;
+    writeln!(file, "_cell_angle_beta  {:.6}", beta)?;
+    writeln!(file, "_cell_angle_gamma {:.6}", gamma)?;
+
+    writeln!(file, "loop_")?;
+    writeln!(file, " _atom_site_label")?;
+    writeln!(file, " _atom_site_fract_x")?;
+    writeln!(file, " _atom_site_fract_y")?;
+    writeln!(file, " _atom_site_fract_z")?;
+
+    // Need fractional coordinates
+    let inv = crate::io::poscar::inverse_matrix(structure.lattice);
+
+    for (i, atom) in structure.atoms.iter().enumerate() {
+        let p = atom.position;
+        let u = p[0]*inv[0][0] + p[1]*inv[1][0] + p[2]*inv[2][0];
+        let v = p[0]*inv[0][1] + p[1]*inv[1][1] + p[2]*inv[2][1];
+        let w = p[0]*inv[0][2] + p[1]*inv[1][2] + p[2]*inv[2][2];
+
+        // Ensure unique label e.g., Fe1, Fe2
+        writeln!(file, " {}{} {:.6} {:.6} {:.6}", atom.element, i+1, u, v, w)?;
+    }
+
+    Ok(())
 }

@@ -1,9 +1,8 @@
-// src/preferences.rs
 use gtk4::{self as gtk, prelude::*};
 use gtk4::gdk;
 use std::rc::Rc;
 use std::cell::RefCell;
-use crate::state::AppState;
+use crate::state::{AppState, ExportFormat};
 use crate::elements::get_atom_properties;
 
 pub fn show_preferences_window(
@@ -15,7 +14,7 @@ pub fn show_preferences_window(
         .title("Preferences")
         .transient_for(parent)
         .modal(false)
-        .default_width(380)
+        .default_width(400)
         .default_height(600)
         .resizable(false)
         .build();
@@ -24,8 +23,13 @@ pub fn show_preferences_window(
     let notebook = gtk::Notebook::new();
     notebook.set_vexpand(true);
 
+    // --- Tab 1: Appearance ---
     let appearance_tab = build_appearance_tab(state.clone(), drawing_area.clone());
     notebook.append_page(&appearance_tab, Some(&gtk::Label::new(Some("Appearance"))));
+
+    // --- Tab 2: Export ---
+    let export_tab = build_export_tab(state.clone());
+    notebook.append_page(&export_tab, Some(&gtk::Label::new(Some("Export"))));
 
     main_vbox.append(&notebook);
 
@@ -44,6 +48,63 @@ pub fn show_preferences_window(
 
     window.set_child(Some(&main_vbox));
     window.present();
+}
+
+fn build_export_tab(state: Rc<RefCell<AppState>>) -> gtk::Box {
+    let container = gtk::Box::new(gtk::Orientation::Vertical, 10);
+
+    // Margins
+    container.set_margin_top(20);
+    container.set_margin_bottom(20);
+    container.set_margin_start(20);
+    container.set_margin_end(20);
+
+    // Label
+    let label_format = gtk::Label::builder()
+        .label("Default Export Format:")
+        .halign(gtk::Align::Start)
+        .build();
+
+    // Dropdown for PNG/PDF
+    let format_options = ["PNG Image", "PDF Document"];
+    let dropdown = gtk::DropDown::from_strings(&format_options);
+
+    // Set initial selection
+    let is_pdf = matches!(state.borrow().default_export_format, ExportFormat::Pdf);
+    dropdown.set_selected(if is_pdf { 1 } else { 0 });
+
+    // Connect Signal
+    let s = state.clone();
+    dropdown.connect_selected_notify(move |d| {
+        let idx = d.selected();
+        let mut st = s.borrow_mut();
+        st.default_export_format = match idx {
+            1 => ExportFormat::Pdf,
+            _ => ExportFormat::Png,
+        };
+
+        // !!! THIS IS THE MISSING KEY !!!
+        st.save_config();
+        // ------------------------------
+
+        println!("Preference saved: Default Export Format = {:?}", st.default_export_format);
+    });
+
+    // Helper text
+    let info_label = gtk::Label::builder()
+        .label("This sets the default format selected in the export dialog.\nYou can still change it manually when saving.")
+        .wrap(true)
+        .css_classes(["dim-label"])
+        .margin_top(10)
+        .halign(gtk::Align::Start)
+        .build();
+    info_label.set_opacity(0.7);
+
+    container.append(&label_format);
+    container.append(&dropdown);
+    container.append(&info_label);
+
+    container
 }
 
 fn build_appearance_tab(
@@ -171,16 +232,12 @@ fn build_appearance_tab(
             let s_r = state.clone();
             let da_r = drawing_area.clone();
             let elem_key_r = elem.clone();
-            let btn_col_ref = btn.clone(); // To update the color button visually
+            let btn_col_ref = btn.clone();
 
             btn_reset.connect_clicked(move |_| {
-                // Remove from map
                 s_r.borrow_mut().style.element_colors.remove(&elem_key_r);
-
-                // Get default and update button visual
                 let (_, def) = get_atom_properties(&elem_key_r);
                 btn_col_ref.set_rgba(&gdk::RGBA::new(def.0 as f32, def.1 as f32, def.2 as f32, 1.0));
-
                 da_r.queue_draw();
             });
 

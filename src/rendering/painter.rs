@@ -21,8 +21,6 @@ enum RenderPrimitive<'a> {
 }
 
 impl<'a> RenderPrimitive<'a> {
-    /// Returns the average Z-depth of the object for sorting.
-    /// Larger Z = Closer to camera (in this coordinate system).
     fn z_depth(&self) -> f64 {
         match self {
             RenderPrimitive::Atom(atom) => atom.screen_pos[2],
@@ -32,6 +30,7 @@ impl<'a> RenderPrimitive<'a> {
 }
 
 // --- 2. Principled BSDF Shaders ---
+// (Keep set_principled_gradient and draw_cylinder_impostor exactly as they were)
 
 /// Creates a radial gradient simulating physically based materials
 fn set_principled_gradient(
@@ -45,66 +44,36 @@ fn set_principled_gradient(
     let (red, green, blue) = base_color;
     let alpha = 1.0 - transmission;
 
-    // 1. Calculate Specular Color (The "Shine")
-    // Dielectrics (Plastic/Ceramic) always have white highlights.
-    // Metals have highlights tinted by their base color.
-    // Formula: Mix(White, BaseColor, Metallic)
     let spec_r = 1.0 + (red - 1.0) * metallic;
     let spec_g = 1.0 + (green - 1.0) * metallic;
     let spec_b = 1.0 + (blue - 1.0) * metallic;
 
-    // 2. Calculate Highlight Size based on Roughness
-    // Smooth (0.0) = Tight point (0.05)
-    // Rough (1.0) = Broad diffuse spot (0.4)
     let highlight_size = 0.05 + roughness * 0.35;
-
-    // 3. Light Source Offset (Top-Left for 3D effect)
     let light_offset = 0.25;
 
     let pat = cairo::RadialGradient::new(
-        cx - r * light_offset, cy - r * light_offset, r * highlight_size, // Focus (Highlight)
-        cx, cy, r                                                         // Edge
+        cx - r * light_offset, cy - r * light_offset, r * highlight_size,
+        cx, cy, r
     );
 
-    // Stop 0: Specular Highlight
-    // Rougher surfaces scatter light, making the highlight dimmer/more diffuse
     let shine_alpha = (1.0 - roughness * 0.5) * alpha;
     pat.add_color_stop_rgba(0.0, spec_r, spec_g, spec_b, shine_alpha);
 
-    // Stop 1: Lit Surface (Diffuse)
-    // Metals absorb more light in the diffuse component (darker body)
     let lit_pos = 0.1 + roughness * 0.2;
     pat.add_color_stop_rgba(lit_pos, red, green, blue, alpha);
 
-    // Stop 2: Core Shadow (Ambient Occlusion)
-    // Metals have higher contrast shadows
     let ambient_level = 0.4 - (metallic * 0.3);
-    pat.add_color_stop_rgba(0.85,
-        red * ambient_level,
-        green * ambient_level,
-        blue * ambient_level,
-        alpha
-    );
+    pat.add_color_stop_rgba(0.85, red * ambient_level, green * ambient_level, blue * ambient_level, alpha);
 
-    // Stop 3: Rim / Edge
-    // Transmissive materials (glass) don't have dark rims
     let rim_darkness = 0.1 * (1.0 - transmission);
-    pat.add_color_stop_rgba(1.0,
-        red * rim_darkness,
-        green * rim_darkness,
-        blue * rim_darkness,
-        alpha
-    );
+    pat.add_color_stop_rgba(1.0, red * rim_darkness, green * rim_darkness, blue * rim_darkness, alpha);
 
     cr.set_source(&pat).unwrap();
 }
 
-/// Draws a bond as a cylinder impostor with material properties
 fn draw_cylinder_impostor(
     cr: &cairo::Context,
-    p1: [f64; 3],
-    p2: [f64; 3],
-    radius: f64,
+    p1: [f64; 3], p2: [f64; 3], radius: f64,
     color: (f64, f64, f64),
     metallic: f64, roughness: f64, transmission: f64
 ) {
@@ -114,11 +83,9 @@ fn draw_cylinder_impostor(
     if len_sq < 0.0001 { return; }
     let len = len_sq.sqrt();
 
-    // Normal vector for width
     let nx = -dy / len;
     let ny = dx / len;
 
-    // Corners of the bond rectangle
     let c1x = p1[0] + nx * radius; let c1y = p1[1] + ny * radius;
     let c2x = p2[0] + nx * radius; let c2y = p2[1] + ny * radius;
     let c3x = p2[0] - nx * radius; let c3y = p2[1] - ny * radius;
@@ -128,27 +95,21 @@ fn draw_cylinder_impostor(
     let (r, g, b) = color;
     let alpha = 1.0 - transmission;
 
-    // Specular mix for cylinder
     let sr = 1.0 + (r - 1.0) * metallic;
     let sg = 1.0 + (g - 1.0) * metallic;
     let sb = 1.0 + (b - 1.0) * metallic;
 
     let shadow = 0.3 - (metallic * 0.2);
 
-    // Edge (Shadow)
     gradient.add_color_stop_rgba(0.0, r*shadow, g*shadow, b*shadow, alpha);
-    // Body
     gradient.add_color_stop_rgba(0.3, r, g, b, alpha);
 
-    // Highlight Strip
     let h_width = 0.05 + roughness * 0.2;
     gradient.add_color_stop_rgba(0.5 - h_width, r, g, b, alpha);
     gradient.add_color_stop_rgba(0.5, sr, sg, sb, alpha * (1.0 - roughness * 0.3));
     gradient.add_color_stop_rgba(0.5 + h_width, r, g, b, alpha);
 
-    // Body
     gradient.add_color_stop_rgba(0.7, r, g, b, alpha);
-    // Edge (Shadow)
     gradient.add_color_stop_rgba(1.0, r*shadow, g*shadow, b*shadow, alpha);
 
     cr.set_source(&gradient).unwrap();
@@ -199,15 +160,14 @@ pub fn draw_structure(
 
     // 2. Collect Bonds
     for (i, r1) in atoms.iter().enumerate() {
-        if r1.is_ghost { continue; } // Don't generate bonds *starting* from ghosts (avoids duplicates)
+        if r1.is_ghost { continue; }
         for (j, r2) in atoms.iter().enumerate() {
-            if i >= j { continue; } // Avoid double counting and self-bonds
+            if i >= j { continue; }
 
             let v_x = r2.screen_pos[0] - r1.screen_pos[0];
             let v_y = r2.screen_pos[1] - r1.screen_pos[1];
             let v_z = r2.screen_pos[2] - r1.screen_pos[2];
 
-            // Normalize distance check by scale
             let d_x = v_x / scale;
             let d_y = v_y / scale;
             let d_z = v_z;
@@ -220,7 +180,6 @@ pub fn draw_structure(
                 let r2_px = raw_r2 * state.style.atom_scale * scale;
 
                 let full_dist = (v_x*v_x + v_y*v_y + v_z*v_z).sqrt();
-
                 let off1 = r1_px * 0.8;
                 let off2 = r2_px * 0.8;
 
@@ -250,7 +209,6 @@ pub fn draw_structure(
     }
 
     // 3. Sort by Z-Depth (Painter's Algorithm)
-    // Draw furthest objects first
     primitives.sort_by(|a, b| {
         a.z_depth().partial_cmp(&b.z_depth()).unwrap_or(Ordering::Equal)
     });
@@ -269,15 +227,33 @@ pub fn draw_structure(
             RenderPrimitive::Atom(atom) => {
                 let (raw_r, default_rgb) = get_atom_properties(&atom.element);
 
-                // PRIORITY:
-                // 1. Element Override (from HashMap)
-                // 2. Default CPK color
                 let rgb = state.style.element_colors
                     .get(&atom.element)
                     .copied()
                     .unwrap_or(default_rgb);
 
                 let radius = raw_r * state.style.atom_scale * scale;
+
+                // --- NEW: Highlight Selection ---
+                // Draw a glow BEHIND the atom if it is selected
+                if state.selected_indices.contains(&atom.original_index) {
+                    cr.save().unwrap();
+                    let highlight_radius = radius + 4.0;
+
+                    // Golden/Yellow Glow
+                    cr.set_source_rgba(1.0, 0.85, 0.0, 0.8);
+                    cr.arc(atom.screen_pos[0], atom.screen_pos[1], highlight_radius, 0.0, 2.0 * PI);
+                    cr.fill().unwrap();
+
+                    // Optional: Thin outline for contrast
+                    cr.set_source_rgba(1.0, 1.0, 1.0, 0.9);
+                    cr.set_line_width(1.5);
+                    cr.arc(atom.screen_pos[0], atom.screen_pos[1], highlight_radius, 0.0, 2.0 * PI);
+                    cr.stroke().unwrap();
+
+                    cr.restore().unwrap();
+                }
+                // --------------------------------
 
                 set_principled_gradient(
                     cr,
@@ -317,7 +293,6 @@ pub fn draw_axes(cr: &cairo::Context, state: &AppState, width: f64, height: f64)
         ([0.0, 0.0, 1.0], (0.2, 0.4, 0.9), state.show_axis_z),
     ];
 
-    // Sort axes so the one pointing 'in' draws first
     let mut sorted_axes: Vec<_> = axes_data.iter().map(|(v, c, show)| {
         (rotate_vec(*v), c, show)
     }).collect();

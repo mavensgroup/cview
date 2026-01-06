@@ -14,6 +14,8 @@ pub mod config;
 pub mod interactions;
 pub mod preferences;
 pub mod menu;
+pub mod geometry;
+pub mod ui;
 
 use state::AppState;
 use rendering::setup_drawing;
@@ -29,10 +31,15 @@ fn main() {
 }
 
 fn build_ui(app: &Application) {
-    // 1. Init State
-    let state = Rc::new(RefCell::new(AppState::new()));
+    // 1. Create default state
+    let mut initial_state = AppState::new();
 
-    // 2. Main Window
+    // 2. Load saved settings from disk
+    initial_state.load_config();
+    // 3. Init State
+    let state = Rc::new(RefCell::new(initial_state));
+
+    // 4. Main Window
     let window = ApplicationWindow::builder()
         .application(app)
         .title("CView - Crystal Structure Viewer")
@@ -43,20 +50,20 @@ fn build_ui(app: &Application) {
     let vbox = Box::new(Orientation::Vertical, 0);
     window.set_child(Some(&vbox));
 
-    // 3. Create Drawing Area
+    // 5. Create Drawing Area
     let drawing_area = DrawingArea::new();
     drawing_area.set_hexpand(true);
     drawing_area.set_vexpand(true);
 
-    // 4. Build Menu & Actions (Refactored)
+    // 6. Build Menu & Actions (Refactored)
     let menu_bar = menu::build_menu_and_actions(app, &window, state.clone(), &drawing_area);
     vbox.append(&menu_bar);
 
-    // 5. Setup Rendering & Interaction Logic
+    // 7. Setup Rendering & Interaction Logic
     setup_drawing(&drawing_area, state.clone());
     setup_interactions(&window, state.clone(), &drawing_area);
 
-    // 6. Finish Layout
+    // 9. Finish Layout
     vbox.append(&drawing_area);
 
     window.present();

@@ -1,5 +1,6 @@
-// Declare the submodules
-mod actions;
+mod actions_file;
+mod actions_view;
+mod actions_tools;
 mod layout;
 
 use gtk4::prelude::*;
@@ -15,8 +16,10 @@ pub fn build_menu_and_actions(
     drawing_area: &DrawingArea,
 ) -> PopoverMenuBar {
 
-    // 1. Setup Logic (Shortcuts & Actions)
-    actions::setup_actions(app, window, state, drawing_area);
+    // 1. Setup Logic (Split across modules)
+    actions_file::setup(app, window, state.clone(), drawing_area);
+    actions_view::setup(app, window, state.clone(), drawing_area);
+    actions_tools::setup(app, window, state, drawing_area);
 
     // 2. Build UI Layout
     let menu_model = layout::build_menu_model();
