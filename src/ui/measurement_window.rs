@@ -4,13 +4,13 @@ use gtk4::{Window, Box, Label, Orientation};
 use crate::state::AppState;
 use crate::geometry;
 
-pub struct GeometryWindow {
+pub struct MeasurementWindow {
     pub window: Window,
     label_info: Label,
     label_result: Label,
 }
 
-impl GeometryWindow {
+impl MeasurementWindow {
     pub fn new(app: &gtk4::Application) -> Self {
         let window = Window::builder()
             .application(app)

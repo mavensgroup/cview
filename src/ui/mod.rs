@@ -1,2 +1,2 @@
 // src/ui/mod.rs
-pub mod geometry;
+pub mod measurement_window;

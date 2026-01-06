@@ -21,6 +21,7 @@ use state::AppState;
 use rendering::setup_drawing;
 use interactions::setup_interactions;
 
+
 fn main() {
     let app = Application::builder()
         .application_id("com.example.cview")

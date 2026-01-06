@@ -3,7 +3,8 @@ use gtk4::{Application, ApplicationWindow, DrawingArea, gio};
 use std::rc::Rc;
 use std::cell::RefCell;
 use crate::state::AppState;
-use crate::ui::geometry::GeometryWindow;
+// use crate::ui::geometry::GeometryWindow;
+use crate::ui::measurement_window::MeasurementWindow;
 
 pub fn setup(
     _app: &Application, // Unused prefix
@@ -19,7 +20,7 @@ pub fn setup(
     let state_clone = state.clone();
     action_geometry.connect_activate(move |_, _| {
         if let Some(app) = &app_opt {
-            let geom_win = GeometryWindow::new(app);
+            let geom_win = MeasurementWindow::new(app);
             let s = state_clone.borrow();
             geom_win.update(&s);
             geom_win.window.present();
