@@ -16,8 +16,9 @@ pub fn setup_drawing(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) {
     let state_clone = state.clone();
     let da_clone = drawing_area.clone();
 
-    gesture.connect_pressed(move |gesture, n_press, x, y| {
-        let widget = gesture.widget().expect("Gesture has no widget");
+    gesture.connect_pressed(move |gesture, _n_press, x, y| {
+        // let widget = gesture.widget().expect("Gesture has no widget");
+        let widget = gesture.widget();
         let width = widget.width() as f64;
         let height = widget.height() as f64;
 

@@ -3,7 +3,7 @@ use gtk4::cairo;
 use std::f64::consts::PI;
 use std::cmp::Ordering;
 use crate::state::AppState;
-use crate::elements::get_atom_properties;
+use crate::model::elements::get_atom_properties;
 use super::scene::RenderAtom;
 
 // --- 1. Primitive Structures ---

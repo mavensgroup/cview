@@ -1,8 +1,10 @@
 use gtk4::prelude::*;
-use gtk4::{Application, ApplicationWindow, DrawingArea, gio};
+use gtk4::{Application, ApplicationWindow, DrawingArea};
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::f64::consts::PI;
 use crate::state::{AppState, RotationCenter};
+use crate::ui::show_preferences_window;
 
 pub fn setup(
     app: &Application,
@@ -10,63 +12,96 @@ pub fn setup(
     state: Rc<RefCell<AppState>>,
     drawing_area: &DrawingArea,
 ) {
-    let da_clone = drawing_area.clone();
-    let queue_draw = move || da_clone.queue_draw();
-
-    // Reset
-    let action_reset = gio::SimpleAction::new("reset_view", None);
-    let state_c = state.clone();
-    let q_c = queue_draw.clone();
-    action_reset.connect_activate(move |_, _| {
-        let mut st = state_c.borrow_mut();
-        st.rot_x = 0.0; st.rot_y = 0.0; st.zoom = 1.0;
-        q_c();
+    // 1. Restore View (Reset)
+    let act_reset = gtk4::gio::SimpleAction::new("view_reset", None);
+    let s_reset = state.clone();
+    let da_reset = drawing_area.clone();
+    act_reset.connect_activate(move |_, _| {
+        let mut st = s_reset.borrow_mut();
+        st.rot_x = 0.0;
+        st.rot_y = 0.0;
+        st.zoom = 1.0;
+        da_reset.queue_draw();
     });
-    window.add_action(&action_reset);
-    app.set_accels_for_action("win.reset_view", &["r", "R"]);
+    app.add_action(&act_reset);
 
-    // Toggle Center
-    let initial_state = matches!(state.borrow().rotation_mode, RotationCenter::UnitCell);
-    let action_center = gio::SimpleAction::new_stateful("toggle_center", None, &initial_state.to_variant());
-    let state_c = state.clone();
-    let q_c = queue_draw.clone();
-    action_center.connect_activate(move |action, _| {
-        let current_state: bool = action.state().unwrap().get().unwrap();
-        let new_state = !current_state;
-        action.set_state(&new_state.to_variant());
-        let mut st = state_c.borrow_mut();
-        st.rotation_mode = if new_state { RotationCenter::UnitCell } else { RotationCenter::Centroid };
-        st.save_config();
-        q_c();
+    // 2. View Along Axes
+    // Along A (Look down X) -> Rotate Y by -90 deg
+    let act_a = gtk4::gio::SimpleAction::new("view_along_a", None);
+    let s_a = state.clone();
+    let da_a = drawing_area.clone();
+    act_a.connect_activate(move |_, _| {
+        let mut st = s_a.borrow_mut();
+        st.rot_x = 0.0;
+        st.rot_y = -PI / 2.0;
+        da_a.queue_draw();
     });
-    window.add_action(&action_center);
-    app.set_accels_for_action("win.toggle_center", &["c", "C"]);
+    app.add_action(&act_a);
 
-    // Aligns
-    let action_view_x = gio::SimpleAction::new("view_x", None);
-    let state_c = state.clone(); let q_c = queue_draw.clone();
-    action_view_x.connect_activate(move |_, _| { 
-        state_c.borrow_mut().rot_x = 0.0; 
-        state_c.borrow_mut().rot_y = std::f64::consts::PI / 2.0; 
-        q_c(); 
+    // Along B (Look down Y) -> Rotate X by 90 deg
+    let act_b = gtk4::gio::SimpleAction::new("view_along_b", None);
+    let s_b = state.clone();
+    let da_b = drawing_area.clone();
+    act_b.connect_activate(move |_, _| {
+        let mut st = s_b.borrow_mut();
+        st.rot_x = PI / 2.0;
+        st.rot_y = 0.0;
+        da_b.queue_draw();
     });
-    window.add_action(&action_view_x);
+    app.add_action(&act_b);
 
-    let action_view_y = gio::SimpleAction::new("view_y", None);
-    let state_c = state.clone(); let q_c = queue_draw.clone();
-    action_view_y.connect_activate(move |_, _| { 
-        state_c.borrow_mut().rot_x = std::f64::consts::PI / 2.0; 
-        state_c.borrow_mut().rot_y = 0.0; 
-        q_c(); 
+    // Along C (Look down Z) -> Reset rotations
+    let act_c = gtk4::gio::SimpleAction::new("view_along_c", None);
+    let s_c = state.clone();
+    let da_c = drawing_area.clone();
+    act_c.connect_activate(move |_, _| {
+        let mut st = s_c.borrow_mut();
+        st.rot_x = 0.0;
+        st.rot_y = 0.0;
+        da_c.queue_draw();
     });
-    window.add_action(&action_view_y);
+    app.add_action(&act_c);
 
-    let action_view_z = gio::SimpleAction::new("view_z", None);
-    let state_c = state.clone(); let q_c = queue_draw.clone();
-    action_view_z.connect_activate(move |_, _| { 
-        state_c.borrow_mut().rot_x = 0.0; 
-        state_c.borrow_mut().rot_y = 0.0; 
-        q_c(); 
+    // 3. Rotation Center Modes
+    let act_centroid = gtk4::gio::SimpleAction::new("center_centroid", None);
+    let s_cent = state.clone();
+    let da_cent = drawing_area.clone();
+    act_centroid.connect_activate(move |_, _| {
+        s_cent.borrow_mut().rotation_mode = RotationCenter::Centroid;
+        da_cent.queue_draw();
     });
-    window.add_action(&action_view_z);
+    app.add_action(&act_centroid);
+
+    let act_uc = gtk4::gio::SimpleAction::new("center_unitcell", None);
+    let s_uc = state.clone();
+    let da_uc = drawing_area.clone();
+    act_uc.connect_activate(move |_, _| {
+        s_uc.borrow_mut().rotation_mode = RotationCenter::UnitCell;
+        da_uc.queue_draw();
+    });
+    app.add_action(&act_uc);
+
+    // 4. Toggle Bonds
+    let act_bonds = gtk4::gio::SimpleAction::new("toggle_bonds", None);
+    let s_bond = state.clone();
+    let da_bond = drawing_area.clone();
+    act_bonds.connect_activate(move |_, _| {
+        let mut st = s_bond.borrow_mut();
+        st.show_bonds = !st.show_bonds;
+        da_bond.queue_draw();
+    });
+    app.add_action(&act_bonds);
+
+    // 5. Preferences
+    let act_pref = gtk4::gio::SimpleAction::new("preferences", None);
+    let s_pref = state.clone();
+    // let da_pref = drawing_area.clone();
+    let win_weak = window.downgrade();
+
+    act_pref.connect_activate(move |_, _| {
+        if let Some(win) = win_weak.upgrade() {
+            show_preferences_window(&win, s_pref.clone());
+        }
+    });
+    app.add_action(&act_pref);
 }

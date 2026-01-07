@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::collections::HashMap;
-use crate::structure::{Atom, Structure};
+use crate::model::{Atom, Structure};
 
 #[derive(PartialEq)]
 enum Section {
@@ -105,13 +105,14 @@ pub fn parse(path: &str) -> io::Result<Structure> {
             raw_pos[1] * alat,
             raw_pos[2] * alat
         ];
-        atoms.push(Atom { element: label, position: pos });
+        let idx = atoms.len();
+        atoms.push(Atom { element: label, position: pos, original_index: idx });
     }
 
     // Apply ALAT Scaling to Lattice
     for i in 0..3 { for j in 0..3 { lattice[i][j] *= alat; } }
 
-    Ok(Structure { lattice, atoms })
+    Ok(Structure { lattice, atoms, formula: "SPR-KKR Import".to_string() })
 }
 
 // --- UPDATED WRITER ---

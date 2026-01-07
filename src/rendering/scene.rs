@@ -30,27 +30,45 @@ pub fn calculate_scene(
         None => return (vec![], vec![], SceneBounds{scale:1.0, width:100.0, height:100.0})
     };
 
-    let (sin_x, cos_x) = state.rot_x.sin_cos();
-    let (sin_y, cos_y) = state.rot_y.sin_cos();
+    // --- FIX 1: Convert Degrees to Radians & Get Z Trig ---
+    // Your sliders output 0.0 to 360.0, but sin() expects radians.
+    let (sin_x, cos_x) = state.rot_x.to_radians().sin_cos();
+    let (sin_y, cos_y) = state.rot_y.to_radians().sin_cos();
+    let (sin_z, cos_z) = state.rot_z.to_radians().sin_cos(); // <--- Added Z
+
     let center = get_rotation_center(state);
     let lattice = structure.lattice;
     let inv_lattice = invert_matrix(lattice);
 
-    // Rotation closure
+    // --- FIX 2: Update Rotation Logic (X -> Y -> Z) ---
     let rotate = |p: [f64; 3]| -> [f64; 3] {
+        // 1. Shift to center
         let x = p[0] - center[0];
         let y = p[1] - center[1];
         let z = p[2] - center[2];
+
+        // 2. Rotate around X
         let y1 = y * cos_x - z * sin_x;
         let z1 = y * sin_x + z * cos_x;
+
+        // 3. Rotate around Y (using z1 from above)
         let x2 = x * cos_y - z1 * sin_y;
         let z2 = x * sin_y + z1 * cos_y;
-        [x2, y1, z2]
+
+        // 4. Rotate around Z (using x2, y1 from above)
+        // Note: Z-rotation mixes X and Y, leaving Z unchanged
+        let x3 = x2 * cos_z - y1 * sin_z;
+        let y3 = x2 * sin_z + y1 * cos_z;
+
+        // Return final rotated coords
+        [x3, y3, z2]
     };
 
     let mut render_atoms = Vec::new();
     let mut min_x = f64::MAX; let mut max_x = f64::MIN;
     let mut min_y = f64::MAX; let mut max_y = f64::MIN;
+
+    // ... (The rest of your code remains exactly the same) ...
 
     // --- 1. Calculate Lattice Corners ---
     let mut raw_corners = Vec::new();
@@ -116,7 +134,7 @@ pub fn calculate_scene(
             render_atoms.push(RenderAtom {
                 screen_pos: r_pos,
                 element: atom.element.clone(),
-                original_index: i, // FIXED: Correct field name
+                original_index: i,
                 is_ghost: ghost,
             });
         }

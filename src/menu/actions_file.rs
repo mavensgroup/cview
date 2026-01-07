@@ -1,67 +1,98 @@
 use gtk4::prelude::*;
-use gtk4::{
-    Application, ApplicationWindow, DrawingArea, FileChooserAction, FileChooserNative,
-    ResponseType, FileFilter, gio
-};
+use gtk4::{Application, ApplicationWindow, DrawingArea, FileChooserNative, FileChooserAction, ResponseType, TextView, FileFilter};
 use std::rc::Rc;
 use std::cell::RefCell;
-
 use crate::state::{AppState, ExportFormat};
 use crate::io;
 use crate::rendering::export_image;
-use crate::preferences;
+// use crate::ui::preferences::show_preferences_window;
 
 pub fn setup(
     app: &Application,
     window: &ApplicationWindow,
     state: Rc<RefCell<AppState>>,
     drawing_area: &DrawingArea,
+    console_view: &TextView,
+    atom_list_box: &gtk4::Box, // <--- Argument for Sidebar update
 ) {
-    let da_clone = drawing_area.clone();
-    let queue_draw = move || da_clone.queue_draw();
 
-    // --- OPEN ---
-    let action_open = gio::SimpleAction::new("open", None);
-    let win_c = window.clone();
-    let state_c = state.clone();
-    let q_c = queue_draw.clone();
+    // --- OPEN ACTION ---
+    let open_action = gtk4::gio::SimpleAction::new("open", None);
+    let win_weak = window.downgrade();
+    let state_weak = Rc::downgrade(&state);
+    let da_weak = drawing_area.downgrade();
+    let console_weak = console_view.downgrade();
 
-    action_open.connect_activate(move |_, _| {
+    // 1. Create weak reference to the atom container (Sidebar)
+    let atom_box_weak = atom_list_box.downgrade();
+
+    open_action.connect_activate(move |_, _| {
+        let win = match win_weak.upgrade() { Some(w) => w, None => return };
+
         let dialog = FileChooserNative::new(
-            Some("Open Structure"),
-            Some(&win_c),
+            Some("Open Structure File"),
+            Some(&win),
             FileChooserAction::Open,
             Some("Open"),
             Some("Cancel"),
         );
-        dialog.set_modal(true);
 
-        let filter = FileFilter::new();
-        filter.set_name(Some("Structure Files"));
-        for pat in &["*.xyz", "*.XYZ", "*.cif", "*.CIF", "*.vasp", "*.VASP",
-                     "*POSCAR*", "*poscar*", "*CONTCAR*", "*contcar*", "*.pot", "*.inp"] {
-            filter.add_pattern(pat);
-        }
-        dialog.add_filter(&filter);
+        let filter_any = FileFilter::new();
+        filter_any.set_name(Some("All Supported Files"));
+        filter_any.add_pattern("*.cif");
+        filter_any.add_pattern("POSCAR*");
+        filter_any.add_pattern("CONTCAR*");
+        filter_any.add_pattern("*.vasp");
+        filter_any.add_pattern("*.pot");
+        filter_any.add_pattern("*.sys");
+        filter_any.add_pattern("*.out");
+        filter_any.add_pattern("*.in");
+        filter_any.add_pattern("*.pwi");
+        filter_any.add_pattern("*.pwo");
+        filter_any.add_pattern("*.qe");
+        filter_any.add_pattern("*.xyz");
+        dialog.add_filter(&filter_any);
 
-        let s = state_c.clone();
-        let q = q_c.clone();
+        let state_weak_inner = state_weak.clone();
+        let da_weak_inner = da_weak.clone();
+        let console_weak_inner = console_weak.clone();
+
+        // 2. Clone weak ref for the inner closure
+        let atom_box_inner = atom_box_weak.clone();
+
         dialog.connect_response(move |d, response| {
             if response == ResponseType::Accept {
                 if let Some(file) = d.file() {
                     if let Some(path) = file.path() {
-                        if let Some(path_str) = path.to_str() {
-                            match io::load_structure(path_str) {
+                        let path_str = path.to_string_lossy().to_string();
+
+                        // We need the state to exist
+                        if let Some(st) = state_weak_inner.upgrade() {
+                            match crate::io::load_structure(&path_str) {
                                 Ok(structure) => {
-                                    let mut st = s.borrow_mut();
-                                    st.structure = Some(structure);
-                                    // Just save the name so we can suggest it later
-                                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                                        st.file_name = stem.to_string();
+                                    {
+                                        let mut s = st.borrow_mut();
+                                        s.structure = Some(structure);
+                                        s.file_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                                        s.selected_indices.clear();
+
+                                        if let Some(con) = console_weak_inner.upgrade() {
+                                            let report = s.get_structure_report();
+                                            crate::ui::log_to_console(&con, &report);
+                                        }
+                                    } // Drop RefMut borrow here so we can use 'st' again below
+
+                                    // 3. REFRESH SIDEBAR AND DRAW
+                                    if let Some(da) = da_weak_inner.upgrade() {
+                                        // Refresh the Atom List in Sidebar
+                                        if let Some(ab) = atom_box_inner.upgrade() {
+                                            // Call the public helper function we created in sidebar.rs
+                                            crate::panels::sidebar::refresh_atom_list(&ab, st.clone(), &da);
+                                        }
+                                        da.queue_draw();
                                     }
-                                    q();
-                                }
-                                Err(e) => eprintln!("Error loading: {}", e),
+                                },
+                                Err(e) => eprintln!("Error loading file: {}", e),
                             }
                         }
                     }
@@ -71,58 +102,35 @@ pub fn setup(
         });
         dialog.show();
     });
-    window.add_action(&action_open);
-    app.set_accels_for_action("win.open", &["<Ctrl>o"]);
+    app.add_action(&open_action);
 
-    // --- SAVE AS (Minimal) ---
-    let action_save_as = gio::SimpleAction::new("save_as", None);
-    let win_c = window.clone();
-    let state_c = state.clone();
 
-    action_save_as.connect_activate(move |_, _| {
-        let dialog = FileChooserNative::new(
-            Some("Save Structure As"),
-            Some(&win_c),
-            FileChooserAction::Save,
-            Some("Save"),
-            Some("Cancel"),
-        );
-        dialog.set_modal(true);
+    // --- SAVE AS ACTION ---
+    let save_action = gtk4::gio::SimpleAction::new("save_as", None);
+    let win_weak_s = window.downgrade();
+    let state_weak_s = Rc::downgrade(&state);
 
-        // Filters (Just for convenience)
-        let filter_cif = FileFilter::new();
-        filter_cif.set_name(Some("CIF File (*.cif)"));
-        filter_cif.add_pattern("*.cif");
+    save_action.connect_activate(move |_, _| {
+        let win = match win_weak_s.upgrade() { Some(w) => w, None => return };
+        let dialog = FileChooserNative::new(Some("Save Structure As"), Some(&win), FileChooserAction::Save, Some("Save"), Some("Cancel"));
 
-        let filter_vasp = FileFilter::new();
-        filter_vasp.set_name(Some("VASP POSCAR (*.vasp)"));
-        filter_vasp.add_pattern("*.vasp");
+        let filter_cif = FileFilter::new(); filter_cif.set_name(Some("CIF File (*.cif)")); filter_cif.add_pattern("*.cif"); dialog.add_filter(&filter_cif);
+        let filter_vasp = FileFilter::new(); filter_vasp.set_name(Some("VASP POSCAR")); filter_vasp.add_pattern("POSCAR"); dialog.add_filter(&filter_vasp);
+        let filter_pot = FileFilter::new(); filter_pot.set_name(Some("SPRKKR Potential (*.pot)")); filter_pot.add_pattern("*.pot"); dialog.add_filter(&filter_pot);
 
-        let filter_spr = FileFilter::new();
-        filter_spr.set_name(Some("SPR-KKR Potential (*.pot)"));
-        filter_spr.add_pattern("*.pot");
+        dialog.set_current_name("structure.cif");
+        let state_weak_inner = state_weak_s.clone();
 
-        dialog.add_filter(&filter_cif);
-        dialog.add_filter(&filter_vasp);
-        dialog.add_filter(&filter_spr);
-
-        // Simple Default: "Filename.cif"
-        let basename = state_c.borrow().file_name.clone();
-        dialog.set_current_name(&format!("{}.cif", basename));
-
-        let s = state_c.clone();
         dialog.connect_response(move |d, response| {
             if response == ResponseType::Accept {
                 if let Some(file) = d.file() {
                     if let Some(path) = file.path() {
-                        if let Some(path_str) = path.to_str() {
-                            let st = s.borrow();
-                            if let Some(structure) = &st.structure {
-                                if let Err(e) = io::save_structure(path_str, structure) {
-                                    eprintln!("Error saving structure: {}", e);
-                                } else {
-                                    println!("Saved structure to {}", path_str);
-                                }
+                        let path_str = path.to_string_lossy().to_string();
+                        if let Some(st) = state_weak_inner.upgrade() {
+                            let s = st.borrow();
+                            if let Some(structure) = &s.structure {
+                                if let Err(e) = io::save_structure(&path_str, structure) { eprintln!("Failed: {}", e); }
+                                else { println!("Saved to {}", path_str); }
                             }
                         }
                     }
@@ -132,72 +140,79 @@ pub fn setup(
         });
         dialog.show();
     });
-    window.add_action(&action_save_as);
-    app.set_accels_for_action("win.save_as", &["<Ctrl><Shift>s"]);
+    app.add_action(&save_action);
 
-    // --- EXPORT IMAGE (Minimal) ---
-    let action_export = gio::SimpleAction::new("export", None);
-    let win_c = window.clone();
-    let state_c = state.clone();
 
-    action_export.connect_activate(move |_, _| {
-        let dialog = FileChooserNative::new(
-            Some("Export Screenshot"),
-            Some(&win_c),
-            FileChooserAction::Save,
-            Some("Save"),
-            Some("Cancel"),
-        );
-        dialog.set_modal(true);
+    // --- EXPORT IMAGE ACTION ---
+    let export_action = gtk4::gio::SimpleAction::new("export", None);
+    let win_weak_e = window.downgrade();
+    let state_weak_e = Rc::downgrade(&state);
 
-        let filter_png = FileFilter::new();
-        filter_png.set_name(Some("PNG Image (*.png)"));
-        filter_png.add_pattern("*.png");
+    export_action.connect_activate(move |_, _| {
+        let win = match win_weak_e.upgrade() { Some(w) => w, None => return };
+        let st_rc = match state_weak_e.upgrade() { Some(s) => s, None => return };
+        let state_weak_inner = state_weak_e.clone();
 
-        let filter_pdf = FileFilter::new();
-        filter_pdf.set_name(Some("PDF Document (*.pdf)"));
-        filter_pdf.add_pattern("*.pdf");
+        let dialog = FileChooserNative::new(Some("Export Image"), Some(&win), FileChooserAction::Save, Some("Export"), Some("Cancel"));
 
-        dialog.add_filter(&filter_png);
-        dialog.add_filter(&filter_pdf);
+        let filter_png = FileFilter::new(); filter_png.set_name(Some("PNG Image (*.png)")); filter_png.add_pattern("*.png"); dialog.add_filter(&filter_png);
+        let filter_pdf = FileFilter::new(); filter_pdf.set_name(Some("PDF Document (*.pdf)")); filter_pdf.add_pattern("*.pdf"); dialog.add_filter(&filter_pdf);
 
-        let is_pdf = matches!(state_c.borrow().default_export_format, ExportFormat::Pdf);
-        let ext = if is_pdf { "pdf" } else { "png" };
-        dialog.set_current_name(&format!("screenshot.{}", ext));
+        let format = st_rc.borrow().default_export_format;
+        match format {
+            ExportFormat::Png => { dialog.set_filter(&filter_png); dialog.set_current_name("snapshot.png"); },
+            ExportFormat::Pdf => { dialog.set_filter(&filter_pdf); dialog.set_current_name("snapshot.pdf"); }
+        }
 
-        let s = state_c.clone();
         dialog.connect_response(move |d, response| {
             if response == ResponseType::Accept {
-                if let Some(file) = d.file() {
+                 if let Some(file) = d.file() {
                     if let Some(path) = file.path() {
-                        if let Some(path_str) = path.to_str() {
-                            let pdf_mode = path_str.to_lowercase().ends_with(".pdf");
-                            let _ = export_image(&s.borrow(), path_str, 2048.0, 2048.0, pdf_mode);
+                        let path_str = path.to_string_lossy().to_string();
+                        let is_pdf = path_str.to_lowercase().ends_with(".pdf");
+                        if let Some(st) = state_weak_inner.upgrade() {
+                             let s = st.borrow();
+                             let _ = export_image(&s, &path_str, 2000.0, 1500.0, is_pdf);
+                             println!("Exported to {}", path_str);
                         }
                     }
-                }
+                 }
             }
             d.destroy();
         });
         dialog.show();
     });
-    window.add_action(&action_export);
-    app.set_accels_for_action("win.export", &["<Ctrl>e"]);
+    app.add_action(&export_action);
 
-    // --- CLOSE ---
-    let action_close = gio::SimpleAction::new("close", None);
-    let win_c = window.clone();
-    action_close.connect_activate(move |_, _| { win_c.close(); });
-    window.add_action(&action_close);
-    app.set_accels_for_action("win.close", &["<Ctrl>q", "<Ctrl>w"]);
 
-    // --- PREFERENCES ---
-    let action_prefs = gio::SimpleAction::new("preferences", None);
-    let win_c = window.clone();
-    let state_c = state.clone();
-    let da_c = drawing_area.clone();
-    action_prefs.connect_activate(move |_, _| {
-        preferences::show_preferences_window(&win_c, state_c.clone(), da_c.clone());
+    // --- PREFERENCES ACTION ---
+    // (Note: Since we moved appearance to the Sidebar, this might be redundant,
+    // but we keep it here to avoid breaking your existing logic).
+    // let pref_action = gtk4::gio::SimpleAction::new("preferences", None);
+    // let win_weak_p = window.downgrade();
+    // let state_weak_p = Rc::downgrade(&state);
+    // let da_weak_p = drawing_area.downgrade();
+
+    // pref_action.connect_activate(move |_, _| {
+        // if let Some(win) = win_weak_p.upgrade() {
+            // if let Some(st) = state_weak_p.upgrade() {
+                // if let Some(da) = da_weak_p.upgrade() {
+                    // show_preferences_window(&win, st);
+                // }
+            // }
+        // }
+    // });
+    // app.add_action(&pref_action);
+
+
+    // --- QUIT ACTION ---
+    let quit_action = gtk4::gio::SimpleAction::new("quit", None);
+    let win_weak_q = window.downgrade();
+
+    quit_action.connect_activate(move |_, _| {
+        if let Some(win) = win_weak_q.upgrade() {
+            win.close();
+        }
     });
-    window.add_action(&action_prefs);
+    app.add_action(&quit_action);
 }

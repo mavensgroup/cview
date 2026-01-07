@@ -1,4 +1,4 @@
-use crate::structure::{Structure, Atom};
+use crate::model::{Structure, Atom};
 use spglib::cell::Cell;
 use spglib::dataset::Dataset;
 
@@ -29,8 +29,7 @@ pub fn to_conventional_cell(structure: &Structure) -> Result<Structure, String> 
     // FIX 1: Make 'cell' mutable
     let mut cell = Cell::new(&lattice, &positions, &types);
 
-    // FIX 2: Pass &mut cell, and remove .map_err()
-    // Dataset::new returns the Dataset struct directly, not a Result.
+    // FIX 2: Pass &mut cell
     let dataset = Dataset::new(&mut cell, 1e-5);
 
     // Extract Standardized Cell data (Conventional Cell)
@@ -62,15 +61,20 @@ pub fn to_conventional_cell(structure: &Structure) -> Result<Structure, String> 
             "X".to_string()
         };
 
+        // --- FIX: Added original_index ---
+        let idx = new_atoms.len();
         new_atoms.push(Atom {
             element,
             position: [cx, cy, cz],
+            original_index: idx,
         });
     }
 
     Ok(Structure {
         lattice: new_lattice,
         atoms: new_atoms,
+        // --- FIX: Added formula (preserving original) ---
+        formula: structure.formula.clone(),
     })
 }
 

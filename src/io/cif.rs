@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
-use crate::structure::{Atom, Structure};
+use crate::model::{Atom, Structure};
 use std::io::Write;
 
 pub fn parse(path: &str) -> io::Result<Structure> {
@@ -94,7 +94,12 @@ pub fn parse(path: &str) -> io::Result<Structure> {
                             else if header.contains("_atom_site_fract_y") { fy = parse_cif_float(val); }
                             else if header.contains("_atom_site_fract_z") { fz = parse_cif_float(val); }
                         }
-                        base_atoms.push(Atom { element: label, position: [fx, fy, fz] });
+                        // base_atoms.push(Atom { element: label, position: [fx, fy, fz] });
+                        base_atoms.push(Atom {
+                            element: label,
+                            position: [fx, fy, fz],
+                            original_index: 0
+                        });
                     }
                 }
             }
@@ -130,9 +135,12 @@ pub fn parse(path: &str) -> io::Result<Structure> {
             });
 
             if !is_duplicate {
+               // final_atoms.push(Atom { element: atom.element.clone(), position: [wx, wy, wz] });
+                let idx = final_atoms.len(); // <--- Capture index
                 final_atoms.push(Atom {
                     element: atom.element.clone(),
-                    position: [wx, wy, wz]
+                    position: [wx, wy, wz],
+                    original_index: idx
                 });
             }
         }
@@ -160,7 +168,12 @@ pub fn parse(path: &str) -> io::Result<Structure> {
         atom.position = [x, y, z];
     }
 
-    Ok(Structure { lattice, atoms: final_atoms })
+    // Ok(Structure { lattice, atoms: final_atoms })
+   Ok(Structure {
+    lattice,
+    atoms: final_atoms,
+    formula: "CIF Import".to_string()
+    })
 }
 
 fn apply_symmetry(p: [f64; 3], op: &str) -> [f64; 3] {

@@ -4,7 +4,7 @@ use std::io::Write;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
-use crate::structure::{Atom, Structure};
+use crate::model::{Atom, Structure};
 
 pub fn parse(path: &str) -> io::Result<Structure> {
     let path = Path::new(path);
@@ -63,11 +63,17 @@ pub fn parse(path: &str) -> io::Result<Structure> {
                 x = lx; y = ly; z = lz;
             }
 
-            atoms.push(Atom { element: elem_name.clone(), position: [x, y, z] });
+            // atoms.push(Atom { element: elem_name.clone(), position: [x, y, z] });
+            let idx = atoms.len(); // <--- Capture index
+            atoms.push(Atom {
+                element: elem_name.clone(),
+                position: [x, y, z],
+                original_index: idx
+            });
         }
     }
 
-    Ok(Structure { lattice, atoms })
+    Ok(Structure { lattice, atoms,formula: "POSCAR Import".to_string() })
 }
 
 
