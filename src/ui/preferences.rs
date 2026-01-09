@@ -1,22 +1,19 @@
-use gtk4::{self as gtk, prelude::*};
-// use gtk4::gdk;
+use gtk4::{self as gtk, prelude::*, gdk};
 use std::rc::Rc;
 use std::cell::RefCell;
-// Added RotationCenter to imports
 use crate::state::{AppState, ExportFormat, RotationCenter};
-// use crate::model::elements::get_atom_properties;
 
 pub fn show_preferences_window(
     parent: &gtk::ApplicationWindow,
     state: Rc<RefCell<AppState>>,
-    // drawing_area: gtk::DrawingArea,
+    drawing_area: gtk::DrawingArea, // <--- UNCOMMENT THIS
 ) {
     let window = gtk::Window::builder()
         .title("Preferences")
         .transient_for(parent)
-        .modal(false)
+        .modal(true) // Setting to true is usually better for Preferences
         .default_width(400)
-        .default_height(600)
+        .default_height(400)
         .resizable(false)
         .build();
 
@@ -25,12 +22,12 @@ pub fn show_preferences_window(
     notebook.set_vexpand(true);
 
     // --- Tab 1: Appearance ---
-    // let appearance_tab = build_appearance_tab(state.clone(), drawing_area.clone());
-    // notebook.append_page(&appearance_tab, Some(&gtk::Label::new(Some("Appearance"))));
+    // Pass the drawing_area so the color picker can trigger a redraw
+    let appearance_tab = build_appearance_tab(state.clone(), drawing_area);
+    notebook.append_page(&appearance_tab, Some(&gtk::Label::new(Some("Appearance"))));
 
     // --- Tab 2: Export / General ---
     let export_tab = build_export_tab(state.clone());
-    // Renamed label slightly to reflect it contains general settings now
     notebook.append_page(&export_tab, Some(&gtk::Label::new(Some("Export & General"))));
 
     main_vbox.append(&notebook);
@@ -52,6 +49,60 @@ pub fn show_preferences_window(
     window.present();
 }
 
+fn build_appearance_tab(state: Rc<RefCell<AppState>>, drawing_area: gtk::DrawingArea) -> gtk::Box {
+    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    vbox.set_margin_top(15);
+    vbox.set_margin_bottom(15);
+    vbox.set_margin_start(15);
+    vbox.set_margin_end(15);
+
+    // --- Background Color Row ---
+    let row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    let label = gtk::Label::new(Some("Background Color"));
+    label.set_hexpand(true);
+    label.set_halign(gtk::Align::Start);
+    row.append(&label);
+
+    let color_button = gtk::ColorButton::new();
+
+    // Get initial color from state
+    let bg_color = state.borrow().style.background_color;
+    color_button.set_rgba(&gdk::RGBA::new(
+        bg_color.0 as f32,
+        bg_color.1 as f32,
+        bg_color.2 as f32,
+        1.0
+    ));
+
+    let s = state.clone();
+    let da = drawing_area.clone();
+
+    color_button.connect_color_set(move |btn| {
+        let rgba = btn.rgba();
+        let mut st = s.borrow_mut();
+
+        // Update state
+        st.style.background_color = (
+            rgba.red() as f64,
+            rgba.green() as f64,
+            rgba.blue() as f64
+        );
+
+        // Save immediately to JSON
+        crate::config::save_config(&st);
+
+        // Force the screen to update
+        da.queue_draw();
+    });
+
+    row.append(&color_button);
+    vbox.append(&row);
+
+    vbox
+}
+
+// ... build_export_tab stays the same as your snippet ...
+//
 fn build_export_tab(state: Rc<RefCell<AppState>>) -> gtk::Box {
     let container = gtk::Box::new(gtk::Orientation::Vertical, 10);
 

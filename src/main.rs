@@ -111,11 +111,14 @@ fn build_ui(app: &Application) {
     let s = state.clone();
     drawing_area.set_draw_func(move |_, cr, w, h| {
         let st = s.borrow();
-        // ... (Your existing drawing code here) ...
-        // Ensure you call calculate_scene and painter::draw_structure
-        let (atoms, _, bounds) = rendering::scene::calculate_scene(&st, w as f64, h as f64, false, None, None);
-        cr.set_source_rgb(0.1, 0.1, 0.1);
+
+        let (bg_r, bg_g, bg_b) = st.style.background_color;
+        cr.set_source_rgb(bg_r, bg_g, bg_b);
         cr.paint().unwrap();
+        // let (atoms, _, bounds) = rendering::scene::calculate_scene(&st, w as f64, h as f64, false, None, None);
+        let (atoms, lattice_corners, bounds) = rendering::scene::calculate_scene(&st, w as f64, h as f64, false, None, None);
+        rendering::painter::draw_unit_cell(cr, &lattice_corners, false);
+        // rendering::painter::draw_unit_cell(cr, &lattice_corners, false);
         rendering::painter::draw_structure(cr, &atoms, &st, bounds.scale, false);
         rendering::painter::draw_axes(cr, &st, w as f64, h as f64);
     });

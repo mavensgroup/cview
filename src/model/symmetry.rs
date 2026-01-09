@@ -1,93 +1,98 @@
 use crate::model::{Structure, Atom};
-use spglib::cell::Cell;
-use spglib::dataset::Dataset;
+use moyo::base::{Cell, Lattice, AngleTolerance};
+use moyo::MoyoDataset;
+use moyo::data::Setting;
+use nalgebra::{Matrix3, Vector3};
 
 pub fn to_conventional_cell(structure: &Structure) -> Result<Structure, String> {
-    let lattice = structure.lattice;
-    let inv_lattice = invert_matrix(lattice).ok_or("Invalid lattice")?;
+    let l = structure.lattice;
 
+    // 1. Setup Lattice
+    let lattice_mat = Matrix3::new(
+        l[0][0], l[0][1], l[0][2],
+        l[1][0], l[1][1], l[1][2],
+        l[2][0], l[2][1], l[2][2],
+    );
+    let lattice = Lattice::new(lattice_mat);
+
+    // 2. Calculate Inverse Lattice for Coordinate Conversion
+    // We need this to convert Cartesian (structure) -> Fractional (moyo)
+    let inv_mat = lattice_mat.try_inverse()
+        .ok_or("Invalid lattice (determinant is zero)")?;
+
+    // 3. Convert Atoms (Cartesian -> Fractional)
     let mut positions = Vec::new();
-    let mut types = Vec::new();
+    let mut numbers = Vec::new();
     let mut unique_elements = Vec::new();
 
     for atom in &structure.atoms {
-        let p = atom.position;
-        // Cartesian -> Fractional
-        let fx = p[0]*inv_lattice[0][0] + p[1]*inv_lattice[1][0] + p[2]*inv_lattice[2][0];
-        let fy = p[0]*inv_lattice[0][1] + p[1]*inv_lattice[1][1] + p[2]*inv_lattice[2][1];
-        let fz = p[0]*inv_lattice[0][2] + p[1]*inv_lattice[1][2] + p[2]*inv_lattice[2][2];
+        let v_cart = Vector3::new(atom.position[0], atom.position[1], atom.position[2]);
+        // Matrix multiplication: frac = (L^T)^-1 * cart
+        // Since lattice_mat rows are basis vectors, we transpose before inversion in standard math,
+        // or transpose the inverse. nalgebra vector is column.
+        let v_frac = inv_mat.transpose() * v_cart;
 
-        positions.push([fx, fy, fz]);
+        positions.push(v_frac);
 
+        // Map element string to ID
         if !unique_elements.contains(&atom.element) {
             unique_elements.push(atom.element.clone());
         }
         let id = unique_elements.iter().position(|e| *e == atom.element).unwrap() as i32;
-        types.push(id);
+        numbers.push(id + 1); // 1-based ID for Moyo
     }
 
-    // FIX 1: Make 'cell' mutable
-    let mut cell = Cell::new(&lattice, &positions, &types);
+    let cell = Cell::new(lattice, positions, numbers);
 
-    // FIX 2: Pass &mut cell
-    let dataset = Dataset::new(&mut cell, 1e-5);
+    // 4. Run Moyo (Refine = true for Standardization)
+    let dataset = MoyoDataset::new(
+        &cell,
+        1e-4,
+        AngleTolerance::Default,
+        Setting::Spglib,
+        true
+    ).map_err(|e| format!("Moyo symmetry search failed: {:?}", e))?;
 
-    // Extract Standardized Cell data (Conventional Cell)
-    let new_lattice = dataset.std_lattice;
-    let new_positions = dataset.std_positions; // Fractional positions
-    let new_types = dataset.std_types;
+    // 5. Convert Result Back (Fractional -> Cartesian)
+    let std_cell = dataset.std_cell;
+    let m = std_cell.lattice.basis;
+    let new_lattice = [
+        [m.m11, m.m12, m.m13],
+        [m.m21, m.m22, m.m23],
+        [m.m31, m.m32, m.m33],
+    ];
 
-    // Safety check: if spglib failed, std_types might be empty or 0
-    if new_types.is_empty() {
-        return Err("Symmetry detection failed (empty result)".to_string());
-    }
+    // Need conversion matrix for the NEW standardized lattice
+    // Moyo returns standardized positions as fractional relative to std_lattice.
+    // So we just multiply by std_lattice to get Cartesian.
+    let std_lat_mat = std_cell.lattice.basis;
 
     let mut new_atoms = Vec::new();
 
-    for (i, &t_id) in new_types.iter().enumerate() {
-        // Safety: Ensure we don't go out of bounds if positions match types
-        if i >= new_positions.len() { break; }
-
-        let frac = new_positions[i];
-
-        // Fractional -> Cartesian
-        let cx = frac[0]*new_lattice[0][0] + frac[1]*new_lattice[1][0] + frac[2]*new_lattice[2][0];
-        let cy = frac[0]*new_lattice[0][1] + frac[1]*new_lattice[1][1] + frac[2]*new_lattice[2][1];
-        let cz = frac[0]*new_lattice[0][2] + frac[1]*new_lattice[1][2] + frac[2]*new_lattice[2][2];
-
-        let element = if (t_id as usize) < unique_elements.len() {
-            unique_elements[t_id as usize].clone()
+    for (i, pos_frac) in std_cell.positions.iter().enumerate() {
+        // Look up element
+        let type_id = std_cell.numbers[i];
+        let element = if (type_id - 1) < unique_elements.len() as i32 {
+            unique_elements[(type_id - 1) as usize].clone()
         } else {
             "X".to_string()
         };
 
-        // --- FIX: Added original_index ---
-        let idx = new_atoms.len();
+        // Fractional -> Cartesian (for CView Structure)
+        // cart = L^T * frac
+        let v_frac_vec = Vector3::new(pos_frac.x, pos_frac.y, pos_frac.z);
+        let v_cart = std_lat_mat.transpose() * v_frac_vec;
+
         new_atoms.push(Atom {
             element,
-            position: [cx, cy, cz],
-            original_index: idx,
+            position: [v_cart.x, v_cart.y, v_cart.z],
+            original_index: i,
         });
     }
 
     Ok(Structure {
         lattice: new_lattice,
         atoms: new_atoms,
-        // --- FIX: Added formula (preserving original) ---
         formula: structure.formula.clone(),
     })
-}
-
-fn invert_matrix(m: [[f64; 3]; 3]) -> Option<[[f64; 3]; 3]> {
-    let det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
-              m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
-              m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
-
-    if det.abs() < 1e-6 { return None; }
-    let inv = 1.0 / det;
-    Some([
-        [(m[1][1]*m[2][2]-m[1][2]*m[2][1])*inv, (m[0][2]*m[2][1]-m[0][1]*m[2][2])*inv, (m[0][1]*m[1][2]-m[0][2]*m[1][1])*inv],
-        [(m[1][2]*m[2][0]-m[1][0]*m[2][2])*inv, (m[0][0]*m[2][2]-m[0][2]*m[2][0])*inv, (m[1][0]*m[0][2]-m[0][0]*m[1][2])*inv],
-        [(m[1][0]*m[2][1]-m[1][1]*m[2][0])*inv, (m[2][0]*m[0][1]-m[0][0]*m[2][1])*inv, (m[0][0]*m[1][1]-m[1][0]*m[0][1])*inv],
-    ])
 }

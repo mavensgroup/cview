@@ -6,8 +6,10 @@ use crate::state::AppState;
 use crate::model::elements::get_atomic_number;
 use std::f64::consts::PI;
 
-// Spglib 1.15.1 & Math
-use spglib::{cell::Cell, dataset::Dataset};
+// MOYO Imports
+use moyo::base::{Cell, Lattice, AngleTolerance};
+use moyo::MoyoDataset;
+use moyo::data::Setting;
 use nalgebra::{Matrix3, Vector3};
 
 /// Helper: Vector Magnitude
@@ -41,7 +43,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
 
     // --- LEFT: Symmetry Info ---
     let left_frame = Box::new(Orientation::Vertical, 5);
-    left_frame.set_hexpand(true); // Take half width
+    left_frame.set_hexpand(true);
 
     let title_sym = Label::new(None);
     title_sym.set_markup("<span size='large' weight='bold'>Symmetry</span>");
@@ -64,6 +66,8 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     let val_sg = Label::new(Some("-"));
     let val_num = Label::new(Some("-"));
     let val_sys = Label::new(Some("-"));
+
+    val_sg.set_selectable(true);
 
     for w in [&val_sg, &val_num, &val_sys] { w.set_halign(Align::Start); }
 
@@ -91,7 +95,6 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     grid_lat.set_column_spacing(15);
     grid_lat.set_margin_top(5);
 
-    // Labels for Lattice
     let labels_lat = [
         ("a:", 0, 0), ("α:", 2, 0),
         ("b:", 0, 1), ("β:", 2, 1),
@@ -125,7 +128,6 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     right_frame.append(&grid_lat);
     top_box.append(&right_frame);
 
-    // Separator before bottom section
     root.append(&Separator::new(Orientation::Horizontal));
 
     // ============================================================
@@ -136,7 +138,6 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     title_coords.set_halign(Align::Start);
     root.append(&title_coords);
 
-    // Scrolled Window for the list
     let scrolled = ScrolledWindow::builder()
         .hscrollbar_policy(PolicyType::Automatic)
         .vscrollbar_policy(PolicyType::Automatic)
@@ -152,36 +153,32 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     grid_atoms.set_margin_end(10);
     grid_atoms.set_margin_bottom(10);
 
-    // Table Headers
     let headers = ["El", "x (Å)", "y (Å)", "z (Å)", "x (frac)", "y (frac)", "z (frac)"];
     for (i, h) in headers.iter().enumerate() {
         let l = Label::new(None);
         l.set_markup(&format!("<b>{}</b>", h));
         grid_atoms.attach(&l, i as i32, 0, 1, 1);
     }
-    // Add separator line below headers
     let sep = Separator::new(Orientation::Horizontal);
     grid_atoms.attach(&sep, 0, 1, 7, 1);
 
     scrolled.set_child(Some(&grid_atoms));
     root.append(&scrolled);
 
-
     // ============================================================
-    // LOGIC & CALCULATIONS
+    // LOGIC
     // ============================================================
     let st = state.borrow();
     if let Some(structure) = &st.structure {
         let lat = structure.lattice;
 
-        // 1. LATTICE PARAMS
+        // 1. LATTICE DISPLAY
         let a_vec = lat[0]; let b_vec = lat[1]; let c_vec = lat[2];
         let a = mag(a_vec); let b = mag(b_vec); let c = mag(c_vec);
         let alpha = angle(b_vec, c_vec);
         let beta  = angle(a_vec, c_vec);
         let gamma = angle(a_vec, b_vec);
 
-        // Volume
         let cx = b_vec[1]*c_vec[2] - b_vec[2]*c_vec[1];
         let cy = b_vec[2]*c_vec[0] - b_vec[0]*c_vec[2];
         let cz = b_vec[0]*c_vec[1] - b_vec[1]*c_vec[0];
@@ -195,39 +192,36 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         val_ga.set_text(&format!("{:.2}°", gamma));
         val_vol.set_text(&format!("{:.2} Å³", vol));
 
-        // 2. COORDINATES & SYMMETRY PREP
-        let types: Vec<i32> = structure.atoms.iter()
-            .map(|at| get_atomic_number(&at.element))
-            .collect();
+        // 2. COORDINATE CONVERSION (Cartesian -> Fractional)
+        let mut numbers = Vec::new();
+        for at in &structure.atoms {
+            let z = get_atomic_number(&at.element);
+            numbers.push(if z == 0 { 1 } else { z as i32 });
+        }
 
-        // Calculate Fractional Matrix
-        let mat = Matrix3::new(
+        let lattice_mat = Matrix3::new(
             lat[0][0], lat[0][1], lat[0][2],
             lat[1][0], lat[1][1], lat[1][2],
             lat[2][0], lat[2][1], lat[2][2],
         );
 
-        if let Some(inv_mat) = mat.try_inverse() {
-            let mut positions: Vec<[f64; 3]> = Vec::new();
+        if let Some(inv_mat) = lattice_mat.try_inverse() {
+            let mut positions: Vec<Vector3<f64>> = Vec::new();
 
-            // Populate Atoms Table
             for (i, atom) in structure.atoms.iter().enumerate() {
-                let v = Vector3::new(atom.position[0], atom.position[1], atom.position[2]);
-                let frac = inv_mat.transpose() * v; // Row-major basis correction
-                positions.push([frac.x, frac.y, frac.z]);
+                let v_cart = Vector3::new(atom.position[0], atom.position[1], atom.position[2]);
+                let v_frac = inv_mat.transpose() * v_cart;
+                positions.push(v_frac);
 
-                // Cartesian Display
                 let el_lbl = Label::new(Some(&atom.element));
                 let x_c = Label::new(Some(&format!("{:.4}", atom.position[0])));
                 let y_c = Label::new(Some(&format!("{:.4}", atom.position[1])));
                 let z_c = Label::new(Some(&format!("{:.4}", atom.position[2])));
+                let x_f = Label::new(Some(&format!("{:.4}", v_frac.x)));
+                let y_f = Label::new(Some(&format!("{:.4}", v_frac.y)));
+                let z_f = Label::new(Some(&format!("{:.4}", v_frac.z)));
 
-                // Fractional Display
-                let x_f = Label::new(Some(&format!("{:.4}", frac.x)));
-                let y_f = Label::new(Some(&format!("{:.4}", frac.y)));
-                let z_f = Label::new(Some(&format!("{:.4}", frac.z)));
-
-                let row = (i as i32) + 2; // +2 because row 0 is header, row 1 is separator
+                let row = (i as i32) + 2;
                 grid_atoms.attach(&el_lbl, 0, row, 1, 1);
                 grid_atoms.attach(&x_c, 1, row, 1, 1);
                 grid_atoms.attach(&y_c, 2, row, 1, 1);
@@ -237,28 +231,41 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
                 grid_atoms.attach(&z_f, 6, row, 1, 1);
             }
 
-            // 3. SYMMETRY CALCULATION
-            let mut cell = Cell::new(&lat, &positions, &types);
-            let dataset = Dataset::new(&mut cell, 1e-3);
+            // 3. MOYO SYMMETRY
+            let cell = Cell::new(Lattice::new(lattice_mat), positions, numbers);
 
-            if dataset.spacegroup_number > 0 {
-                val_sg.set_text(&dataset.international_symbol);
-                val_num.set_text(&format!("{}", dataset.spacegroup_number));
+            match MoyoDataset::new(&cell, 1e-4, AngleTolerance::Default, Setting::Spglib, true) {
+                Ok(dataset) => {
+                    // Number
+                    val_num.set_text(&format!("{}", dataset.number));
 
-                let sys_name = match dataset.spacegroup_number {
-                    1..=2 => "Triclinic",
-                    3..=15 => "Monoclinic",
-                    16..=74 => "Orthorhombic",
-                    75..=142 => "Tetragonal",
-                    143..=167 => "Trigonal",
-                    168..=194 => "Hexagonal",
-                    195..=230 => "Cubic",
-                    _ => "Unknown"
-                };
-                val_sys.set_text(sys_name);
-            } else {
-                val_sg.set_text("Unknown");
+                    // Lookup Symbol
+                    let symbol = if dataset.number >= 1 && dataset.number <= 230 {
+                        SG_SYMBOLS[dataset.number as usize]
+                    } else {
+                        "Unknown"
+                    };
+                    val_sg.set_text(symbol);
+
+                    // System
+                    let sys_name = match dataset.number {
+                        1..=2 => "Triclinic",
+                        3..=15 => "Monoclinic",
+                        16..=74 => "Orthorhombic",
+                        75..=142 => "Tetragonal",
+                        143..=167 => "Trigonal",
+                        168..=194 => "Hexagonal",
+                        195..=230 => "Cubic",
+                        _ => "Unknown"
+                    };
+                    val_sys.set_text(sys_name);
+                },
+                Err(_) => {
+                    val_sg.set_text("Error");
+                }
             }
+        } else {
+            val_sg.set_text("Invalid Lattice");
         }
     } else {
         val_sg.set_text("No Data");
@@ -266,3 +273,11 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
 
     root
 }
+
+// =========================================================================
+// SPACE GROUP LOOKUP TABLE (1-230)
+// Verified complete list (231 elements including index 0)
+// =========================================================================
+
+const SG_SYMBOLS: [&str; 231] = ["","P1", "P-1", "P121", "P12_11", "C121", "P1m1", "P1c1", "C1m1", "C1c1", "P12/m1", "P12_1/m1", "C12/m1", "P12/c1", "P12_1/c1", "C12/c1", "P222", "P222_1", "P2_12_12", "P2_12_12_1", "C222_1", "C222", "F222", "I222", "I2_12_12_1", "Pmm2", "Pmc2_1", "Pcc2", "Pma2", "Pca2_1", "Pnc2", "Pmn2_1", "Pba2", "Pna2_1", "Pnn2", "Cmm2", "Cmc2_1", "Ccc2", "Amm2", "Aem2", "Ama2", "Aea2", "Fmm2", "Fdd2", "Imm2", "Iba2", "Ima2", "Pmmm", "Pnnn", "Pccm", "Pban", "Pmma", "Pnna", "Pmna", "Pcca", "Pbam", "Pccn", "Pbcm", "Pnnm", "Pmmn", "Pbcn", "Pbca", "Pnma", "Cmcm", "Cmce", "Cmmm", "Cccm", "Cmme", "Ccce", "Fmmm", "Fddd", "Immm", "Ibam", "Ibca", "Imma", "P4", "P4_1", "P4_2", "P4_3", "I4", "I4_1", "P-4", "I-4", "P4/m", "P4_2/m", "P4/n", "P4_2/n", "I4/m", "I4_1/a", "P422", "P42_12", "P4_122", "P4_12_12", "P4_222", "P4_22_12", "P4_322", "P4_32_12", "I422", "I4_122", "P4mm", "P4bm", "P4_2cm", "P4_2nm", "P4cc", "P4nc", "P4_2mc", "P4_2bc", "I4mm", "I4cm", "I4_1md", "I4_1cd", "P-42m", "P-42c", "P-42_1m", "P-42_1c", "P-4m2", "P-4c2", "P-4b2", "P-4n2", "I-4m2", "I-4c2", "I-42m", "I-42d", "P4/mmm", "P4/mcc", "P4/nbm", "P4/nnc", "P4/mbm", "P4/mnc", "P4/nmm", "P4/ncc", "P4_2/mmc", "P4_2/mcm", "P4_2/nbc", "P4_2/nnm", "P4_2/mbc", "P4_2/mnm", "P4_2/nmc", "P4_2/ncm", "I4/mmm", "I4/mcm", "I4_1/amd", "I4_1/acd", "P3", "P3_1", "P3_2", "R3", "P-3", "R-3", "P312", "P321", "P3_112", "P3_121", "P3_212", "P3_221", "R32", "P3m1", "P31m", "P3c1", "P31c", "R3m", "R3c", "P-31m", "P-31c", "P-3m1", "P-3c1", "R-3m", "R-3c", "P6", "P6_1", "P6_5", "P6_2", "P6_4", "P6_3", "P-6", "P6/m", "P6_3/m", "P622", "P6_122", "P6_522", "P6_222", "P6_422", "P6_322", "P6mm", "P6cc", "P6_3cm", "P6_3mc", "P-6m2", "P-6c2", "P-62m", "P-62c", "P6/mmm", "P6/mcc", "P6_3/mcm", "P6_3/mmc", "P23", "F23", "I23", "P2_13", "I2_13", "Pm-3", "Pn-3", "Fm-3", "Fd-3", "Im-3", "Pa-3", "Ia-3", "P432", "P4_232", "F432", "F4_132", "I432", "P4_332", "P4_132", "I4_132", "P-43m", "F-43m", "I-43m", "P-43n", "F-43c", "I-43d", "Pm-3m", "Pn-3n", "Pm-3n", "Pn-3m", "Fm-3m", "Fm-3c", "Fd-3m", "Fd-3c", "Im-3m", "Ia-3d"
+];

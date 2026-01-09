@@ -1,3 +1,4 @@
+// src/model/miller.rs
 use std::cmp::Ordering;
 
 pub struct MillerPlane {

@@ -126,7 +126,7 @@ fn draw_cylinder_impostor(
 pub fn draw_unit_cell(cr: &cairo::Context, corners: &[[f64; 2]], is_export: bool) {
     if corners.len() != 8 { return; }
 
-    cr.set_source_rgba(0.0, 0.0, 0.0, 1.0);
+    cr.set_source_rgb(0.5, 0.5, 0.5);
     cr.set_line_width(if is_export { 2.0 } else { 1.5 });
 
     let edges = [

@@ -17,6 +17,7 @@ pub struct RenderStyle {
     pub atom_scale: f64,
     pub bond_radius: f64,
     pub bond_color: (f64, f64, f64),
+    pub background_color: (f64, f64, f64),
     pub metallic: f64,
     pub roughness: f64,
     pub transmission: f64,
@@ -29,6 +30,7 @@ impl Default for RenderStyle {
             atom_scale: 0.4,
             bond_radius: 0.12,
             bond_color: (0.5, 0.5, 0.5),
+            background_color: (0.9, 0.9, 0.9),
             metallic: 0.0,
             roughness: 0.3,
             transmission: 0.0,
@@ -39,7 +41,7 @@ impl Default for RenderStyle {
 
 pub struct AppState {
     pub structure: Option<Structure>,
-    pub miller_planes: Vec<MillerPlane>, // <--- ADDED THIS FIELD
+    pub miller_planes: Vec<MillerPlane>,
     pub file_name: String,
     pub rot_x: f64,
     pub rot_y: f64,

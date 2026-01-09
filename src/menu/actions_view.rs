@@ -95,12 +95,13 @@ pub fn setup(
     // 5. Preferences
     let act_pref = gtk4::gio::SimpleAction::new("preferences", None);
     let s_pref = state.clone();
+    let da_pref = drawing_area.clone();
     // let da_pref = drawing_area.clone();
     let win_weak = window.downgrade();
 
     act_pref.connect_activate(move |_, _| {
         if let Some(win) = win_weak.upgrade() {
-            show_preferences_window(&win, s_pref.clone());
+            show_preferences_window(&win, s_pref.clone(), da_pref.clone());
         }
     });
     app.add_action(&act_pref);

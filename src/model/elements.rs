@@ -1,24 +1,64 @@
-/// Returns (radius_in_angstroms, (r, g, b))
-/// Radii are based on covalent radii. Colors are standard CPK.
-/// Returns the Atomic Number (Z) for a given element symbol
 
+
+// Returns the Atomic Number (Z) for a given element symbol
 pub fn get_atomic_number(element: &str) -> i32 {
     match element {
         // --- Period 1 ---
-        "H"  => 1,
-        "He" => 2,
+        "H" => 1, "He" => 2,
+
         // --- Period 2 ---
         "Li" => 3, "Be" => 4, "B" => 5, "C" => 6, "N" => 7, "O" => 8, "F" => 9, "Ne" => 10,
+
         // --- Period 3 ---
         "Na" => 11, "Mg" => 12, "Al" => 13, "Si" => 14, "P" => 15, "S" => 16, "Cl" => 17, "Ar" => 18,
+
         // --- Period 4 ---
-        "K" => 19, "Ca" => 20, "Sc" => 21, "Ti" => 22, "V" => 23, "Cr" => 24, "Mn" => 25,
-        "Fe" => 26, "Co" => 27, "Ni" => 28, "Cu" => 29, "Zn" => 30, "Ga" => 31, "Ge" => 32,
-        "As" => 33, "Se" => 34, "Br" => 35, "Kr" => 36,
-        // ... add others as needed
+        "K" => 19, "Ca" => 20, "Sc" => 21, "Ti" => 22, "V" => 23, "Cr" => 24, "Mn" => 25, "Fe" => 26, "Co" => 27, "Ni" => 28, "Cu" => 29, "Zn" => 30, "Ga" => 31, "Ge" => 32, "As" => 33, "Se" => 34, "Br" => 35, "Kr" => 36,
+
+        // --- Period 5 ---
+        "Rb" => 37, "Sr" => 38, "Y" => 39, "Zr" => 40, "Nb" => 41, "Mo" => 42, "Tc" => 43, "Ru" => 44, "Rh" => 45, "Pd" => 46, "Ag" => 47, "Cd" => 48, "In" => 49, "Sn" => 50, "Sb" => 51, "Te" => 52, "I" => 53, "Xe" => 54,
+
+        // --- Period 6 ---
+        "Cs" => 55, "Ba" => 56, "La" => 57, "Ce" => 58, "Pr" => 59, "Nd" => 60, "Pm" => 61, "Sm" => 62, "Eu" => 63, "Gd" => 64, "Tb" => 65, "Dy" => 66, "Ho" => 67, "Er" => 68, "Tm" => 69, "Yb" => 70, "Lu" => 71, "Hf" => 72, "Ta" => 73, "W" => 74, "Re" => 75, "Os" => 76, "Ir" => 77, "Pt" => 78, "Au" => 79, "Hg" => 80, "Tl" => 81, "Pb" => 82, "Bi" => 83, "Po" => 84, "At" => 85, "Rn" => 86,
+
+        // --- Period 7 ---
+        "Fr" => 87, "Ra" => 88, "Ac" => 89, "Th" => 90, "Pa" => 91, "U" => 92, "Np" => 93, "Pu" => 94, "Am" => 95, "Cm" => 96, "Bk" => 97, "Cf" => 98, "Es" => 99, "Fm" => 100, "Md" => 101, "No" => 102, "Lr" => 103, "Rf" => 104, "Db" => 105, "Sg" => 106, "Bh" => 107, "Hs" => 108, "Mt" => 109, "Ds" => 110, "Rg" => 111, "Cn" => 112, "Nh" => 113, "Fl" => 114, "Mc" => 115, "Lv" => 116, "Ts" => 117, "Og" => 118,
+
         _ => 0, // Unknown/Dummy
     }
 }
+
+
+// Returns the vdW radius for a given element symbol
+pub fn get_atom_vdw(element: &str) ->f64 {
+    match element {
+        // --- Period 1 ---
+        "H" => 1.20, "He" => 1.40,
+
+        // --- Period 2 ---
+        "Li" => 1.82, "Be" => 1.53, "B" => 1.92, "C" => 1.70, "N" => 1.55, "O" => 1.52, "F" => 1.47, "Ne" => 1.54,
+
+        // --- Period 3 ---
+        "Na" => 2.27, "Mg" => 1.73, "Al" => 1.84, "Si" => 2.10, "P" => 1.80, "S" => 1.80, "Cl" => 1.75, "Ar" => 1.88,
+
+        // --- Period 4 ---
+        "K" => 2.75, "Ca" => 2.31, "Sc" => 2.30, "Ti" => 2.15, "V" => 2.05, "Cr" => 2.05, "Mn" => 2.05, "Fe" => 2.00, "Co" => 2.00, "Ni" => 1.97, "Cu" => 1.96, "Zn" => 2.01, "Ga" => 1.87, "Ge" => 2.11, "As" => 1.85, "Se" => 1.90, "Br" => 1.85, "Kr" => 2.02,
+
+        // --- Period 5 ---
+        "Rb" => 3.03, "Sr" => 2.49, "Y" => 2.40, "Zr" => 2.30, "Nb" => 2.15, "Mo" => 2.10, "Tc" => 2.05, "Ru" => 2.05, "Rh" => 2.00, "Pd" => 2.05, "Ag" => 2.03, "Cd" => 2.18, "In" => 1.93, "Sn" => 2.17, "Sb" => 2.06, "Te" => 2.06, "I" => 1.98, "Xe" => 2.16,
+
+        // --- Period 6 ---
+        "Cs" => 3.43, "Ba" => 2.68, "La" => 2.50, "Ce" => 2.48, "Pr" => 2.47, "Nd" => 2.45, "Pm" => 2.43, "Sm" => 2.42, "Eu" => 2.40, "Gd" => 2.38, "Tb" => 2.37, "Dy" => 2.35, "Ho" => 2.33, "Er" => 2.32, "Tm" => 2.30, "Yb" => 2.28, "Lu" => 2.27, "Hf" => 2.25, "Ta" => 2.20, "W" => 2.10, "Re" => 2.05, "Os" => 2.00, "Ir" => 2.00, "Pt" => 2.05, "Au" => 2.10, "Hg" => 2.05, "Tl" => 1.96, "Pb" => 2.02, "Bi" => 2.07, "Po" => 1.97, "At" => 2.02, "Rn" => 2.20,
+
+        // --- Period 7 ---
+        "Fr" => 3.48, "Ra" => 2.83, "Ac" => 2.00, "Th" => 2.40, "Pa" => 2.00, "U" => 1.86, "Np" => 2.00, "Pu" => 2.00,
+        _ => 2.0, // Unknown/Dummy
+    }
+}
+
+
+// Returns (radius_in_angstroms, (r, g, b))
+// Radii are based on covalent radii. Colors are standard CPK.
 pub fn get_atom_properties(element: &str) -> (f64, (f64, f64, f64)) {
     match element {
         // --- Period 1 ---
