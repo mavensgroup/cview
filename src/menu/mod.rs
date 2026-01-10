@@ -9,6 +9,8 @@ pub mod actions_view;
 pub mod actions_tools;
 pub mod actions_analysis;
 pub mod actions_help;
+pub mod tool_supercell;
+pub mod tool_miller;
 
 pub fn build_menu_and_actions(
     app: &Application,

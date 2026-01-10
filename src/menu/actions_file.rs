@@ -72,6 +72,7 @@ pub fn setup(
                                 Ok(structure) => {
                                     {
                                         let mut s = st.borrow_mut();
+                                        s.original_structure = Some(structure.clone());
                                         s.structure = Some(structure);
                                         s.file_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
                                         s.selected_indices.clear();

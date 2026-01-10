@@ -1,90 +1,87 @@
-// src/ui/analysis/xrd_tab.rs
-
-// 1. Explicitly import only what doesn't conflict, or use fully qualified names
 use gtk4::prelude::*;
-use gtk4::{Orientation, Button, Label, Entry, ResponseType, FileChooserDialog, FileChooserAction};
-
-// We DO NOT import 'Box' or 'DrawingArea' from gtk4 here to avoid confusion.
-// We will refer to them as 'gtk4::Box' and 'gtk4::DrawingArea' in the code.
-
+use gtk4::{Orientation, Button, Label, ResponseType, FileChooserDialog, FileChooserAction, Align, Grid, Frame, SpinButton};
 use std::rc::Rc;
 use std::cell::RefCell;
 use crate::state::AppState;
 use crate::physics::xrd::{calculate_pattern, XRDSettings, XRDPattern};
 
-// Plotters imports
+// Plotters & Cairo Imports
 use plotters::prelude::*;
 use plotters::style::TextStyle;
-use plotters::drawing::DrawingArea; // This is the Plotters canvas
-use plotters::coord::Shift;
 use plotters::backend::DrawingBackend;
 use plotters_cairo::CairoBackend;
-
-// Import cairo for PDF Surface creation
-// Note: If this fails, ensure 'cairo-rs' is in your Cargo.toml,
-// or try 'use gtk4::cairo;' if it's re-exported.
 use cairo::{PdfSurface, Context};
 
-// --- Helper Function: Draws the Chart to ANY Backend (Screen or PDF) ---
-// We use 'std::boxed::Box' explicitly for the error return type
+// State to hold data between draw calls
+struct PlotState {
+    peaks: Option<Vec<XRDPattern>>,
+    settings: XRDSettings,
+}
+
+/// Helper: Draws the professional chart to any backend (Screen or PDF)
+/// uses the styling and clustering logic you preferred.
 fn draw_xrd_chart<DB: DrawingBackend>(
-    root: &DrawingArea<DB, Shift>, // Pass by reference
-    peaks: &Vec<XRDPattern>
+    root: &plotters::drawing::DrawingArea<DB, plotters::coord::Shift>,
+    peaks: &Vec<XRDPattern>,
+    settings: &XRDSettings
 ) -> Result<(), std::boxed::Box<dyn std::error::Error>>
 where DB::ErrorType: 'static {
 
-    // 1. Generate Raw Continuous Profile
-    let min_theta = 10.0;
-    let max_theta = 90.0;
+    // 1. Generate Raw Continuous Profile (Gaussian Broadening)
+    // Convert FWHM to Sigma: sigma = FWHM / 2.355
+    let sigma = settings.smoothing / 2.355;
     let step = 0.05;
-    let sigma = 0.2;
 
-    let mut raw_curve = Vec::new();
-    let mut t = min_theta;
+    let mut curve_points = Vec::new();
+    let mut t = settings.min_2theta;
 
-    while t <= max_theta {
-        let mut intensity_sum = 0.0;
-        for peak in peaks {
-            let diff = t - peak.two_theta;
+    while t <= settings.max_2theta {
+        let mut intensity = 0.0;
+        for p in peaks {
+            let diff = t - p.two_theta;
+            // Optimization: only calc if within 5 sigma
             if diff.abs() < 5.0 * sigma {
-                intensity_sum += peak.intensity * (-0.5 * (diff / sigma).powi(2)).exp();
+                intensity += p.intensity * (-0.5 * (diff / sigma).powi(2)).exp();
             }
         }
-        raw_curve.push((t, intensity_sum));
+        curve_points.push((t, intensity));
         t += step;
     }
 
-    // 2. Normalize
-    let max_raw = raw_curve.iter().map(|(_, y)| *y).fold(0.0f64, f64::max);
-    let scale_factor = if max_raw > 1e-9 { 100.0 / max_raw } else { 1.0 };
+    // Normalize to 100% relative intensity
+    let max_y = curve_points.iter().map(|(_, y)| *y).fold(0.0f64, f64::max);
+    let scale = if max_y > 1e-6 { 100.0 / max_y } else { 1.0 };
 
-    let final_curve: Vec<(f64, f64)> = raw_curve.into_iter()
-        .map(|(t, y)| (t, y * scale_factor))
+    let final_data: Vec<(f64, f64)> = curve_points.into_iter()
+        .map(|(x, y)| (x, y * scale))
         .collect();
 
-    // 3. Build Chart
-    let chart_max_y = 115.0;
+    // 2. Build the Chart (Using your preferred margins/fonts)
+    root.fill(&WHITE)?;
 
-    // Note: We use 'root' directly here (it's already a reference to a DrawingArea)
     let mut chart = ChartBuilder::on(root)
-        .caption("Simulated XRD Pattern", ("sans-serif", 20))
+        .caption("Simulated Powder Diffraction", ("sans-serif", 20).into_font())
         .margin(20)
         .x_label_area_size(50)
         .y_label_area_size(60)
-        .build_cartesian_2d(min_theta..max_theta, 0.0..chart_max_y)?;
+        .build_cartesian_2d(settings.min_2theta..settings.max_2theta, 0.0..115.0)?;
 
+    // 3. Configure Grid and Labels (Professional Style)
     chart.configure_mesh()
-        .x_desc("2θ°")
+        .x_desc("2θ (Degrees)")
         .y_desc("Relative Intensity (%)")
         .axis_desc_style(("sans-serif", 20))
+        .label_style(("sans-serif", 15))
         .draw()?;
 
+    // 4. Draw the Blue Line
     chart.draw_series(LineSeries::new(
-        final_curve,
-        &BLUE,
+        final_data,
+        BLUE.stroke_width(2), // Thicker line looks better
     ))?;
 
-    // 4. Smart Labeling (Grouped/Clustered)
+    // 5. Smart Labeling (Grouped/Clustered)
+    // This logic prevents labels from overlapping by grouping nearby peaks
     let mut i = 0;
     while i < peaks.len() {
         let current_peak = &peaks[i];
@@ -93,12 +90,15 @@ where DB::ErrorType: 'static {
         let mut best_hkl = current_peak.hkl;
         let mut max_in_cluster = current_peak.intensity;
 
+        // Look ahead for nearby peaks to group
         let mut j = i + 1;
         while j < peaks.len() {
             let next_peak = &peaks[j];
-            if (next_peak.two_theta - current_peak.two_theta).abs() > 0.5 {
+            // If peaks are within 0.8 degrees, treat as one cluster
+            if (next_peak.two_theta - current_peak.two_theta).abs() > 0.8 {
                 break;
             }
+
             cluster_intensity += next_peak.intensity;
             if next_peak.intensity > max_in_cluster {
                 max_in_cluster = next_peak.intensity;
@@ -107,112 +107,182 @@ where DB::ErrorType: 'static {
             j += 1;
         }
 
-        let visual_height = cluster_intensity * scale_factor;
+        // Determine height of the label based on the curve intensity at this point
+        // (Approximated by scaled intensity sum)
+        let visual_height = cluster_intensity * scale;
 
-        if visual_height > 2.0 {
-            chart.draw_series(std::iter::once(Text::new(
+        // Only draw label if it's significant (> 5%)
+        if visual_height > 5.0 {
+             chart.draw_series(std::iter::once(Text::new(
                 format!("({} {} {})", best_hkl.0, best_hkl.1, best_hkl.2),
-                (current_peak.two_theta, visual_height + 3.0),
+                (current_peak.two_theta, visual_height + 5.0),
                 ("sans-serif", 12).into_font(),
             )))?;
         }
+
+        // Advance outer loop
         i = j;
     }
 
     Ok(())
 }
 
-// --- Main Build Function ---
-// Returns gtk4::Box explicitly
 pub fn build(state: Rc<RefCell<AppState>>) -> gtk4::Box {
-    let root = gtk4::Box::new(Orientation::Vertical, 10);
-    root.set_margin_top(10);
-    root.set_margin_bottom(10);
-    root.set_margin_start(10);
-    root.set_margin_end(10);
+    // Root Layout (Horizontal)
+    let root = gtk4::Box::new(Orientation::Horizontal, 15);
+    root.set_margin_top(15);
+    root.set_margin_bottom(15);
+    root.set_margin_start(15);
+    root.set_margin_end(15);
 
-    // --- Controls ---
-    let controls = gtk4::Box::new(Orientation::Horizontal, 10);
-    controls.append(&Label::new(Some("λ (Å):")));
+    // ================= LEFT PANE: Plot Area =================
+    let left_pane = gtk4::Box::new(Orientation::Vertical, 5);
+    left_pane.set_hexpand(true);
 
-    let entry_lambda = Entry::new();
-    entry_lambda.set_text("1.5406");
-    entry_lambda.set_width_chars(6);
-    controls.append(&entry_lambda);
+    let plot_frame = Frame::new(Some("Powder Diffraction Pattern"));
 
-    let btn_calc = Button::with_label("Calculate Pattern");
-    controls.append(&btn_calc);
-
-    let btn_export = Button::with_label("Export PDF");
-    controls.append(&btn_export);
-
-    root.append(&controls);
-
-    // --- Plot Area (GTK Widget) ---
-    // Use fully qualified name to distinguish from Plotters DrawingArea
+    // Use fully qualified name for GTK DrawingArea
     let drawing_area = gtk4::DrawingArea::new();
+    drawing_area.set_content_height(400);
+    drawing_area.set_content_width(500);
     drawing_area.set_hexpand(true);
     drawing_area.set_vexpand(true);
-    drawing_area.set_content_height(400);
 
-    let current_peaks: Rc<RefCell<Option<Vec<XRDPattern>>>> = Rc::new(RefCell::new(None));
-    let peaks_clone = current_peaks.clone();
+    plot_frame.set_child(Some(&drawing_area));
+    left_pane.append(&plot_frame);
+    root.append(&left_pane);
+
+    // ================= RIGHT PANE: Controls =================
+    let right_pane = gtk4::Box::new(Orientation::Vertical, 10);
+    right_pane.set_width_request(250);
+
+    let title = Label::new(Some("XRD Settings"));
+    title.add_css_class("title-2");
+    title.set_halign(Align::Start);
+    right_pane.append(&title);
+
+    let grid = Grid::new();
+    grid.set_column_spacing(10);
+    grid.set_row_spacing(10);
+
+    // 1. Wavelength
+    grid.attach(&Label::new(Some("Wavelength (Å):")), 0, 0, 1, 1);
+    let spin_lambda = SpinButton::with_range(0.1, 5.0, 0.001);
+    spin_lambda.set_value(1.5406); // Cu K-alpha
+    grid.attach(&spin_lambda, 1, 0, 1, 1);
+
+    // 2. Range (2-Theta)
+    grid.attach(&Label::new(Some("Min 2θ:")), 0, 1, 1, 1);
+    let spin_min = SpinButton::with_range(0.0, 180.0, 1.0);
+    spin_min.set_value(10.0);
+    grid.attach(&spin_min, 1, 1, 1, 1);
+
+    grid.attach(&Label::new(Some("Max 2θ:")), 0, 2, 1, 1);
+    let spin_max = SpinButton::with_range(0.0, 180.0, 1.0);
+    spin_max.set_value(90.0);
+    grid.attach(&spin_max, 1, 2, 1, 1);
+
+    // 3. FWHM
+    grid.attach(&Label::new(Some("FWHM (deg):")), 0, 3, 1, 1);
+    let spin_fwhm = SpinButton::with_range(0.01, 2.0, 0.01);
+    spin_fwhm.set_value(0.3);
+    grid.attach(&spin_fwhm, 1, 3, 1, 1);
+
+    right_pane.append(&grid);
+
+    // Buttons
+    let btn_calc = Button::with_label("Calculate Pattern");
+    btn_calc.add_css_class("suggested-action");
+    btn_calc.set_margin_top(20);
+    right_pane.append(&btn_calc);
+
+    let btn_export = Button::with_label("Export PDF");
+    right_pane.append(&btn_export);
+
+    // Status Label
+    let lbl_status = Label::new(Some("Ready."));
+    lbl_status.set_wrap(true);
+    lbl_status.set_margin_top(10);
+    right_pane.append(&lbl_status);
+
+    root.append(&right_pane);
+
+    // ================= LOGIC =================
+
+    // Shared state for the Plotter
+    let plot_state = Rc::new(RefCell::new(PlotState {
+        peaks: None,
+        settings: XRDSettings::default(),
+    }));
 
     // --- Draw Function (Screen) ---
-    drawing_area.set_draw_func(move |_, context, width, height| {
-        // Create Cairo Backend from the GTK context
-        let backend = CairoBackend::new(context, (width as u32, height as u32)).unwrap();
+    let ps_draw = plot_state.clone();
+
+    drawing_area.set_draw_func(move |_, context, w, h| {
+        // Create Cairo backend
+        let backend = CairoBackend::new(context, (w as u32, h as u32)).unwrap();
         let root_area = backend.into_drawing_area();
-        root_area.fill(&WHITE).unwrap();
 
-        let peaks_ref = peaks_clone.borrow();
+        let st = ps_draw.borrow();
 
-        if let Some(peaks) = &*peaks_ref {
-            // Re-use the shared logic, passing the Plotters DrawingArea
-            draw_xrd_chart(&root_area, peaks).unwrap();
+        if let Some(peaks) = &st.peaks {
+            // Draw chart using the shared helper
+            if let Err(e) = draw_xrd_chart(&root_area, peaks, &st.settings) {
+                eprintln!("Error drawing chart: {:?}", e);
+            }
         } else {
+            root_area.fill(&WHITE).unwrap();
             let style = TextStyle::from(("sans-serif", 20).into_font()).color(&BLACK);
             root_area.draw_text(
-                "No Data. Click Calculate.",
+                "Load Structure & Click Calculate",
                 &style,
-                (width as i32 / 2 - 100, height as i32 / 2),
+                (w as i32 / 2 - 120, h as i32 / 2),
             ).unwrap();
         }
     });
 
-    root.append(&drawing_area);
-
-    // --- Interactions ---
+    // --- Signal: Calculate ---
     let da_clone = drawing_area.clone();
-    let peaks_clone_2 = current_peaks.clone();
+    let ps_calc = plot_state.clone();
+    let lbl_calc = lbl_status.clone();
+    let state_calc = state.clone();
 
-    // 1. Calculate Button
     btn_calc.connect_clicked(move |_| {
-        let st = state.borrow();
-        if let Some(structure) = &st.structure {
-            let lambda: f64 = entry_lambda.text().parse().unwrap_or(1.5406);
+        let app_st = state_calc.borrow();
+        if let Some(structure) = &app_st.structure {
+            // 1. Gather Settings
             let settings = XRDSettings {
-                wavelength: lambda,
-                min_2theta: 10.0,
-                max_2theta: 90.0,
-                smoothing: 0.2,
+                wavelength: spin_lambda.value(),
+                min_2theta: spin_min.value(),
+                max_2theta: spin_max.value(),
+                smoothing: spin_fwhm.value(), // Pass FWHM directly
             };
+
+            // 2. Physics Calculation
             let result = calculate_pattern(structure, &settings);
-            *peaks_clone_2.borrow_mut() = Some(result);
-            da_clone.queue_draw();
+
+            // 3. Update State
+            {
+                let mut ps = ps_calc.borrow_mut();
+                ps.peaks = Some(result);
+                ps.settings = settings;
+            }
+
+            lbl_calc.set_text("Calculation complete.");
+            da_clone.queue_draw(); // Trigger redraw
+        } else {
+            lbl_calc.set_text("No structure loaded.");
         }
     });
 
-    // 2. Export PDF Button
-    let peaks_clone_3 = current_peaks.clone();
+    // --- Signal: Export PDF ---
+    let ps_export = plot_state.clone();
 
     btn_export.connect_clicked(move |btn| {
-        let peaks_ref = peaks_clone_3.borrow();
-
-        if let Some(peaks) = &*peaks_ref {
-            // Create File Chooser Dialog
+        let ps = ps_export.borrow();
+        if let Some(peaks) = &ps.peaks {
+            // Open Save Dialog
             let window = btn.root().and_then(|root| root.downcast::<gtk4::Window>().ok());
-
             let dialog = FileChooserDialog::new(
                 Some("Export XRD to PDF"),
                 window.as_ref(),
@@ -221,50 +291,34 @@ pub fn build(state: Rc<RefCell<AppState>>) -> gtk4::Box {
             );
             dialog.set_current_name("xrd_pattern.pdf");
 
-            let peaks_for_export = peaks.clone();
+            // Clone data for the closure
+            let peaks_ex = peaks.clone();
+            let settings_ex = ps.settings.clone();
 
             dialog.connect_response(move |d, response| {
                 if response == ResponseType::Accept {
                     if let Some(file) = d.file() {
                         if let Some(path) = file.path() {
+                            // --- PDF Generation ---
+                            let w = 800.0;
+                            let h = 600.0;
+                            let surf = PdfSurface::new(w, h, &path).expect("PDF Surface failed");
+                            let ctx = Context::new(&surf).expect("Cairo Context failed");
+                            let backend = CairoBackend::new(&ctx, (w as u32, h as u32)).unwrap();
+                            let root = backend.into_drawing_area();
 
-                            // --- PDF EXPORT LOGIC ---
-                            let width = 800.0;
-                            let height = 600.0;
+                            draw_xrd_chart(&root, &peaks_ex, &settings_ex).unwrap();
 
-                            // 1. Create PDF Surface
-                            let surface = PdfSurface::new(width, height, &path)
-                                .expect("Failed to create PDF surface");
-
-                            // 2. Create Context
-                            let ctx = Context::new(&surface)
-                                .expect("Failed to create Cairo context");
-
-                            // 3. Create Plotters Backend
-                            let backend = CairoBackend::new(&ctx, (width as u32, height as u32))
-                                .unwrap();
-
-                            let root_area = backend.into_drawing_area();
-                            root_area.fill(&WHITE).unwrap();
-
-                            // 4. Draw
-                            if let Err(e) = draw_xrd_chart(&root_area, &peaks_for_export) {
-                                eprintln!("Error exporting PDF: {:?}", e); // Use {:?} for box<dyn error>
-                            } else {
-                                println!("XRD exported successfully to {:?}", path);
-                            }
-
-                            // 5. Finish (ensure write)
-                            surface.finish();
+                            surf.finish();
+                            println!("Exported to {:?}", path);
                         }
                     }
                 }
                 d.destroy();
             });
-
             dialog.present();
         } else {
-            println!("No data to export!");
+            println!("No data to export");
         }
     });
 

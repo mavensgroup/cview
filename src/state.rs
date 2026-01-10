@@ -1,11 +1,14 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::rc::Rc;            // <--- ADDED
+use std::cell::RefCell;     // <--- ADDED
+use gtk4::cairo::ImageSurface; // <--- ADDED
+
 use crate::model::structure::Structure;
-use crate::model::miller::MillerPlane; // <--- ADDED THIS IMPORT
+use crate::model::miller::MillerPlane;
 use crate::utils::geometry;
 use crate::config;
 
-// ... (Enums and RenderStyle struct remain unchanged) ...
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum RotationCenter { Centroid, UnitCell }
 
@@ -22,6 +25,11 @@ pub struct RenderStyle {
     pub roughness: f64,
     pub transmission: f64,
     pub element_colors: HashMap<String, (f64, f64, f64)>,
+
+    // --- NEW: The Sprite Cache ---
+    // We use #[serde(skip)] so this isn't saved to config.json
+    #[serde(skip)]
+    pub atom_cache: Rc<RefCell<HashMap<String, ImageSurface>>>,
 }
 
 impl Default for RenderStyle {
@@ -35,12 +43,15 @@ impl Default for RenderStyle {
             roughness: 0.3,
             transmission: 0.0,
             element_colors: HashMap::new(),
+            // Initialize empty cache
+            atom_cache: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 }
 
 pub struct AppState {
     pub structure: Option<Structure>,
+    pub original_structure: Option<Structure>,
     pub miller_planes: Vec<MillerPlane>,
     pub file_name: String,
     pub rot_x: f64,
@@ -57,13 +68,15 @@ pub struct AppState {
     pub style: RenderStyle,
     pub load_conventional: bool,
     pub default_export_format: ExportFormat,
+    pub scale: f64,
 }
 
 impl AppState {
     pub fn new() -> Self {
         Self {
             structure: None,
-            miller_planes: Vec::new(), // <--- INITIALIZED HERE
+            original_structure: None,
+            miller_planes: Vec::new(),
             file_name: String::from("Untitled"),
             rot_x: 0.0,
             rot_y: 0.0,
@@ -79,6 +92,7 @@ impl AppState {
             style: RenderStyle::default(),
             load_conventional: false,
             default_export_format: ExportFormat::Png,
+            scale: 1.0,
         }
     }
 
@@ -87,7 +101,18 @@ impl AppState {
         self.rotation_mode = cfg.rotation_mode;
         self.load_conventional = cfg.load_conventional;
         self.default_export_format = cfg.default_export_format;
-        self.style = cfg.style;
+
+        // When loading config, we get the styles but NOT the cache (because we skipped it).
+        // The default cache (empty) inside the config struct is fine to use.
+        // However, if we overwrite self.style completely, we might lose an existing cache if we had one (rare here).
+        // Since config load usually happens at start, overwriting is fine.
+        // We just ensure the loaded style has a valid cache container.
+        let mut loaded_style = cfg.style;
+        if Rc::strong_count(&loaded_style.atom_cache) == 0 {
+             // Just in case serialization did something weird, though 'skip' usually uses Default::default()
+             loaded_style.atom_cache = Rc::new(RefCell::new(HashMap::new()));
+        }
+        self.style = loaded_style;
     }
 
     pub fn save_config(&self) {

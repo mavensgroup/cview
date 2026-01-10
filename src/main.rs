@@ -107,38 +107,64 @@ fn build_ui(app: &Application) {
     // --- Setup Logic ---
     setup_interactions(&window, state.clone(), &drawing_area, &console_view);
 
-    // Drawing Function (Existing logic)
+    // Drawing Function
     let s = state.clone();
     drawing_area.set_draw_func(move |_, cr, w, h| {
         let st = s.borrow();
 
+        // 1. Background
         let (bg_r, bg_g, bg_b) = st.style.background_color;
         cr.set_source_rgb(bg_r, bg_g, bg_b);
         cr.paint().unwrap();
-        // let (atoms, _, bounds) = rendering::scene::calculate_scene(&st, w as f64, h as f64, false, None, None);
-        let (atoms, lattice_corners, bounds) = rendering::scene::calculate_scene(&st, w as f64, h as f64, false, None, None);
+
+        // 2. Calculate Scene (Atoms, Lattice, Bounds)
+        let (atoms, lattice_corners, bounds) = rendering::scene::calculate_scene(
+            &st,
+            w as f64,
+            h as f64,
+            false,
+            None,
+            None
+        );
+
+        // 3. Draw Unit Cell (Box)
         rendering::painter::draw_unit_cell(cr, &lattice_corners, false);
-        // rendering::painter::draw_unit_cell(cr, &lattice_corners, false);
+
+        // 4. Draw Atoms & Bonds
         rendering::painter::draw_structure(cr, &atoms, &st, bounds.scale, false);
+
+        // --- NEW: Draw Miller Planes ---
+        // We pass 'bounds.scale' so it matches the zoom level of the atoms
+       rendering::painter::draw_miller_planes(
+    cr,
+    &st,
+    &lattice_corners, // This passes a slice &[ [f64;3] ]
+    bounds.scale,
+    w as f64,
+    h as f64
+);
+        //
+        // -------------------------------
+
+        // 5. Draw Axes (Last, so they appear on top)
         rendering::painter::draw_axes(cr, &st, w as f64, h as f64);
     });
 
     window.present();
 }
+    // Drawing Function (Existing logic)
+    // let s = state.clone();
+    // drawing_area.set_draw_func(move |_, cr, w, h| {
+        // let st = s.borrow();
 
-// Helper to manually rotate points (matches the scene logic)
-/* fn rotate_point(x: f64, y: f64, z: f64, angle_x: f64, angle_y: f64, scale: f64) -> (f64, f64, f64) { */
-/*     let rad_x = angle_x.to_radians(); */
-/*     let rad_y = angle_y.to_radians(); */
+        // let (bg_r, bg_g, bg_b) = st.style.background_color;
+        // cr.set_source_rgb(bg_r, bg_g, bg_b);
+        // cr.paint().unwrap();
+        // let (atoms, lattice_corners, bounds) = rendering::scene::calculate_scene(&st, w as f64, h as f64, false, None, None);
+        // rendering::painter::draw_unit_cell(cr, &lattice_corners, false);
+        // rendering::painter::draw_structure(cr, &atoms, &st, bounds.scale, false);
+        // rendering::painter::draw_axes(cr, &st, w as f64, h as f64);
+    // });
 
-/*     // Rotate around X */
-/*     let y1 = y * rad_x.cos() - z * rad_x.sin(); */
-/*     let z1 = y * rad_x.sin() + z * rad_x.cos(); */
-
-/*     // Rotate around Y */
-/*     let x2 = x * rad_y.cos() - z1 * rad_y.sin(); */
-/*     let z2 = x * rad_y.sin() + z1 * rad_y.cos(); */
-
-/*     // Apply scale */
-/*     (x2 * scale, y1 * scale, z2 * scale) */
-/* } */
+    // window.present();
+// }

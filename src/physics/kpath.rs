@@ -1,4 +1,4 @@
-use crate::model::structure::{Structure, Atom};
+use crate::model::structure::{Structure};
 use moyo::base::{Cell, Lattice, AngleTolerance};
 use moyo::MoyoDataset;
 use moyo::data::Setting;
