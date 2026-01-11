@@ -8,14 +8,13 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter};
 use std::path::PathBuf;
-use std::rc::Rc; // <--- Handling OS paths
+use std::rc::Rc;
 
 use crate::model::miller::MillerPlane;
 use crate::model::structure::Structure;
-use crate::utils::geometry;
-// We remove 'crate::config' because we handle it here now
 use crate::physics::analysis::kpath::KPathResult;
 use crate::physics::analysis::voids::VoidResult;
+use crate::utils::geometry;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum RotationCenter {
@@ -40,7 +39,7 @@ pub struct RenderStyle {
   pub transmission: f64,
   pub element_colors: HashMap<String, (f64, f64, f64)>,
 
-  // --- The Sprite Cache ---
+  // This IS correct because RenderStyle derives Serialize
   #[serde(skip)]
   pub atom_cache: Rc<RefCell<HashMap<String, ImageSurface>>>,
 }
@@ -56,7 +55,6 @@ impl Default for RenderStyle {
       roughness: 0.3,
       transmission: 0.0,
       element_colors: HashMap::new(),
-      // Initialize empty cache
       atom_cache: Rc::new(RefCell::new(HashMap::new())),
     }
   }
@@ -76,12 +74,19 @@ pub struct AppState {
   pub original_structure: Option<Structure>,
   pub miller_planes: Vec<MillerPlane>,
   pub file_name: String,
+
+  // View
   pub rot_x: f64,
   pub rot_y: f64,
   pub rot_z: f64,
   pub zoom: f64,
+  pub pan_x: f64,
+  pub pan_y: f64,
   pub rotation_mode: RotationCenter,
-  pub selected_indices: Vec<usize>,
+
+  // Selection & Interaction
+  pub selected_indices: HashSet<usize>,
+
   pub show_bonds: bool,
   pub bond_cutoff: f64,
   pub show_axis_x: bool,
@@ -91,18 +96,27 @@ pub struct AppState {
   pub load_conventional: bool,
   pub default_export_format: ExportFormat,
   pub scale: f64,
-  // --- Physics Results (Transient) ---
+
+  // Analysis Results (Transient)
   pub kpath_result: Option<KPathResult>,
   pub void_result: Option<VoidResult>,
-  // Panning (Transient)
-  pub pan_x: f64,
-  pub pan_y: f64,
+
+  // --- NEW FIELDS FOR INTERACTION ---
+  // REMOVED #[serde(skip)] because AppState does not derive Serialize
+
+  // History for Undo
+  pub undo_stack: Vec<Structure>,
+
+  // Input State
+  pub is_shift_pressed: bool,
+
+  // Box Selection: ((Start X, Start Y), (Current X, Current Y))
+  pub selection_box: Option<((f64, f64), (f64, f64))>,
 }
 
 impl Default for AppState {
   fn default() -> Self {
-    let mut state = Self::new();
-    state.load_config(); // Try to load from OS default path
+    let (state, _) = Self::new_with_log();
     state
   }
 }
@@ -118,8 +132,12 @@ impl AppState {
       rot_y: 0.0,
       rot_z: 0.0,
       zoom: 1.0,
+      pan_x: 0.0,
+      pan_y: 0.0,
       rotation_mode: RotationCenter::Centroid,
-      selected_indices: Vec::new(),
+
+      selected_indices: HashSet::new(),
+
       show_bonds: true,
       bond_cutoff: 2.8,
       show_axis_x: true,
@@ -129,18 +147,23 @@ impl AppState {
       load_conventional: false,
       default_export_format: ExportFormat::Png,
       scale: 1.0,
-      // Initialize new fields for Tools
+
       kpath_result: None,
       void_result: None,
-      pan_x: 0.0,
-      pan_y: 0.0,
+
+      // Initialize new fields
+      undo_stack: Vec::new(),
+      is_shift_pressed: false,
+      selection_box: None,
     }
   }
 
-  /// Helper: Get the platform-specific config file path
-  /// Linux:   ~/.config/cview/settings.json
-  /// Windows: %APPDATA%\Rudra\CView\config\settings.json
-  /// Mac:     ~/Library/Application Support/com.rudra.cview/settings.json
+  pub fn new_with_log() -> (Self, String) {
+    let mut state = Self::new();
+    let log = state.load_config();
+    (state, log)
+  }
+
   fn get_config_path() -> PathBuf {
     if let Some(proj_dirs) = ProjectDirs::from("com", "rudra", "cview") {
       let config_dir = proj_dirs.config_dir();
@@ -149,11 +172,11 @@ impl AppState {
       }
       config_dir.join("settings.json")
     } else {
-      PathBuf::from("settings.json") // Fallback
+      PathBuf::from("settings.json")
     }
   }
 
-  pub fn load_config(&mut self) {
+  pub fn load_config(&mut self) -> String {
     let path = Self::get_config_path();
     if path.exists() {
       match File::open(&path) {
@@ -161,35 +184,29 @@ impl AppState {
           let reader = BufReader::new(file);
           match serde_json::from_reader::<_, AppConfig>(reader) {
             Ok(cfg) => {
-              // Success (Silent)
               self.rotation_mode = cfg.rotation_mode;
               self.load_conventional = cfg.load_conventional;
               self.default_export_format = cfg.default_export_format;
 
-              // Handle Style & Cache
               let mut loaded_style = cfg.style;
-              // Ensure cache is initialized (defensive check)
               if Rc::strong_count(&loaded_style.atom_cache) == 0 {
                 loaded_style.atom_cache = Rc::new(RefCell::new(HashMap::new()));
               }
               self.style = loaded_style;
+              format!("Config loaded from {:?}", path)
             }
-            Err(e) => {
-              eprintln!("Failed to parse config: {}", e);
-            }
+            Err(e) => format!("Error parsing config: {}", e),
           }
         }
-        Err(e) => {
-          eprintln!("Failed to open config file: {}", e);
-        }
+        Err(e) => format!("Error opening config file: {}", e),
       }
+    } else {
+      "No config file found. Using defaults.".to_string()
     }
   }
 
-  pub fn save_config(&self) {
+  pub fn save_config(&self) -> String {
     let path = Self::get_config_path();
-
-    // Construct the subset struct
     let cfg = AppConfig {
       style: self.style.clone(),
       rotation_mode: self.rotation_mode,
@@ -200,19 +217,66 @@ impl AppState {
     if let Ok(file) = File::create(&path) {
       let writer = BufWriter::new(file);
       if let Err(e) = serde_json::to_writer_pretty(writer, &cfg) {
-        eprintln!("Failed to save config: {}", e);
+        format!("Failed to save config: {}", e)
+      } else {
+        format!("Config saved to {:?}", path)
       }
-      // Success case is now silent
     } else {
-      eprintln!("Could not create config file at: {:?}", path);
+      format!("Could not create config file at: {:?}", path)
     }
   }
 
   pub fn toggle_selection(&mut self, index: usize) {
-    if let Some(pos) = self.selected_indices.iter().position(|&i| i == index) {
-      self.selected_indices.remove(pos);
+    if self.selected_indices.contains(&index) {
+      self.selected_indices.remove(&index);
     } else {
-      self.selected_indices.push(index);
+      self.selected_indices.insert(index);
+    }
+  }
+
+  // --- UNDO / REDO / DELETE LOGIC ---
+
+  pub fn push_undo(&mut self) {
+    if let Some(s) = &self.structure {
+      if self.undo_stack.len() >= 20 {
+        self.undo_stack.remove(0);
+      }
+      self.undo_stack.push(s.clone());
+    }
+  }
+
+  pub fn undo(&mut self) -> String {
+    if let Some(prev_struct) = self.undo_stack.pop() {
+      self.structure = Some(prev_struct);
+      self.selected_indices.clear();
+      "Undo successful.".to_string()
+    } else {
+      "Nothing to undo.".to_string()
+    }
+  }
+
+  pub fn delete_selected(&mut self) -> String {
+    if self.selected_indices.is_empty() {
+      return "No atoms selected.".to_string();
+    }
+
+    self.push_undo();
+
+    if let Some(s) = &mut self.structure {
+      let initial_count = s.atoms.len();
+      let mut new_atoms = Vec::new();
+      for (i, atom) in s.atoms.drain(..).enumerate() {
+        if !self.selected_indices.contains(&i) {
+          new_atoms.push(atom);
+        }
+      }
+      s.atoms = new_atoms;
+
+      let deleted = initial_count - s.atoms.len();
+      self.selected_indices.clear();
+      format!("Deleted {} atoms.", deleted)
+    } else {
+      "No structure loaded.".to_string()
     }
   }
 
@@ -265,7 +329,9 @@ impl AppState {
       None => return "No structure loaded.".to_string(),
     };
 
-    let sel = &self.selected_indices;
+    let mut sel: Vec<usize> = self.selected_indices.iter().cloned().collect();
+    sel.sort();
+
     if sel.is_empty() {
       return "Select atoms to measure.".to_string();
     }

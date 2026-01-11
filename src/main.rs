@@ -1,3 +1,5 @@
+// src/main.rs
+
 use gtk4::prelude::*;
 use gtk4::Box as GtkBox;
 use gtk4::{
@@ -28,21 +30,17 @@ fn main() {
 
   app.connect_activate(build_ui);
 
-  // FIX: Pass empty arguments to GTK so it doesn't try to interpret 'POSCAR' as a GTK-file-open request.
-  // We handle the arguments manually inside build_ui via std::env::args().
+  // Fix for CLI args being interpreted by GTK
   app.run_with_args(&Vec::<String>::new());
 }
 
 fn build_ui(app: &Application) {
-  let mut initial_state = AppState::new();
-  initial_state.load_config();
-
-  let state = Rc::new(RefCell::new(initial_state));
+  // 1. Initialize State & Capture Startup Log
+  let (mut initial_state, startup_log) = AppState::new_with_log();
 
   // ============================================================
-  // CLI ARGUMENT PARSING (Manual)
+  // CLI ARGUMENT PARSING
   // ============================================================
-  // This still works because we read from the OS environment directly
   let args: Vec<String> = std::env::args().collect();
   if args.len() > 1 {
     let path = &args[1];
@@ -67,7 +65,7 @@ fn build_ui(app: &Application) {
     match result {
       Ok(structure) => {
         println!("CLI: Successfully loaded {} atoms.", structure.atoms.len());
-        state.borrow_mut().structure = Some(structure);
+        initial_state.structure = Some(structure);
       }
       Err(e) => {
         eprintln!("CLI Error: Failed to load '{}': {}", path, e);
@@ -75,6 +73,8 @@ fn build_ui(app: &Application) {
     }
   }
   // ============================================================
+
+  let state = Rc::new(RefCell::new(initial_state));
 
   let window = ApplicationWindow::builder()
     .application(app)
@@ -107,6 +107,10 @@ fn build_ui(app: &Application) {
     .top_margin(10)
     .bottom_margin(10)
     .build();
+
+  // --- LOG STARTUP MESSAGE ---
+  console_view.buffer().set_text(&startup_log);
+
   let scroll_win = ScrolledWindow::builder()
     .min_content_height(150)
     .child(&console_view)
@@ -150,11 +154,28 @@ fn build_ui(app: &Application) {
   app.add_action(&toggle_action);
   app.set_accels_for_action("app.toggle_sidebar", &["F9"]);
 
+  // 5. Action: Quit (Save Config)
+  let quit_action = gtk4::gio::SimpleAction::new("quit", None);
+  let win_weak_q = window.downgrade();
+  let state_quit = state.clone();
+
+  quit_action.connect_activate(move |_, _| {
+    // Save config to JSON
+    let msg = state_quit.borrow().save_config();
+    println!("{}", msg); // Print to terminal as app closes
+
+    if let Some(win) = win_weak_q.upgrade() {
+      win.close();
+    }
+  });
+  app.add_action(&quit_action);
+
   root_vbox.append(&menu_bar);
   root_vbox.append(&main_hbox);
 
   setup_interactions(&window, state.clone(), &drawing_area, &console_view);
 
+  // --- DRAWING LOOP ---
   let s = state.clone();
   drawing_area.set_draw_func(move |_, cr, w, h| {
     let st = s.borrow();
@@ -180,6 +201,9 @@ fn build_ui(app: &Application) {
       h as f64,
     );
     rendering::painter::draw_axes(cr, &st, w as f64, h as f64);
+
+    // --- DRAW SELECTION BOX ---
+    rendering::painter::draw_selection_box(cr, &st);
   });
 
   window.present();
