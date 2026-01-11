@@ -1,9 +1,12 @@
-use crate::model::structure::{Structure};
-use moyo::base::{Cell, Lattice, AngleTolerance};
-use moyo::MoyoDataset;
-use moyo::data::Setting;
-use nalgebra::{Matrix3, Vector3};
 use crate::model::elements::get_atomic_number;
+use crate::model::structure::Structure;
+use moyo::base::{AngleTolerance, Cell, Lattice};
+use moyo::data::Setting;
+use moyo::MoyoDataset;
+use nalgebra::{Matrix3, Vector3};
+use std::f64::consts::PI;
+
+const SYMPREC: f64 = 1e-4;
 
 #[derive(Debug, Clone)]
 pub struct KPoint {
@@ -15,191 +18,396 @@ pub struct KPoint {
 pub struct KPathResult {
     pub spacegroup: String,
     pub number: i32,
+    pub bravais_type: String,
     pub kpoints: Vec<KPoint>,
     pub path_string: String,
     pub bz_lines: Vec<([f64; 3], [f64; 3])>,
 }
 
 pub fn calculate_kpath(structure: &Structure) -> Option<KPathResult> {
-    // 1. Convert CView Structure -> Moyo Cell
-    let l = structure.lattice;
-
-    // Construct Lattice (Row-major in CView -> Matrix3)
-    let lattice_mat = Matrix3::new(
-        l[0][0], l[0][1], l[0][2],
-        l[1][0], l[1][1], l[1][2],
-        l[2][0], l[2][1], l[2][2],
+    // 1. Build Column-Basis Matrix
+    let col_a = Vector3::new(
+        structure.lattice[0][0],
+        structure.lattice[0][1],
+        structure.lattice[0][2],
     );
-    let lattice = Lattice::new(lattice_mat);
+    let col_b = Vector3::new(
+        structure.lattice[1][0],
+        structure.lattice[1][1],
+        structure.lattice[1][2],
+    );
+    let col_c = Vector3::new(
+        structure.lattice[2][0],
+        structure.lattice[2][1],
+        structure.lattice[2][2],
+    );
 
-    // CRITICAL FIX: Convert Cartesian -> Fractional
-    // Moyo expects fractional coordinates.
-    // fractional = (L^T)^-1 * cartesian
-    let inv_mat = lattice_mat.try_inverse()?; // Return None if singular
+    let basis_matrix = Matrix3::from_columns(&[col_a, col_b, col_c]);
+
+    if basis_matrix.determinant().abs() < 1e-10 {
+        eprintln!("[KPATH] Error: Degenerate lattice");
+        return None;
+    }
+
+    // 2. Cartesian -> Fractional
+    let inv_basis = basis_matrix.try_inverse()?;
 
     let mut positions = Vec::new();
     let mut numbers = Vec::new();
 
     for atom in &structure.atoms {
-        let v_cart = Vector3::new(atom.position[0], atom.position[1], atom.position[2]);
-        let v_frac = inv_mat.transpose() * v_cart; // Convert
-
-        positions.push(v_frac);
-
+        let cart = Vector3::new(atom.position[0], atom.position[1], atom.position[2]);
+        let frac = inv_basis * cart;
+        positions.push(frac);
         let z = get_atomic_number(&atom.element) as i32;
-        numbers.push(if z == 0 { 1 } else { z });
+        numbers.push(z.max(1));
     }
 
-    let cell = Cell::new(lattice, positions, numbers);
+    // 3. Symmetry (Moyo) - Transpose for Row-Major input
+    let moyo_lattice = Lattice::new(basis_matrix.transpose());
+    let cell = Cell::new(moyo_lattice, positions, numbers);
 
-    // 2. Run Moyo Symmetry Search
-    // API: new(cell, symprec, angle_tolerance, setting, refine_cell)
     let dataset = match MoyoDataset::new(
         &cell,
-        1e-4,
+        SYMPREC,
         AngleTolerance::Default,
         Setting::Spglib,
-        true // Refine/Standardize cell
+        true,
     ) {
         Ok(d) => d,
         Err(e) => {
-            println!("[KPATH] Moyo symmetry search failed: {:?}", e);
+            eprintln!("[KPATH] Moyo failed: {:?}", e);
             return None;
         }
     };
 
     let sg_num = dataset.number;
-    let hall_num = dataset.hall_number;
 
-    println!("[KPATH] Moyo identified SG #{} (Hall: {})", sg_num, hall_num);
+    // 4. Classify Bravais - Transpose standardized lattice
+    let std_mat_rows = dataset.std_cell.lattice.basis; // Already Matrix3 (Rows)
+    let bravais = classify_bravais_lattice(sg_num, &std_mat_rows.transpose());
 
-    // 3. DECIDE K-PATH BASED ON SPACE GROUP
-    let mut final_sg = sg_num;
-    let mut sg_label = format!("SG #{}", sg_num);
+    println!("[KPATH] Detected SG #{} -> {:?}", sg_num, bravais);
 
-    // Geometry Check for R-3m (Primitive BCC vs FCC ambiguity)
-    // If Moyo returns 166 (R-3m), it could be Primitive BCC or FCC.
-    if sg_num == 166 || sg_num == 167 {
-        let alpha = angle_deg(l[1], l[2]);
-        if (alpha - 109.47).abs() < 3.0 {
-            println!("[KPATH] R-3m (~109.5°) detected -> Treating as Primitive BCC (#229)");
-            final_sg = 229;
-            sg_label = "Im-3m (Prim)".to_string();
-        } else if (alpha - 60.0).abs() < 3.0 {
-            println!("[KPATH] R-3m (~60.0°) detected -> Treating as Primitive FCC (#225)");
-            final_sg = 225;
-            sg_label = "Fm-3m (Prim)".to_string();
-        }
-    }
-
-    let (points, path_str) = get_standard_path(final_sg);
-    let bz_lines = get_bz_lines(final_sg);
+    // 5. Get Path & Wireframe
+    let (kpoints, path_string) = get_kpath_for_bravais(&bravais);
+    let bz_lines = get_bz_wireframe(&bravais);
 
     Some(KPathResult {
-        spacegroup: sg_label,
-        number: final_sg,
-        kpoints: points,
-        path_string: path_str,
+        spacegroup: format!("{} ({})", sg_num, dataset.hall_number),
+        number: sg_num,
+        bravais_type: format!("{:?}", bravais),
+        kpoints,
+        path_string,
         bz_lines,
     })
 }
 
-fn angle_deg(v1: [f64; 3], v2: [f64; 3]) -> f64 {
-    let dot = v1[0]*v2[0] + v1[1]*v2[1] + v1[2]*v2[2];
-    let m1 = (v1[0].powi(2) + v1[1].powi(2) + v1[2].powi(2)).sqrt();
-    let m2 = (v2[0].powi(2) + v2[1].powi(2) + v2[2].powi(2)).sqrt();
-    (dot / (m1 * m2)).clamp(-1.0, 1.0).acos() * 180.0 / std::f64::consts::PI
+// --- CLASSIFICATION ---
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum BravaisLattice {
+    CubicP,
+    CubicF,
+    CubicI,
+    TetragonalP,
+    TetragonalI,
+    Orthorhombic,
+    HexagonalP,
+    Rhombohedral,
+    Monoclinic,
+    Triclinic,
 }
 
-// --- STANDARD PATHS ---
-
-fn get_standard_path(sg: i32) -> (Vec<KPoint>, String) {
-    let g = KPoint { label: "Γ".to_string(), coords: [0.0, 0.0, 0.0] };
-
+fn classify_bravais_lattice(sg: i32, lattice_cols: &Matrix3<f64>) -> BravaisLattice {
+    use BravaisLattice::*;
     match sg {
-        // FCC Path
-        196 | 202 | 203 | 209 | 210 | 216 | 219 | 225..=228 | 230 => {
-            let x = KPoint { label: "X".to_string(), coords: [0.5, 0.0, 0.5] };
-            let w = KPoint { label: "W".to_string(), coords: [0.5, 0.25, 0.75] };
-            let k = KPoint { label: "K".to_string(), coords: [0.375, 0.375, 0.75] };
-            let l = KPoint { label: "L".to_string(), coords: [0.5, 0.5, 0.5] };
-            (vec![g.clone(), x, w, k, g, l], "Γ -> X -> W -> K -> Γ -> L".to_string())
-        },
-        // BCC Path
-        229 | 197 | 199 | 211 | 214 | 217 | 220 => {
-             let h = KPoint { label: "H".to_string(), coords: [0.5, -0.5, 0.5] };
-             let n = KPoint { label: "N".to_string(), coords: [0.0, 0.0, 0.5] };
-             let p = KPoint { label: "P".to_string(), coords: [0.25, 0.25, 0.25] };
-             (vec![g.clone(), h, n.clone(), g, p, n], "Γ -> H -> N -> Γ -> P -> N".to_string())
-        },
-        // Hexagonal
-        168..=194 => {
-             let m = KPoint { label: "M".to_string(), coords: [0.5, 0.0, 0.0] };
-             let k = KPoint { label: "K".to_string(), coords: [1.0/3.0, 1.0/3.0, 0.0] };
-             let a = KPoint { label: "A".to_string(), coords: [0.0, 0.0, 0.5] };
-             let l = KPoint { label: "L".to_string(), coords: [0.5, 0.0, 0.5] };
-             let h = KPoint { label: "H".to_string(), coords: [1.0/3.0, 1.0/3.0, 0.5] };
-             (vec![g.clone(), m, k, g, a.clone(), l, h, a], "Γ -> M -> K -> Γ -> A -> L -> H -> A".to_string())
-        },
-        // Simple Cubic / Default
+        1..=2 => Triclinic,
+        3..=15 => Monoclinic,
+        16..=74 => Orthorhombic,
+        75..=142 => {
+            if is_tetragonal_i(sg) {
+                TetragonalI
+            } else {
+                TetragonalP
+            }
+        }
+        143..=167 => {
+            if is_rhombohedral_geometry(lattice_cols) {
+                Rhombohedral
+            } else {
+                HexagonalP
+            }
+        }
+        168..=194 => HexagonalP,
+        195..=230 => {
+            if sg <= 206 {
+                CubicP
+            } else if (sg >= 207 && sg <= 214) || [217, 220, 229].contains(&sg) {
+                CubicI
+            } else {
+                CubicF
+            }
+        }
+        _ => Triclinic,
+    }
+}
+
+fn is_tetragonal_i(sg: i32) -> bool {
+    matches!(sg, 79|80|82|87|88|97|98|107..=110|119..=122|139..=142)
+}
+
+fn is_rhombohedral_geometry(mat: &Matrix3<f64>) -> bool {
+    let a = mat.column(0).norm();
+    let b = mat.column(1).norm();
+    let c = mat.column(2).norm();
+    (a - b).abs() < 1e-3 && (a - c).abs() < 1e-3
+}
+
+// --- PATH GENERATION ---
+
+fn get_kpath_for_bravais(bravais: &BravaisLattice) -> (Vec<KPoint>, String) {
+    use BravaisLattice::*;
+    let g = kp("Γ", 0., 0., 0.);
+
+    match bravais {
+        CubicF => {
+            // FCC
+            let x = kp("X", 0.5, 0.0, 0.5);
+            let w = kp("W", 0.5, 0.25, 0.75);
+            let k = kp("K", 0.375, 0.375, 0.75);
+            let l = kp("L", 0.5, 0.5, 0.5);
+            let u = kp("U", 0.625, 0.25, 0.625);
+            (
+                vec![
+                    g.clone(),
+                    x.clone(),
+                    w.clone(),
+                    k.clone(),
+                    g.clone(),
+                    l.clone(),
+                    u.clone(),
+                    w,
+                    l,
+                    k,
+                    u,
+                    x,
+                ],
+                "Γ-X-W-K-Γ-L-U-W-L-K|U-X".to_string(),
+            )
+        }
+        CubicI => {
+            // BCC
+            let h = kp("H", 0.5, -0.5, 0.5);
+            let n = kp("N", 0.0, 0.0, 0.5);
+            let p = kp("P", 0.25, 0.25, 0.25);
+            (
+                vec![g.clone(), h.clone(), n.clone(), g, p.clone(), h, p, n],
+                "Γ-H-N-Γ-P-H|P-N".to_string(),
+            )
+        }
+        HexagonalP => {
+            let m = kp("M", 0.5, 0.0, 0.0);
+            let k = kp("K", 1.0 / 3.0, 1.0 / 3.0, 0.0);
+            let a = kp("A", 0.0, 0.0, 0.5);
+            let l = kp("L", 0.5, 0.0, 0.5);
+            let h = kp("H", 1.0 / 3.0, 1.0 / 3.0, 0.5);
+            (
+                vec![
+                    g.clone(),
+                    m.clone(),
+                    k.clone(),
+                    g,
+                    a.clone(),
+                    l.clone(),
+                    h.clone(),
+                    a,
+                    l,
+                    m,
+                    k,
+                    h,
+                ],
+                "Γ-M-K-Γ-A-L-H-A|L-M|K-H".to_string(),
+            )
+        }
+        Rhombohedral => {
+            let f = kp("F", 0.5, 0.5, 0.0);
+            let l = kp("L", 0.5, 0.0, 0.0);
+            let z = kp("Z", 0.5, 0.5, 0.5);
+            (vec![g.clone(), f, l, z, g], "Γ-F-L-Z-Γ".to_string())
+        }
         _ => {
-             let x = KPoint { label: "X".to_string(), coords: [0.5, 0.0, 0.0] };
-             let m = KPoint { label: "M".to_string(), coords: [0.5, 0.5, 0.0] };
-             let r = KPoint { label: "R".to_string(), coords: [0.5, 0.5, 0.5] };
-             (vec![g.clone(), x.clone(), m, g, r, x], "Γ -> X -> M -> Γ -> R -> X".to_string())
+            // Simple Cubic / Default
+            let x = kp("X", 0.5, 0.0, 0.0);
+            let m = kp("M", 0.5, 0.5, 0.0);
+            let r = kp("R", 0.5, 0.5, 0.5);
+            (
+                vec![g.clone(), x.clone(), m.clone(), g, r.clone(), x, m, r],
+                "Γ-X-M-Γ-R-X|M-R".to_string(),
+            )
         }
     }
 }
 
-// --- BZ WIREFRAMES ---
-
-fn get_bz_lines(sg: i32) -> Vec<([f64; 3], [f64; 3])> {
-    match sg {
-        // BCC Path -> Rhombic Dodecahedron BZ
-        229 | 197 | 199 | 211 | 214 | 217 | 220 => get_bcc_bz(),
-        // FCC Path -> Truncated Octahedron (using cube placeholder for now)
-        196 | 202 | 203 | 209 | 210 | 216 | 219 | 225..=228 | 230 => get_cube_frame(),
-        // Hexagonal
-        168..=194 => get_hex_bz(),
-        // Default Cube
-        _ => get_cube_frame(),
+fn kp(label: &str, x: f64, y: f64, z: f64) -> KPoint {
+    KPoint {
+        label: label.to_string(),
+        coords: [x, y, z],
     }
 }
 
-fn get_bcc_bz() -> Vec<([f64; 3], [f64; 3])> {
-    // Rhombic Dodecahedron
-     let mut lines = Vec::new();
-     let tips: [[f64; 3]; 6] = [[1.,0.,0.], [-1.,0.,0.], [0.,1.,0.], [0.,-1.,0.], [0.,0.,1.], [0.,0.,-1.]];
-     for tip in tips.iter() {
-         for dx in [-0.5f64, 0.5] { for dy in [-0.5f64, 0.5] { for dz in [-0.5f64, 0.5] {
-             if ((tip[0]-dx).powi(2)+(tip[1]-dy).powi(2)+(tip[2]-dz).powi(2)) < 0.8 {
-                 lines.push((*tip, [dx, dy, dz]));
-             }
-         }}}
-     }
-     lines
+// --- BRILLOUIN ZONES ---
+
+fn get_bz_wireframe(bravais: &BravaisLattice) -> Vec<([f64; 3], [f64; 3])> {
+    use BravaisLattice::*;
+    match bravais {
+        CubicF => get_truncated_octahedron(),
+        CubicI => get_rhombic_dodecahedron(),
+        HexagonalP | Rhombohedral => get_hexagonal_prism(),
+        _ => get_cube_wireframe(),
+    }
 }
 
-fn get_hex_bz() -> Vec<([f64; 3], [f64; 3])> {
+/// Truncated Octahedron (FCC BZ)
+/// Correct Geometry: Permutations of (0, ±1, ±2) scaled
+fn get_truncated_octahedron() -> Vec<([f64; 3], [f64; 3])> {
     let mut lines = Vec::new();
-    let r = 2.0/3.0;
-    let mut c = Vec::new();
-    for i in 0..6 { let a = (i as f64)*60.0*std::f64::consts::PI/180.0; c.push([r*a.cos(), r*a.sin()]); }
-    for i in 0..6 {
-        let j = (i+1)%6;
-        lines.push(([c[i][0],c[i][1],0.5], [c[j][0],c[j][1],0.5]));
-        lines.push(([c[i][0],c[i][1],-0.5], [c[j][0],c[j][1],-0.5]));
-        lines.push(([c[i][0],c[i][1],-0.5], [c[i][0],c[i][1],0.5]));
+    let s: f64 = 0.35; // FIX: Explicit type f64 prevents "ambiguous numeric type" error
+
+    // Generate all 24 vertices: Permutations of (0, ±1s, ±2s)
+    let mut vertices = Vec::new();
+    let coords = [0.0, 1.0 * s, 2.0 * s];
+
+    // Sign combinations
+    for sx in [-1.0, 1.0] {
+        for sy in [-1.0, 1.0] {
+            // Permutation (0, 1, 2) -> (0, s, 2s)
+            vertices.push([0.0, sx * coords[1], sy * coords[2]]);
+            vertices.push([0.0, sx * coords[2], sy * coords[1]]);
+
+            // Permutation (1, 0, 2) -> (s, 0, 2s)
+            vertices.push([sx * coords[1], 0.0, sy * coords[2]]);
+            vertices.push([sx * coords[2], 0.0, sy * coords[1]]);
+
+            // Permutation (1, 2, 0) -> (s, 2s, 0)
+            vertices.push([sx * coords[1], sy * coords[2], 0.0]);
+            vertices.push([sx * coords[2], sy * coords[1], 0.0]);
+        }
+    }
+
+    // Connect nearest neighbors
+    let target_dist_sq: f64 = 2.0 * s * s;
+    let tolerance: f64 = 0.1 * s * s;
+
+    for i in 0..vertices.len() {
+        for j in (i + 1)..vertices.len() {
+            let dx = vertices[i][0] - vertices[j][0];
+            let dy = vertices[i][1] - vertices[j][1];
+            let dz = vertices[i][2] - vertices[j][2];
+            let d2 = dx * dx + dy * dy + dz * dz;
+
+            if (d2 - target_dist_sq).abs() < tolerance {
+                lines.push((vertices[i], vertices[j]));
+            }
+        }
+    }
+
+    lines
+}
+
+/// Rhombic Dodecahedron (BCC BZ)
+fn get_rhombic_dodecahedron() -> Vec<([f64; 3], [f64; 3])> {
+    let mut lines = Vec::new();
+    // 14 vertices: 6 tips and 8 corners
+    let tips = [
+        [1., 0., 0.],
+        [-1., 0., 0.],
+        [0., 1., 0.],
+        [0., -1., 0.],
+        [0., 0., 1.],
+        [0., 0., -1.],
+    ];
+    let corners = [
+        [0.5, 0.5, 0.5],
+        [0.5, 0.5, -0.5],
+        [0.5, -0.5, 0.5],
+        [0.5, -0.5, -0.5],
+        [-0.5, 0.5, 0.5],
+        [-0.5, 0.5, -0.5],
+        [-0.5, -0.5, 0.5],
+        [-0.5, -0.5, -0.5],
+    ];
+
+    for t in tips {
+        for c in corners {
+            let dx = t[0] - c[0];
+            let dy = t[1] - c[1];
+            let dz = t[2] - c[2];
+            let d2 = dx * dx + dy * dy + dz * dz;
+            // Dist is sqrt(0.5^2*2 + 0.5^2) = 0.866. d2 = 0.75
+            if d2 < 0.8 {
+                lines.push((t, c));
+            }
+        }
     }
     lines
 }
 
-fn get_cube_frame() -> Vec<([f64; 3], [f64; 3])> {
+/// Hexagonal Prism
+fn get_hexagonal_prism() -> Vec<([f64; 3], [f64; 3])> {
+    let mut lines = Vec::new();
+    let r = 0.65;
+    let h = 0.5;
+    for z in [-h, h] {
+        for i in 0..6 {
+            let a1 = (i as f64) * PI / 3.0;
+            let a2 = ((i + 1) % 6) as f64 * PI / 3.0;
+            lines.push((
+                [r * a1.cos(), r * a1.sin(), z],
+                [r * a2.cos(), r * a2.sin(), z],
+            ));
+        }
+    }
+    for i in 0..6 {
+        let a = (i as f64) * PI / 3.0;
+        lines.push((
+            [r * a.cos(), r * a.sin(), -h],
+            [r * a.cos(), r * a.sin(), h],
+        ));
+    }
+    lines
+}
+
+/// Simple Cube
+fn get_cube_wireframe() -> Vec<([f64; 3], [f64; 3])> {
     let mut lines = Vec::new();
     let d = 0.5;
-    let p = [[-d,-d,-d], [d,-d,-d], [d,d,-d], [-d,d,-d], [-d,-d,d], [d,-d,d], [d,d,d], [-d,d,d]];
-    lines.push((p[0],p[1])); lines.push((p[1],p[2])); lines.push((p[2],p[3])); lines.push((p[3],p[0]));
-    lines.push((p[4],p[5])); lines.push((p[5],p[6])); lines.push((p[6],p[7])); lines.push((p[7],p[4]));
-    lines.push((p[0],p[4])); lines.push((p[1],p[5])); lines.push((p[2],p[6])); lines.push((p[3],p[7]));
+    let v = [
+        [-d, -d, -d],
+        [d, -d, -d],
+        [d, d, -d],
+        [-d, d, -d],
+        [-d, -d, d],
+        [d, -d, d],
+        [d, d, d],
+        [-d, d, d],
+    ];
+    let edges = [
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 0),
+        (4, 5),
+        (5, 6),
+        (6, 7),
+        (7, 4),
+        (0, 4),
+        (1, 5),
+        (2, 6),
+        (3, 7),
+    ];
+    for (s, e) in edges {
+        lines.push((v[s], v[e]));
+    }
     lines
 }

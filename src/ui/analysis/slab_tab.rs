@@ -1,15 +1,19 @@
+// src/ui/analysis/slab_tab.rs
+use crate::model::structure::Structure;
+use crate::physics::operations::slab;
+use crate::state::AppState;
 use gtk4::prelude::*;
-use gtk4::{Box, Orientation, Label, Button, SpinButton, Align, Grid, DrawingArea, Frame};
-use std::rc::Rc;
+use gtk4::{Align, Box, Button, DrawingArea, Frame, Grid, Label, Orientation, SpinButton};
+use nalgebra::{Matrix3, Vector3}; // Use nalgebra for cleaner UI math
 use std::cell::RefCell;
 use std::f64::consts::PI;
-use crate::state::AppState;
-use crate::physics::operations::slab;
-use crate::model::structure::Structure;
+use std::rc::Rc;
 
 // Shared state for the visualization
 struct VisState {
-    h: f64, k: f64, l: f64,
+    h: f64,
+    k: f64,
+    l: f64,
     structure: Option<Structure>,
 }
 
@@ -23,7 +27,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
 
     // ================= LEFT PANE: Visualization =================
     let left_pane = Box::new(Orientation::Vertical, 5);
-    left_pane.set_hexpand(true); // Take available width
+    left_pane.set_hexpand(true);
 
     let frame = Frame::new(Some("Cutting Plane Visualization"));
 
@@ -39,7 +43,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
 
     // ================= RIGHT PANE: Controls =================
     let right_pane = Box::new(Orientation::Vertical, 10);
-    right_pane.set_width_request(250); // Fixed sidebar width
+    right_pane.set_width_request(250);
 
     // Header
     let title = Label::new(Some("Slab Generator"));
@@ -47,7 +51,9 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     title.set_halign(Align::Start);
     right_pane.append(&title);
 
-    let info = Label::new(Some("Define the Miller indices (h k l) to cut the surface."));
+    let info = Label::new(Some(
+        "Define the Miller indices (h k l) to cut the surface.",
+    ));
     info.set_wrap(true);
     info.set_halign(Align::Start);
     info.set_margin_bottom(10);
@@ -61,9 +67,12 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     // 1. Miller Indices
     grid.attach(&Label::new(Some("Miller Indices:")), 0, 0, 3, 1);
 
-    let spin_h = SpinButton::with_range(-10.0, 10.0, 1.0); spin_h.set_value(1.0);
-    let spin_k = SpinButton::with_range(-10.0, 10.0, 1.0); spin_k.set_value(1.0);
-    let spin_l = SpinButton::with_range(-10.0, 10.0, 1.0); spin_l.set_value(0.0);
+    let spin_h = SpinButton::with_range(-10.0, 10.0, 1.0);
+    spin_h.set_value(1.0);
+    let spin_k = SpinButton::with_range(-10.0, 10.0, 1.0);
+    spin_k.set_value(1.0);
+    let spin_l = SpinButton::with_range(-10.0, 10.0, 1.0);
+    spin_l.set_value(0.0);
 
     // Row 1: Labels h, k, l
     let row_hkl = Box::new(Orientation::Horizontal, 5);
@@ -122,8 +131,10 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     // --- Visualization State ---
     let current_struct = state.borrow().structure.clone();
     let vis_state = Rc::new(RefCell::new(VisState {
-        h: 1.0, k: 1.0, l: 0.0,
-        structure: current_struct
+        h: 1.0,
+        k: 1.0,
+        l: 0.0,
+        structure: current_struct,
     }));
 
     // --- Drawing Function (The 3D Cube + Atoms) ---
@@ -151,63 +162,57 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
             let x1 = x * yaw.cos() - z * yaw.sin();
             let z1 = x * yaw.sin() + z * yaw.cos();
             let y2 = y * pitch.cos() - z1 * pitch.sin();
+            // Invert Y for screen coordinates
             (cx + x1 * scale, cy + y2 * scale)
         };
 
         // 2. Draw Atoms (With Periodic Ghosts)
         if let Some(structure) = &st.structure {
-            // Need lattice for Cartesian -> Fractional conversion
+            // Replaced manual math with nalgebra for safety
             let lat = structure.lattice;
-            let ax = lat[0][0]; let ay = lat[0][1]; let az = lat[0][2];
-            let bx = lat[1][0]; let by = lat[1][1]; let bz = lat[1][2];
-            let cx = lat[2][0]; let cy = lat[2][1]; let cz = lat[2][2];
+            let lat_mat = Matrix3::new(
+                lat[0][0], lat[0][1], lat[0][2], lat[1][0], lat[1][1], lat[1][2], lat[2][0],
+                lat[2][1], lat[2][2],
+            );
 
-            // Determinant & Inverse (Hardcoded 3x3 inv)
-            let det = ax*(by*cz - bz*cy) - ay*(bx*cz - bz*cx) + az*(bx*cy - by*cx);
-
-            if det.abs() > 1e-6 {
-                let inv_det = 1.0 / det;
+            // Need Inverse to get Fractional Coords
+            // Be careful: if your lattice is degenerate, this returns None
+            if let Some(inv_lat) = lat_mat.try_inverse() {
+                // Since our lattice uses Row vectors, Fractional = Inv^T * Cart
+                let to_frac = inv_lat.transpose();
 
                 for atom in &structure.atoms {
-                    let x = atom.position[0];
-                    let y = atom.position[1];
-                    let z = atom.position[2];
+                    let cart = Vector3::new(atom.position[0], atom.position[1], atom.position[2]);
+                    let frac = to_frac * cart;
 
-                    // Convert Cartesian to Fractional
-                    let fx = ((by*cz - bz*cy)*x + (az*cy - ay*cz)*y + (ay*bz - az*by)*z) * inv_det;
-                    let fy = ((bz*cx - bx*cz)*x + (ax*cz - az*cx)*y + (az*bx - ax*bz)*z) * inv_det;
-                    let fz = ((bx*cy - by*cx)*x + (ay*cx - ax*cy)*y + (ax*by - ay*bx)*z) * inv_det;
-
-                    // "Complete the Box" Logic: Iterate shifts to fill visual unit cell
+                    // "Complete the Box" Logic
                     for dx in -1..=1 {
                         for dy in -1..=1 {
                             for dz in -1..=1 {
-                                let nx = fx + dx as f64;
-                                let ny = fy + dy as f64;
-                                let nz = fz + dz as f64;
+                                let nx = frac.x + dx as f64;
+                                let ny = frac.y + dy as f64;
+                                let nz = frac.z + dz as f64;
 
-                                // Tolerance for "Visual Edge" (atoms exactly on boundary appear on both sides)
                                 let eps = 0.05;
-                                if nx >= -eps && nx <= 1.0+eps &&
-                                   ny >= -eps && ny <= 1.0+eps &&
-                                   nz >= -eps && nz <= 1.0+eps
+                                if nx >= -eps
+                                    && nx <= 1.0 + eps
+                                    && ny >= -eps
+                                    && ny <= 1.0 + eps
+                                    && nz >= -eps
+                                    && nz <= 1.0 + eps
                                 {
-                                    // Map fractional 0..1 to drawing box coordinates -1..1
+                                    // Map fractional 0..1 to drawing box -1..1
                                     let bx = nx * 2.0 - 1.0;
                                     let by = ny * 2.0 - 1.0;
                                     let bz = nz * 2.0 - 1.0;
 
                                     let (px, py) = project(bx, by, bz);
 
-                                    // Draw Atom Sphere
+                                    // Draw Atom
                                     cr.new_path();
                                     cr.arc(px, py, 6.0, 0.0, 2.0 * PI);
-
-                                    // Teal color
                                     cr.set_source_rgba(0.0, 0.5, 0.5, 0.8);
                                     cr.fill_preserve().unwrap();
-
-                                    // Outline
                                     cr.set_source_rgb(0.0, 0.3, 0.3);
                                     cr.set_line_width(1.0);
                                     cr.stroke().unwrap();
@@ -224,14 +229,29 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         cr.set_source_rgb(0.2, 0.2, 0.2);
 
         let corners = [
-            (-1.0, -1.0, -1.0), (1.0, -1.0, -1.0), (1.0, 1.0, -1.0), (-1.0, 1.0, -1.0),
-            (-1.0, -1.0, 1.0), (1.0, -1.0, 1.0), (1.0, 1.0, 1.0), (-1.0, 1.0, 1.0),
+            (-1.0, -1.0, -1.0),
+            (1.0, -1.0, -1.0),
+            (1.0, 1.0, -1.0),
+            (-1.0, 1.0, -1.0),
+            (-1.0, -1.0, 1.0),
+            (1.0, -1.0, 1.0),
+            (1.0, 1.0, 1.0),
+            (-1.0, 1.0, 1.0),
         ];
 
         let edges = [
-            (0,1), (1,2), (2,3), (3,0), // Back face
-            (4,5), (5,6), (6,7), (7,4), // Front face
-            (0,4), (1,5), (2,6), (3,7)  // Connecting edges
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 0), // Back face
+            (4, 5),
+            (5, 6),
+            (6, 7),
+            (7, 4), // Front face
+            (0, 4),
+            (1, 5),
+            (2, 6),
+            (3, 7), // Connectors
         ];
 
         for (start, end) in edges {
@@ -243,31 +263,34 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         }
 
         // 4. Draw Cutting Plane (Red Poly)
-        let len = (nh*nh + nk*nk + nl*nl).sqrt();
+        let len = (nh * nh + nk * nk + nl * nl).sqrt();
         if len > 0.001 {
-            let n = (nh/len, nk/len, nl/len);
-            let up = if n.1.abs() > 0.9 { (0.0, 0.0, 1.0) } else { (0.0, 1.0, 0.0) };
+            let n = Vector3::new(nh / len, nk / len, nl / len);
 
-            // Cross product helpers
-            let cross = |a: (f64,f64,f64), b: (f64,f64,f64)| (a.1*b.2 - a.2*b.1, a.2*b.0 - a.0*b.2, a.0*b.1 - a.1*b.0);
-            let normalize = |v: (f64,f64,f64)| { let l = (v.0*v.0+v.1*v.1+v.2*v.2).sqrt(); if l==0.0{(0.,0.,0.)}else{(v.0/l,v.1/l,v.2/l)} };
+            // Choose an arbitrary "up" vector not parallel to n
+            let up = if n.y.abs() > 0.9 {
+                Vector3::new(0.0, 0.0, 1.0)
+            } else {
+                Vector3::new(0.0, 1.0, 0.0)
+            };
 
-            let u = normalize(cross(n, up));
-            let v = normalize(cross(n, u));
+            let u = n.cross(&up).normalize();
+            let v = n.cross(&u).normalize();
             let sz = 1.4;
 
             let pts = [
-                (-u.0*sz - v.0*sz, -u.1*sz - v.1*sz, -u.2*sz - v.2*sz),
-                ( u.0*sz - v.0*sz,  u.1*sz - v.1*sz,  u.2*sz - v.2*sz),
-                ( u.0*sz + v.0*sz,  u.1*sz + v.1*sz,  u.2*sz + v.2*sz),
-                (-u.0*sz + v.0*sz, -u.1*sz + v.1*sz, -u.2*sz + v.2*sz),
+                -u * sz - v * sz,
+                u * sz - v * sz,
+                u * sz + v * sz,
+                -u * sz + v * sz,
             ];
 
             cr.set_source_rgba(0.8, 0.2, 0.2, 0.3); // Red transparent
-            let p0 = project(pts[0].0, pts[0].1, pts[0].2);
+
+            let p0 = project(pts[0].x, pts[0].y, pts[0].z);
             cr.move_to(p0.0, p0.1);
             for i in 1..4 {
-                let p = project(pts[i].0, pts[i].1, pts[i].2);
+                let p = project(pts[i].x, pts[i].y, pts[i].z);
                 cr.line_to(p.0, p.1);
             }
             cr.close_path();
@@ -280,15 +303,24 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     // --- Update Signals ---
     let da_clone = drawing_area.clone();
     let state_h = vis_state.clone();
-    spin_h.connect_value_changed(move |s| { state_h.borrow_mut().h = s.value(); da_clone.queue_draw(); });
+    spin_h.connect_value_changed(move |s| {
+        state_h.borrow_mut().h = s.value();
+        da_clone.queue_draw();
+    });
 
     let da_clone = drawing_area.clone();
     let state_k = vis_state.clone();
-    spin_k.connect_value_changed(move |s| { state_k.borrow_mut().k = s.value(); da_clone.queue_draw(); });
+    spin_k.connect_value_changed(move |s| {
+        state_k.borrow_mut().k = s.value();
+        da_clone.queue_draw();
+    });
 
     let da_clone = drawing_area.clone();
     let state_l = vis_state.clone();
-    spin_l.connect_value_changed(move |s| { state_l.borrow_mut().l = s.value(); da_clone.queue_draw(); });
+    spin_l.connect_value_changed(move |s| {
+        state_l.borrow_mut().l = s.value();
+        da_clone.queue_draw();
+    });
 
     // --- Generate / Undo Logic ---
     let undo_store: Rc<RefCell<Option<Structure>>> = Rc::new(RefCell::new(None));
@@ -309,12 +341,13 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
             let thick = spin_thick.value() as u32;
             let vac = spin_vac.value();
 
+            // Calling the updated physics engine
             match slab::generate_slab(structure, h, k, l, thick, vac) {
                 Ok(new_struct) => {
                     st.structure = Some(new_struct);
                     lbl_gen.set_markup("<span color='green'>Slab generated.</span>");
                     btn_undo_gen.set_sensitive(true);
-                },
+                }
                 Err(e) => {
                     lbl_gen.set_markup(&format!("<span color='red'>Error: {}</span>", e));
                 }
@@ -324,6 +357,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         }
     });
 
+    // Undo Logic (Unchanged)
     let state_undo = state.clone();
     let undo_store_ref = undo_store.clone();
     let btn_undo_ref = btn_undo.clone();

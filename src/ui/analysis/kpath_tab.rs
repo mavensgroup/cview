@@ -1,10 +1,13 @@
+use crate::physics::analysis::kpath;
+use crate::state::AppState;
 use gtk4::prelude::*;
-use gtk4::{Box, Orientation, Label, TextView, ScrolledWindow, DrawingArea, Frame, GestureDrag, Align, PolicyType};
-use std::rc::Rc;
+use gtk4::{
+    Align, Box, DrawingArea, Frame, GestureDrag, Label, Orientation, PolicyType, ScrolledWindow,
+    TextView,
+};
 use std::cell::RefCell;
 use std::f64::consts::PI;
-use crate::state::AppState;
-use crate::physics::analysis::kpath;
+use std::rc::Rc;
 
 // Local state for the 3D Viewer inside this tab
 struct ViewerState {
@@ -68,7 +71,9 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
 
             // Helper: 3D Rotation -> 2D Screen Projection
             let project = |v: [f64; 3]| -> (f64, f64) {
-                let x = v[0]; let y = v[1]; let z = v[2];
+                let x = v[0];
+                let y = v[1];
+                let z = v[2];
                 // Rotate around X
                 let y1 = y * cos_x - z * sin_x;
                 let z1 = y * sin_x + z * cos_x;
@@ -113,9 +118,9 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
 
             let kpts = &res_clone.kpoints;
             if kpts.len() > 1 {
-                for i in 0..kpts.len()-1 {
+                for i in 0..kpts.len() - 1 {
                     let (x1, y1) = project(kpts[i].coords);
-                    let (x2, y2) = project(kpts[i+1].coords);
+                    let (x2, y2) = project(kpts[i + 1].coords);
                     cr.move_to(x1, y1);
                     cr.line_to(x2, y2);
                     cr.stroke().unwrap();
@@ -132,7 +137,11 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
                 cr.fill().unwrap();
 
                 // Draw Label
-                cr.select_font_face("Sans", gtk4::cairo::FontSlant::Normal, gtk4::cairo::FontWeight::Bold);
+                cr.select_font_face(
+                    "Sans",
+                    gtk4::cairo::FontSlant::Normal,
+                    gtk4::cairo::FontWeight::Bold,
+                );
                 cr.set_font_size(13.0);
                 cr.move_to(px + 6.0, py - 6.0);
                 cr.show_text(&pt.label).unwrap();
@@ -157,7 +166,6 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         left_pane.append(&frame_vis);
         root.append(&left_pane);
 
-
         // ================= RIGHT PANE: Output & Info =================
         let right_pane = Box::new(Orientation::Vertical, 10);
         right_pane.set_width_request(300); // Fixed sidebar width
@@ -168,9 +176,13 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         title.set_halign(Align::Start);
         right_pane.append(&title);
 
-        let lbl_sg = Label::new(Some(&format!("Space Group: {}", res.spacegroup)));
-        lbl_sg.set_halign(Align::Start);
-        right_pane.append(&lbl_sg);
+        // let lbl_sg = Label::new(Some(&format!("Space Group: {}", res.spacegroup)));
+        // lbl_sg.set_halign(Align::Start);
+        // right_pane.append(&lbl_sg);
+        let lbl_bravais = Label::new(Some(&format!("Lattice: {}", res.bravais_type)));
+        lbl_bravais.set_halign(Align::Start);
+        lbl_bravais.add_css_class("caption"); // Make it look like subtitle
+        right_pane.append(&lbl_bravais);
 
         let lbl_path = Label::new(Some(&format!("Path: {}", res.path_string)));
         lbl_path.set_halign(Align::Start);
@@ -192,11 +204,17 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         vasp_str.push_str("Reciprocal\n");
 
         if res.kpoints.len() > 1 {
-            for i in 0..res.kpoints.len()-1 {
+            for i in 0..res.kpoints.len() - 1 {
                 let p1 = &res.kpoints[i];
-                let p2 = &res.kpoints[i+1];
-                vasp_str.push_str(&format!("{:.5} {:.5} {:.5} ! {}\n", p1.coords[0], p1.coords[1], p1.coords[2], p1.label));
-                vasp_str.push_str(&format!("{:.5} {:.5} {:.5} ! {}\n", p2.coords[0], p2.coords[1], p2.coords[2], p2.label));
+                let p2 = &res.kpoints[i + 1];
+                vasp_str.push_str(&format!(
+                    "{:.5} {:.5} {:.5} ! {}\n",
+                    p1.coords[0], p1.coords[1], p1.coords[2], p1.label
+                ));
+                vasp_str.push_str(&format!(
+                    "{:.5} {:.5} {:.5} ! {}\n",
+                    p2.coords[0], p2.coords[1], p2.coords[2], p2.label
+                ));
                 vasp_str.push_str("\n");
             }
         }
@@ -214,10 +232,11 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         right_pane.append(&text_frame);
 
         root.append(&right_pane);
-
     } else {
         // Fallback if no structure/path found
-        let msg = Label::new(Some("No K-Path detected.\nLoad a structure or check symmetry."));
+        let msg = Label::new(Some(
+            "No K-Path detected.\nLoad a structure or check symmetry.",
+        ));
         msg.set_justify(gtk4::Justification::Center);
         msg.set_valign(gtk4::Align::Center);
         msg.set_vexpand(true);
