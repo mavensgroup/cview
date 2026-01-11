@@ -1,28 +1,26 @@
+use crate::model::structure::Structure;
+use crate::state::AppState;
 use gtk4::prelude::*;
-use gtk4::{Box, Orientation, Label, Button, SpinButton, Align, Grid, DrawingArea, Frame, Separator};
-use std::rc::Rc;
+use gtk4::{
+    Align, Box, Button, DrawingArea, DropDown, Frame, Grid, Label, Orientation, Separator,
+    SpinButton, StringList,
+};
 use std::cell::RefCell;
 use std::f64::consts::PI;
-use crate::state::AppState;
-use crate::physics::voids::{self, VoidResult};
-use crate::model::structure::Structure;
+use std::rc::Rc;
 
-// Common ions for intercalation (Symbol, Ionic Radius in Angstroms)
-const IONS: [(&str, f64); 8] = [
-    ("Li⁺", 0.76), ("Mg²⁺", 0.72), ("Zn²⁺", 0.74), ("Na⁺", 1.02),
-    ("Ca²⁺", 1.00), ("K⁺", 1.38), ("O²⁻", 1.40), ("Al³⁺", 0.54),
-];
+// Import constants and types from Physics
+use crate::physics::analysis::voids::{self, RadiusType, VoidConfig, VoidResult};
 
 struct VoidsVisState {
     structure: Option<Structure>,
     result: Option<VoidResult>,
 }
 
-// Helper struct for Depth Sorting (Painter's Algorithm)
 struct DrawableAtom {
     x: f64,
     y: f64,
-    z_depth: f64,
+    z: f64,
     r: f64,
     color: (f64, f64, f64, f64),
     is_void: bool,
@@ -35,22 +33,20 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     root.set_margin_start(15);
     root.set_margin_end(15);
 
-    // ================= LEFT PANE: Visualization =================
+    // --- LEFT PANE (Visualization) ---
     let left_pane = Box::new(Orientation::Vertical, 5);
     left_pane.set_hexpand(true);
-
-    let frame = Frame::new(Some("Structure & Max Void"));
+    let frame = Frame::new(Some("Structure & Void"));
     let drawing_area = DrawingArea::new();
     drawing_area.set_content_width(400);
     drawing_area.set_content_height(400);
     drawing_area.set_hexpand(true);
     drawing_area.set_vexpand(true);
-
     frame.set_child(Some(&drawing_area));
     left_pane.append(&frame);
     root.append(&left_pane);
 
-    // ================= RIGHT PANE: Controls =================
+    // --- RIGHT PANE (Controls) ---
     let right_pane = Box::new(Orientation::Vertical, 10);
     right_pane.set_width_request(300);
 
@@ -59,186 +55,266 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     title.set_halign(Align::Start);
     right_pane.append(&title);
 
-    let desc = Label::new(Some("Identify the largest spherical pore and intercalation candidates."));
-    desc.set_wrap(true);
-    desc.set_halign(Align::Start);
-    right_pane.append(&desc);
+    let ctrl_box = Box::new(Orientation::Vertical, 8);
 
-    // Controls
-    let ctrl_box = Box::new(Orientation::Vertical, 5);
+    // 1. Grid Resolution
     let row_res = Box::new(Orientation::Horizontal, 10);
-    row_res.append(&Label::new(Some("Grid Resolution (Å):")));
-
-    let spin_res = SpinButton::with_range(0.1, 1.0, 0.1);
-    spin_res.set_value(0.25);
+    row_res.append(&Label::new(Some("Grid Res (pts/Å):")));
+    let spin_res = SpinButton::with_range(0.1, 2.0, 0.1);
+    spin_res.set_value(0.3);
     spin_res.set_hexpand(true);
     row_res.append(&spin_res);
     ctrl_box.append(&row_res);
 
-    let btn_calc = Button::with_label("Calculate Void");
+    // 2. Radius Type
+    let row_type = Box::new(Orientation::Horizontal, 10);
+    row_type.append(&Label::new(Some("Radius Type:")));
+    // Added "Ionic" as the first option
+    let type_model = StringList::new(&["Ionic", "Van der Waals", "Covalent"]);
+    let drop_type = DropDown::new(Some(type_model), None::<&gtk4::Expression>);
+    drop_type.set_selected(0); // Default to Ionic
+    drop_type.set_hexpand(true);
+    row_type.append(&drop_type);
+    ctrl_box.append(&row_type);
+
+    // 3. Atom Scale
+    let row_scale = Box::new(Orientation::Horizontal, 10);
+    row_scale.append(&Label::new(Some("Radius Scale:")));
+    let spin_scale = SpinButton::with_range(0.1, 1.5, 0.05);
+    spin_scale.set_value(1.0);
+    spin_scale.set_hexpand(true);
+    row_scale.append(&spin_scale);
+    ctrl_box.append(&row_scale);
+
+    // 4. Probe Radius
+    let row_probe = Box::new(Orientation::Horizontal, 10);
+    row_probe.append(&Label::new(Some("Probe Radius (Å):")));
+    let spin_probe = SpinButton::with_range(0.0, 5.0, 0.05);
+    spin_probe.set_value(1.20);
+    spin_probe.set_hexpand(true);
+    row_probe.append(&spin_probe);
+    ctrl_box.append(&row_probe);
+
+    // 5. Dynamic Probe Buttons (Source: Physics)
+    let grid_probes = Grid::builder().row_spacing(5).column_spacing(5).build();
+    for (i, (name, rad)) in voids::PRESET_PROBES.iter().enumerate() {
+        let btn = Button::with_label(name);
+        let sp = spin_probe.clone();
+        let r_val = *rad;
+        btn.connect_clicked(move |_| sp.set_value(r_val));
+        grid_probes.attach(&btn, (i % 4) as i32, (i / 4) as i32, 1, 1);
+    }
+    ctrl_box.append(&grid_probes);
+
+    let btn_calc = Button::with_label("Calculate");
     btn_calc.add_css_class("suggested-action");
-    btn_calc.set_margin_top(5);
     ctrl_box.append(&btn_calc);
 
     right_pane.append(&ctrl_box);
     right_pane.append(&Separator::new(Orientation::Horizontal));
 
-    // Results
+    // Results Display
     let res_grid = Grid::new();
     res_grid.set_column_spacing(10);
-    res_grid.set_row_spacing(8);
-
-    let add_row = |grid: &Grid, row: i32, title: &str, val_lbl: &Label| {
-        let l = Label::builder().label(title).halign(Align::Start).build();
-        grid.attach(&l, 0, row, 1, 1);
-        grid.attach(val_lbl, 1, row, 1, 1);
+    res_grid.set_row_spacing(5);
+    let add_res = |r, t, l: &Label| {
+        res_grid.attach(
+            &Label::builder().label(t).halign(Align::Start).build(),
+            0,
+            r,
+            1,
+            1,
+        );
+        res_grid.attach(l, 1, r, 1, 1);
     };
 
-    let val_r = Label::builder().label("-").halign(Align::Start).build();
+    let val_r = Label::new(Some("-"));
     val_r.add_css_class("title-3");
-    add_row(&res_grid, 0, "Max Radius:", &val_r);
-    let val_d = Label::builder().label("-").halign(Align::Start).build();
-    add_row(&res_grid, 1, "Diameter:", &val_d);
-    let val_pos = Label::builder().label("-").halign(Align::Start).build();
-    add_row(&res_grid, 2, "Center (x,y,z):", &val_pos);
-    let val_vol = Label::builder().label("-").halign(Align::Start).build();
-    add_row(&res_grid, 3, "Void Volume %:", &val_vol);
+    let val_d = Label::new(Some("-"));
+    let val_vol = Label::new(Some("-"));
+    add_res(0, "Max Radius:", &val_r);
+    add_res(1, "Diameter:", &val_d);
+    add_res(2, "Void Vol %:", &val_vol);
 
     right_pane.append(&res_grid);
-
-    let lbl_cand_title = Label::builder().label("Intercalation Candidates:").halign(Align::Start).margin_top(10).build();
-    right_pane.append(&lbl_cand_title);
-    let val_cand = Label::builder().label("-").halign(Align::Start).wrap(true).build();
+    right_pane.append(
+        &Label::builder()
+            .label("Candidates:")
+            .halign(Align::Start)
+            .margin_top(8)
+            .build(),
+    );
+    let val_cand = Label::builder()
+        .label("-")
+        .halign(Align::Start)
+        .wrap(true)
+        .build();
     right_pane.append(&val_cand);
 
     root.append(&right_pane);
 
-    // ================= LOGIC =================
+    // --- INTERACTION LOGIC ---
     let vis_state = Rc::new(RefCell::new(VoidsVisState {
         structure: state.borrow().structure.clone(),
         result: None,
     }));
-
-    let state_calc = state.clone();
-    let vis_state_calc = vis_state.clone();
-    let da_calc = drawing_area.clone();
+    let state_c = state.clone();
+    let vis_c = vis_state.clone();
+    let da_c = drawing_area.clone();
 
     btn_calc.connect_clicked(move |_| {
-        let st = state_calc.borrow();
+        let st = state_c.borrow();
         if let Some(structure) = &st.structure {
-            let res = spin_res.value();
-            let result = voids::calculate_voids(structure, res);
-            let r_max = result.max_sphere_radius;
+            // Map Index -> Enum
+            let idx = drop_type.selected();
+            let r_type = match idx {
+                0 => RadiusType::Ionic,
+                1 => RadiusType::VanDerWaals,
+                _ => RadiusType::Covalent,
+            };
 
-            if r_max > 0.0 {
-                val_r.set_text(&format!("{:.3} Å", r_max));
-                val_d.set_text(&format!("{:.3} Å", r_max * 2.0));
-                val_pos.set_text(&format!("{:.2}, {:.2}, {:.2}",
-                    result.max_sphere_center[0], result.max_sphere_center[1], result.max_sphere_center[2]));
-                val_vol.set_text(&format!("{:.2} %", result.void_fraction));
+            // Create Config
+            let config = VoidConfig {
+                grid_resolution: spin_res.value(),
+                probe_radius: spin_probe.value(),
+                radii_scale: spin_scale.value(),
+                radius_type: r_type,
+                max_grid_points: 10_000_000,
+            };
 
-                let mut fits = Vec::new();
-                for (symbol, r_ion) in IONS.iter() {
-                    if *r_ion <= r_max { fits.push(*symbol); }
+            // Calculate & Handle Result
+            match voids::calculate_voids(structure, config) {
+                Ok(result) => {
+                    let r_max = result.max_sphere_radius;
+
+                    val_r.set_text(&format!("{:.3} Å", r_max));
+                    val_d.set_text(&format!("{:.3} Å", r_max * 2.0));
+                    val_vol.set_text(&format!("{:.2} %", result.void_fraction));
+
+                    if r_max > 0.0 {
+                        let mut fits = Vec::new();
+                        for (ion, rad) in voids::CANDIDATE_IONS {
+                            if *rad <= r_max {
+                                fits.push(*ion);
+                            }
+                        }
+                        if fits.is_empty() {
+                            val_cand.set_markup("<span color='orange'>None (Too Small)</span>");
+                        } else {
+                            val_cand.set_markup(&format!("<b>{}</b>", fits.join(", ")));
+                        }
+                    } else {
+                        val_cand.set_markup("<span color='red'>Overlap Detected</span>");
+                    }
+
+                    let mut vs = vis_c.borrow_mut();
+                    vs.structure = Some(structure.clone());
+                    vs.result = Some(result);
+                    da_c.queue_draw();
                 }
-                if fits.is_empty() {
-                    val_cand.set_markup("<span color='orange'>None (Too Dense)</span>");
-                } else {
-                    val_cand.set_markup(&format!("<b>{}</b>", fits.join(", ")));
+                Err(e) => {
+                    val_cand.set_markup(&format!("<span color='red'>Error: {}</span>", e));
+                    val_r.set_text("-");
                 }
-            } else {
-                val_r.set_text("0.00 Å");
-                val_cand.set_text("Structure is dense.");
             }
-
-            let mut vs = vis_state_calc.borrow_mut();
-            vs.structure = Some(structure.clone());
-            vs.result = Some(result);
-            da_calc.queue_draw();
-        } else {
-            val_r.set_text("No Structure");
         }
     });
 
-    // ================= DRAWING (With Depth Sort) =================
-    let vis_state_draw = vis_state.clone();
-
+    // --- DRAWING LOGIC (Cartesian + Fixed Sorting) ---
+    let vis_draw = vis_state.clone();
     drawing_area.set_draw_func(move |_, cr, width, height| {
         cr.set_source_rgb(1.0, 1.0, 1.0);
         cr.paint().unwrap();
-
         let w = width as f64;
-        let h_dim = height as f64;
-        let scale = w.min(h_dim) / 4.0;
+        let h = height as f64;
         let cx = w / 2.0;
-        let cy = h_dim / 2.0;
-
-        let yaw = PI / 4.0 + 0.4;
+        let cy = h / 2.0;
+        let yaw = PI / 4.0 + 0.3;
         let pitch = PI / 6.0;
 
-        // Projection function returning (screen_x, screen_y, z_depth)
-        let project_3d = |x: f64, y: f64, z: f64| -> (f64, f64, f64) {
-            let x1 = x * yaw.cos() - z * yaw.sin();
-            let z1 = x * yaw.sin() + z * yaw.cos();
-            let y2 = y * pitch.cos() - z1 * pitch.sin();
-            let z2 = y * pitch.sin() + z1 * pitch.cos(); // Depth
-            (cx + x1 * scale, cy + y2 * scale, z2)
-        };
-
-        let vs = vis_state_draw.borrow();
+        let vs = vis_draw.borrow();
         if let Some(structure) = &vs.structure {
-            // Lattice Matrix
             let lat = structure.lattice;
-            let ax = lat[0][0]; let ay = lat[0][1]; let az = lat[0][2];
-            let bx = lat[1][0]; let by = lat[1][1]; let bz = lat[1][2];
-            let cx_v = lat[2][0]; let cy_v = lat[2][1]; let cz_v = lat[2][2];
+            let ax = lat[0][0];
+            let ay = lat[0][1];
+            let az = lat[0][2];
+            let bx = lat[1][0];
+            let by = lat[1][1];
+            let bz = lat[1][2];
+            let cx_vec = lat[2][0];
+            let cy_vec = lat[2][1];
+            let cz_vec = lat[2][2];
 
-            // Determinant & Inverse
-            let det = ax*(by*cz_v - bz*cy_v) - ay*(bx*cz_v - bz*cx_v) + az*(bx*cy_v - by*cx_v);
-            let inv_det = if det.abs() > 1e-6 { 1.0/det } else { 0.0 };
+            let len_a = (ax * ax + ay * ay + az * az).sqrt();
+            let len_b = (bx * bx + by * by + bz * bz).sqrt();
+            let len_c = (cx_vec * cx_vec + cy_vec * cy_vec + cz_vec * cz_vec).sqrt();
+            let max_dim = len_a.max(len_b).max(len_c);
+            let view_scale = (w.min(h) * 0.5) / max_dim;
 
-            let mut draw_list: Vec<DrawableAtom> = Vec::new();
+            let center_x = (ax + bx + cx_vec) * 0.5;
+            let center_y = (ay + by + cy_vec) * 0.5;
+            let center_z = (az + bz + cz_vec) * 0.5;
 
-            // 1. Process Atoms
+            let project = |x: f64, y: f64, z: f64| {
+                let x1 = x * yaw.cos() - z * yaw.sin();
+                let z1 = x * yaw.sin() + z * yaw.cos();
+                let y2 = y * pitch.cos() - z1 * pitch.sin();
+                let z2 = y * pitch.sin() + z1 * pitch.cos();
+                (cx + x1 * view_scale, cy + y2 * view_scale, z2)
+            };
+
+            let det = ax * (by * cz_vec - bz * cy_vec) - ay * (bx * cz_vec - bz * cx_vec)
+                + az * (bx * cy_vec - by * cx_vec);
+            let inv_det = if det.abs() > 1e-6 { 1.0 / det } else { 0.0 };
+
+            let mut list = Vec::new();
+
             for atom in &structure.atoms {
-                // Cartesian to Fractional
-                let x = atom.position[0]; let y = atom.position[1]; let z = atom.position[2];
-                let mut fx = ((by*cz_v - bz*cy_v)*x + (az*cy_v - ay*cz_v)*y + (ay*bz - az*by)*z) * inv_det;
-                let mut fy = ((bz*cx_v - bx*cz_v)*x + (ax*cz_v - az*cx_v)*y + (az*bx - ax*bz)*z) * inv_det;
-                let mut fz = ((bx*cy_v - by*cx_v)*x + (ay*cx_v - ax*cy_v)*y + (ax*by - ay*bx)*z) * inv_det;
+                let x = atom.position[0];
+                let y = atom.position[1];
+                let z = atom.position[2];
+                let mut fx = ((by * cz_vec - bz * cy_vec) * x
+                    + (az * cy_vec - ay * cz_vec) * y
+                    + (ay * bz - az * by) * z)
+                    * inv_det;
+                let mut fy = ((bz * cx_vec - bx * cz_vec) * x
+                    + (ax * cz_vec - az * cx_vec) * y
+                    + (az * bx - ax * bz) * z)
+                    * inv_det;
+                let mut fz = ((bx * cy_vec - by * cx_vec) * x
+                    + (ay * cx_vec - ax * cy_vec) * y
+                    + (ax * by - ay * bx) * z)
+                    * inv_det;
 
-                // WRAP to [0, 1) first to standardize input
                 fx = fx.rem_euclid(1.0);
                 fy = fy.rem_euclid(1.0);
                 fz = fz.rem_euclid(1.0);
 
-                // Generate Ghosts: Check -1, 0, 1 for boundary overlap
                 for dx in -1..=1 {
                     for dy in -1..=1 {
                         for dz in -1..=1 {
                             let nx = fx + dx as f64;
                             let ny = fy + dy as f64;
                             let nz = fz + dz as f64;
-
-                            // Visual Tolerance: Draw if within [-0.05, 1.05]
-                            // This ensures an atom at 0.02 is drawn at 0.02 AND 1.02
-                            let eps = 0.05;
-                            if nx >= -eps && nx <= 1.0+eps &&
-                               ny >= -eps && ny <= 1.0+eps &&
-                               nz >= -eps && nz <= 1.0+eps
+                            if nx > -0.05
+                                && nx < 1.05
+                                && ny > -0.05
+                                && ny < 1.05
+                                && nz > -0.05
+                                && nz < 1.05
                             {
-                                // Map 0..1 to -1..1 for drawing centered
-                                let bx_d = nx * 2.0 - 1.0;
-                                let by_d = ny * 2.0 - 1.0;
-                                let bz_d = nz * 2.0 - 1.0;
-
-                                let (px, py, pz) = project_3d(bx_d, by_d, bz_d);
-
-                                draw_list.push(DrawableAtom {
-                                    x: px, y: py, z_depth: pz,
-                                    r: 6.0,
-                                    color: (0.0, 0.5, 0.5, 0.9),
-                                    is_void: false
+                                let rx = nx * ax + ny * bx + nz * cx_vec;
+                                let ry = nx * ay + ny * by + nz * cy_vec;
+                                let rz = nx * az + ny * bz + nz * cz_vec;
+                                let (px, py, pz) =
+                                    project(rx - center_x, ry - center_y, rz - center_z);
+                                list.push(DrawableAtom {
+                                    x: px,
+                                    y: py,
+                                    z: pz,
+                                    r: 5.0,
+                                    color: (0.2, 0.2, 0.2, 0.5),
+                                    is_void: false,
                                 });
                             }
                         }
@@ -246,87 +322,80 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
                 }
             }
 
-            // 2. Process Void Sphere
             if let Some(res) = &vs.result {
-                if res.max_sphere_radius > 0.1 {
+                if res.max_sphere_radius > 0.0 {
                     let vx = res.max_sphere_center[0];
                     let vy = res.max_sphere_center[1];
                     let vz = res.max_sphere_center[2];
-
-                    // Convert Void Center Cartesian -> Fractional
-                    let mut vfx = ((by*cz_v - bz*cy_v)*vx + (az*cy_v - ay*cz_v)*vy + (ay*bz - az*by)*vz) * inv_det;
-                    let mut vfy = ((bz*cx_v - bx*cz_v)*vx + (ax*cz_v - az*cx_v)*vy + (az*bx - ax*bz)*vz) * inv_det;
-                    let mut vfz = ((bx*cy_v - by*cx_v)*vx + (ay*cx_v - ax*cy_v)*vy + (ax*by - ay*bx)*vz) * inv_det;
-
-                    // Wrap Void to unit cell for display
-                    vfx = vfx.rem_euclid(1.0);
-                    vfy = vfy.rem_euclid(1.0);
-                    vfz = vfz.rem_euclid(1.0);
-
-                    let bx_d = vfx * 2.0 - 1.0;
-                    let by_d = vfy * 2.0 - 1.0;
-                    let bz_d = vfz * 2.0 - 1.0;
-
-                    let (px, py, pz) = project_3d(bx_d, by_d, bz_d);
-                    let avg_lat = (ax*ax+ay*ay+az*az).sqrt().max(5.0);
-                    let draw_r = (res.max_sphere_radius / avg_lat) * scale * 2.5;
-
-                    draw_list.push(DrawableAtom {
-                        x: px, y: py, z_depth: pz,
-                        r: draw_r,
-                        color: (0.9, 0.7, 0.0, 0.6), // Gold
-                        is_void: true
+                    let (px, py, pz) = project(vx - center_x, vy - center_y, vz - center_z);
+                    list.push(DrawableAtom {
+                        x: px,
+                        y: py,
+                        z: pz,
+                        r: res.max_sphere_radius * view_scale,
+                        color: (0.9, 0.1, 0.1, 0.6),
+                        is_void: true,
                     });
                 }
             }
 
-            // 3. SORT by Depth (Z) - Back to Front
-            // Higher Z is "deeper" into the screen (depending on coord system),
-            // usually in this projection Z+ is towards viewer?
-            // Let's check: x1*sin + z*cos. If we rotate Y, z moves.
-            // Standard: Sort ascending (draw small Z first) or descending?
-            // If z2 increases away from camera, draw large Z first.
-            // Let's try sorting Ascending (Small Z = Background).
-            draw_list.sort_by(|a, b| a.z_depth.partial_cmp(&b.z_depth).unwrap_or(std::cmp::Ordering::Equal));
+            // CRITICAL FIX: Sort DESCENDING (Far to Near) so atoms close to camera overlap atoms behind.
+            list.sort_by(|a, b| b.z.partial_cmp(&a.z).unwrap_or(std::cmp::Ordering::Equal));
 
-            // 4. Draw Unit Cell Box (Wireframe - Always behind or handle separately?
-            // Box lines don't occlude, so just draw them first.)
+            // Draw Box (Wireframe) - drawn first so it's behind
+            cr.set_source_rgb(0.5, 0.5, 0.5);
             cr.set_line_width(1.0);
-            cr.set_source_rgb(0.7, 0.7, 0.7);
             let corners = [
-                (-1., -1., -1.), (1., -1., -1.), (1., 1., -1.), (-1., 1., -1.),
-                (-1., -1., 1.), (1., -1., 1.), (1., 1., 1.), (-1., 1., 1.)
+                (0., 0., 0.),
+                (1., 0., 0.),
+                (1., 1., 0.),
+                (0., 1., 0.),
+                (0., 0., 1.),
+                (1., 0., 1.),
+                (1., 1., 1.),
+                (0., 1., 1.),
             ];
-            let edges = [(0,1), (1,2), (2,3), (3,0), (4,5), (5,6), (6,7), (7,4), (0,4), (1,5), (2,6), (3,7)];
+            let edges = [
+                (0, 1),
+                (1, 2),
+                (2, 3),
+                (3, 0),
+                (4, 5),
+                (5, 6),
+                (6, 7),
+                (7, 4),
+                (0, 4),
+                (1, 5),
+                (2, 6),
+                (3, 7),
+            ];
             for (s, e) in edges {
-                let p1 = project_3d(corners[s].0, corners[s].1, corners[s].2);
-                let p2 = project_3d(corners[e].0, corners[e].1, corners[e].2);
-                cr.move_to(p1.0, p1.1);
-                cr.line_to(p2.0, p2.1);
+                let c1 = corners[s];
+                let c2 = corners[e];
+                let r1x = c1.0 * ax + c1.1 * bx + c1.2 * cx_vec;
+                let r1y = c1.0 * ay + c1.1 * by + c1.2 * cy_vec;
+                let r1z = c1.0 * az + c1.1 * bz + c1.2 * cz_vec;
+                let r2x = c2.0 * ax + c2.1 * bx + c2.2 * cx_vec;
+                let r2y = c2.0 * ay + c2.1 * by + c2.2 * cy_vec;
+                let r2z = c2.0 * az + c2.1 * bz + c2.2 * cz_vec;
+                let (p1x, p1y, _) = project(r1x - center_x, r1y - center_y, r1z - center_z);
+                let (p2x, p2y, _) = project(r2x - center_x, r2y - center_y, r2z - center_z);
+                cr.move_to(p1x, p1y);
+                cr.line_to(p2x, p2y);
                 cr.stroke().unwrap();
             }
 
-            // 5. Draw Atoms/Void
-            for item in draw_list {
+            for d in list {
                 cr.new_path();
-                cr.arc(item.x, item.y, item.r, 0.0, 2.0 * PI);
-
-                if item.is_void {
-                    // Void Style
-                    cr.set_source_rgba(item.color.0, item.color.1, item.color.2, item.color.3);
+                cr.arc(d.x, d.y, d.r, 0.0, 2.0 * PI);
+                if d.is_void {
+                    cr.set_source_rgba(d.color.0, d.color.1, d.color.2, d.color.3);
                     cr.fill_preserve().unwrap();
-                    cr.set_source_rgba(item.color.0, item.color.1, item.color.2, 1.0);
-                    cr.set_line_width(2.0);
-                    cr.set_dash(&[4.0, 2.0], 0.0);
+                    cr.set_source_rgb(1.0, 0.0, 0.0);
                     cr.stroke().unwrap();
-                    cr.set_dash(&[], 0.0);
                 } else {
-                    // Atom Style
-                    cr.set_source_rgba(item.color.0, item.color.1, item.color.2, item.color.3);
-                    cr.fill_preserve().unwrap();
-                    cr.set_source_rgb(0.0, 0.3, 0.3);
-                    cr.set_line_width(1.0);
-                    cr.stroke().unwrap();
+                    cr.set_source_rgba(d.color.0, d.color.1, d.color.2, d.color.3);
+                    cr.fill().unwrap();
                 }
             }
         }

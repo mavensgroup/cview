@@ -1,7 +1,8 @@
 use gtk4::prelude::*;
 use gtk4::{
     Box as GtkBox, Orientation, Scale, Adjustment, Label, Align, DrawingArea,
-    Expander, ScrolledWindow, PolicyType, Frame, ColorButton, Button, Separator
+    Expander, ScrolledWindow, PolicyType, Frame, ColorButton, Button, Separator,
+    CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION
 };
 use gtk4::gdk;
 
@@ -12,11 +13,37 @@ use crate::model::elements::get_atom_properties;
 
 /// Builds the sidebar and returns (The ScrolledWindow, The Atom List Container Box)
 pub fn build(state: Rc<RefCell<AppState>>, drawing_area: &DrawingArea) -> (ScrolledWindow, GtkBox) {
+    // --- 0. INJECT CUSTOM CSS FOR "BOLD LINE" SLIDERS ---
+    let provider = CssProvider::new();
+    provider.load_from_data("
+        scale.thin-slider slider {
+            min-width: 6px;       /* Width of the line */
+            min-height: 18px;     /* Height of the line */
+            margin-top: -7px;     /* Center vertically on track */
+            margin-bottom: -7px;
+            border-radius: 2px;   /* Slight rounding */
+            background-color: #555555; /* Dark Bold Line */
+            box-shadow: none;
+            outline: none;
+        }
+        scale.thin-slider slider:hover {
+            background-color: #3584e4; /* Blue when hovering */
+        }
+    ");
+
+    if let Some(display) = gdk::Display::default() {
+        gtk4::style_context_add_provider_for_display(
+            &display,
+            &provider,
+            STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+    }
+
     // 1. Root Container (Scrollable)
     let scroll = ScrolledWindow::builder()
         .hscrollbar_policy(PolicyType::Never)
         .vscrollbar_policy(PolicyType::Automatic)
-        .min_content_width(280)
+        .min_content_width(200) // FIX: Restored to narrower width
         .build();
 
     let root_vbox = GtkBox::new(Orientation::Vertical, 10);
@@ -26,27 +53,32 @@ pub fn build(state: Rc<RefCell<AppState>>, drawing_area: &DrawingArea) -> (Scrol
     root_vbox.set_margin_bottom(10);
     scroll.set_child(Some(&root_vbox));
 
-    // --- Helper for Sliders (Fixed Snapping) ---
+    // --- Helper for Sliders (Fixed Snapping & Styling) ---
     let create_slider = |label: &str, min: f64, max: f64, step: f64, val: f64, callback: Box<dyn Fn(f64)>| {
         let b = GtkBox::new(Orientation::Vertical, 2);
         b.append(&Label::builder().label(label).halign(Align::Start).build());
 
         let adj = Adjustment::new(val, min, max, step, step, 0.0);
         let scale = Scale::new(Orientation::Horizontal, Some(&adj));
+
+        // Apply our custom class for the thin line look
+        scale.add_css_class("thin-slider");
+
         scale.set_digits(2);
         scale.set_draw_value(true);
         scale.set_value_pos(gtk4::PositionType::Right);
+        // FIX: Removed hexpand(true) to prevent sidebar widening
 
         scale.connect_value_changed(move |sc| {
             let raw = sc.value();
 
-            // LOGIC FIX: Always snap, regardless of step size
+            // Logic: Snap to the nearest 'step'
             let snapped = (raw / step).round() * step;
 
-            // If the slider is not currently at the snapped value, move it there
+            // Prevent infinite loop of updates
             if (raw - snapped).abs() > 0.0001 {
                 sc.set_value(snapped);
-                return; // Stop here, the set_value will trigger this callback again with the correct number
+                return;
             }
 
             callback(snapped);
@@ -73,23 +105,21 @@ pub fn build(state: Rc<RefCell<AppState>>, drawing_area: &DrawingArea) -> (Scrol
         da_z.queue_draw();
     })));
 
-    // Rot X
+    // Rotations (Step 1.0)
     let s_rx = state.clone(); let da_rx = drawing_area.clone();
-    controls_box.append(&create_slider("Rotation X", 0.0, 360.0, 15.0, state.borrow().rot_x, Box::new(move |v| {
+    controls_box.append(&create_slider("Rotation X", 0.0, 360.0, 1.0, state.borrow().rot_x, Box::new(move |v| {
         s_rx.borrow_mut().rot_x = v;
         da_rx.queue_draw();
     })));
 
-    // Rot Y
     let s_ry = state.clone(); let da_ry = drawing_area.clone();
-    controls_box.append(&create_slider("Rotation Y", 0.0, 360.0, 15.0, state.borrow().rot_y, Box::new(move |v| {
+    controls_box.append(&create_slider("Rotation Y", 0.0, 360.0, 1.0, state.borrow().rot_y, Box::new(move |v| {
         s_ry.borrow_mut().rot_y = v;
         da_ry.queue_draw();
     })));
 
-    // Rot Z
     let s_rz = state.clone(); let da_rz = drawing_area.clone();
-    controls_box.append(&create_slider("Rotation Z", 0.0, 360.0, 15.0, state.borrow().rot_z, Box::new(move |v| {
+    controls_box.append(&create_slider("Rotation Z", 0.0, 360.0, 1.0, state.borrow().rot_z, Box::new(move |v| {
         s_rz.borrow_mut().rot_z = v;
         da_rz.queue_draw();
     })));
@@ -102,8 +132,6 @@ pub fn build(state: Rc<RefCell<AppState>>, drawing_area: &DrawingArea) -> (Scrol
     // SECTION 2: APPEARANCE
     // ============================================================
     let style_expander = Expander::new(Some("Appearance"));
-
-    // FIX 2: Set expanded to false by default
     style_expander.set_expanded(false);
 
     let style_box = GtkBox::new(Orientation::Vertical, 15);
@@ -114,7 +142,6 @@ pub fn build(state: Rc<RefCell<AppState>>, drawing_area: &DrawingArea) -> (Scrol
     // --- MATERIAL ---
     let frame_mat = Frame::new(Some("Material"));
     let vbox_mat = GtkBox::new(Orientation::Vertical, 10);
-
     vbox_mat.set_margin_top(10);
     vbox_mat.set_margin_bottom(10);
     vbox_mat.set_margin_start(10);
@@ -123,21 +150,27 @@ pub fn build(state: Rc<RefCell<AppState>>, drawing_area: &DrawingArea) -> (Scrol
     // Metallic
     let s_met = state.clone(); let da_met = drawing_area.clone();
     vbox_mat.append(&create_slider("Metallic", 0.0, 1.0, 0.05, state.borrow().style.metallic, Box::new(move |v| {
-        s_met.borrow_mut().style.metallic = v;
+        let mut st = s_met.borrow_mut();
+        st.style.metallic = v;
+        st.style.atom_cache.borrow_mut().clear();
         da_met.queue_draw();
     })));
 
     // Roughness
     let s_rgh = state.clone(); let da_rgh = drawing_area.clone();
     vbox_mat.append(&create_slider("Roughness", 0.0, 1.0, 0.05, state.borrow().style.roughness, Box::new(move |v| {
-        s_rgh.borrow_mut().style.roughness = v;
+        let mut st = s_rgh.borrow_mut();
+        st.style.roughness = v;
+        st.style.atom_cache.borrow_mut().clear();
         da_rgh.queue_draw();
     })));
 
     // Transmission
     let s_tr = state.clone(); let da_tr = drawing_area.clone();
     vbox_mat.append(&create_slider("Transmission", 0.0, 1.0, 0.05, state.borrow().style.transmission, Box::new(move |v| {
-        s_tr.borrow_mut().style.transmission = v;
+        let mut st = s_tr.borrow_mut();
+        st.style.transmission = v;
+        st.style.atom_cache.borrow_mut().clear();
         da_tr.queue_draw();
     })));
 
@@ -148,13 +181,12 @@ pub fn build(state: Rc<RefCell<AppState>>, drawing_area: &DrawingArea) -> (Scrol
     // --- ATOMS ---
     let frame_atoms = Frame::new(Some("Atoms"));
     let vbox_atoms = GtkBox::new(Orientation::Vertical, 10);
-
     vbox_atoms.set_margin_top(10);
     vbox_atoms.set_margin_bottom(10);
     vbox_atoms.set_margin_start(10);
     vbox_atoms.set_margin_end(10);
 
-    // 1. Global Scale Slider
+    // 1. Global Scale
     let s_as = state.clone(); let da_as = drawing_area.clone();
     vbox_atoms.append(&create_slider("Size Scale", 0.1, 2.0, 0.05, state.borrow().style.atom_scale, Box::new(move |v| {
         s_as.borrow_mut().style.atom_scale = v;
@@ -163,11 +195,10 @@ pub fn build(state: Rc<RefCell<AppState>>, drawing_area: &DrawingArea) -> (Scrol
 
     vbox_atoms.append(&Separator::new(Orientation::Horizontal));
 
-    // 2. Dynamic Element List Container
+    // 2. Element List
     let atoms_list_container = GtkBox::new(Orientation::Vertical, 5);
     vbox_atoms.append(&atoms_list_container);
 
-    // Initial Population
     refresh_atom_list(&atoms_list_container, state.clone(), drawing_area);
 
     frame_atoms.set_child(Some(&vbox_atoms));
@@ -176,7 +207,6 @@ pub fn build(state: Rc<RefCell<AppState>>, drawing_area: &DrawingArea) -> (Scrol
     // --- BONDS ---
     let frame_bonds = Frame::new(Some("Bonds"));
     let vbox_bonds = GtkBox::new(Orientation::Vertical, 10);
-
     vbox_bonds.set_margin_top(10);
     vbox_bonds.set_margin_bottom(10);
     vbox_bonds.set_margin_start(10);
@@ -188,6 +218,15 @@ pub fn build(state: Rc<RefCell<AppState>>, drawing_area: &DrawingArea) -> (Scrol
         s_br.borrow_mut().style.bond_radius = v;
         da_br.queue_draw();
     })));
+
+   // 2. NEW: Bond Tolerance Slider
+    // This controls the "bond_cutoff" state which is now interpreted as a multiplier (e.g. 1.15)
+    let s_tol = state.clone(); let da_tol = drawing_area.clone();
+    vbox_bonds.append(&create_slider("Tolerance", 0.6, 1.6, 0.05, state.borrow().bond_cutoff, Box::new(move |v| {
+        s_tol.borrow_mut().bond_cutoff = v;
+        da_tol.queue_draw();
+    })));
+
 
     // Color
     let box_bcol = GtkBox::new(Orientation::Horizontal, 10);
@@ -212,19 +251,16 @@ pub fn build(state: Rc<RefCell<AppState>>, drawing_area: &DrawingArea) -> (Scrol
     style_expander.set_child(Some(&style_box));
     root_vbox.append(&style_expander);
 
-    // RETURN both components
     (scroll, atoms_list_container)
 }
 
 
 /// Public helper to rebuild the list of atom colors dynamically
 pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, drawing_area: &DrawingArea) {
-    // 1. Clear existing list
     while let Some(child) = container.first_child() {
         container.remove(&child);
     }
 
-    // 2. Get Elements
     let elements = if let Some(structure) = &state.borrow().structure {
         let mut unique: Vec<String> = structure.atoms.iter().map(|a| a.element.clone()).collect();
         unique.sort();
@@ -234,7 +270,6 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, drawi
         vec![]
     };
 
-    // 3. Rebuild UI
     if elements.is_empty() {
         let lbl = Label::new(Some("(Load file to see elements)"));
         lbl.set_opacity(0.6);
@@ -267,7 +302,9 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, drawi
             let s = state.clone(); let da = drawing_area.clone(); let elem_key = elem.clone();
             btn.connect_color_set(move |b| {
                 let c = b.rgba();
-                s.borrow_mut().style.element_colors.insert(elem_key.clone(), (c.red() as f64, c.green() as f64, c.blue() as f64));
+                let mut st = s.borrow_mut();
+                st.style.element_colors.insert(elem_key.clone(), (c.red() as f64, c.green() as f64, c.blue() as f64));
+                st.style.atom_cache.borrow_mut().remove(&elem_key);
                 da.queue_draw();
             });
             row.append(&btn);
@@ -278,7 +315,10 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, drawi
             let elem_key_r = elem.clone(); let btn_ref = btn.clone();
 
             btn_reset.connect_clicked(move |_| {
-                s_r.borrow_mut().style.element_colors.remove(&elem_key_r);
+                let mut st = s_r.borrow_mut();
+                st.style.element_colors.remove(&elem_key_r);
+                st.style.atom_cache.borrow_mut().remove(&elem_key_r);
+
                 let (_, def) = get_atom_properties(&elem_key_r);
                 btn_ref.set_rgba(&gdk::RGBA::new(def.0 as f32, def.1 as f32, def.2 as f32, 1.0));
                 da_r.queue_draw();

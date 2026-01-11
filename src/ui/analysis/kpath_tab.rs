@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::f64::consts::PI;
 use crate::state::AppState;
-use crate::physics::kpath; // Removed unused KPathResult import
+use crate::physics::analysis::kpath;
 
 // Local state for the 3D Viewer inside this tab
 struct ViewerState {

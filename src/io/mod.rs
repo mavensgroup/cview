@@ -1,11 +1,10 @@
 // src/io/mod.rs
-// src/io/mod.rs
-
 pub mod cif;
 pub mod poscar;
 pub mod sprkkr;
 pub mod xyz;
-pub mod qe;  // <--- Make sure this module is declared
+pub mod qe;
+pub mod xrd_exp;
 
 use std::io;
 use crate::model::Structure;

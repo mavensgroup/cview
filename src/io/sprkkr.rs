@@ -1,8 +1,10 @@
 use std::fs::File;
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, Write}; // Added Write trait
 use std::path::Path;
 use std::collections::HashMap;
 use crate::model::{Atom, Structure};
+// Import the shared atomic number lookup
+use crate::model::elements::get_atomic_number;
 
 #[derive(PartialEq)]
 enum Section {
@@ -38,85 +40,95 @@ pub fn parse(path: &str) -> io::Result<Structure> {
         if trimmed == "OCCUPATION" { current_section = Section::Occupation; continue; }
         if trimmed == "TYPES" { current_section = Section::Types; continue; }
 
-        if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
-
         match current_section {
             Section::Lattice => {
-                if trimmed.starts_with("ALAT") {
-                    if let Some(val) = parse_value_after_key(trimmed, "ALAT") { alat = val; }
-                } else if trimmed.starts_with("A(1)") {
-                    if let Some(v) = parse_vector_after_key(trimmed, "A(1)") { lattice[0] = v; }
-                } else if trimmed.starts_with("A(2)") {
-                    if let Some(v) = parse_vector_after_key(trimmed, "A(2)") { lattice[1] = v; }
-                } else if trimmed.starts_with("A(3)") {
-                    if let Some(v) = parse_vector_after_key(trimmed, "A(3)") { lattice[2] = v; }
-                }
-            }
-            Section::Sites => {
-                if trimmed.starts_with("IQ") || trimmed.starts_with("CARTESIAN") || trimmed.starts_with("BASSCALE") { continue; }
-                let parts: Vec<&str> = trimmed.split_whitespace().collect();
-                if parts.len() >= 4 {
-                    if let Ok(iq) = parts[0].parse::<usize>() {
-                        let x = parts[1].parse::<f64>().unwrap_or(0.0);
-                        let y = parts[2].parse::<f64>().unwrap_or(0.0);
-                        let z = parts[3].parse::<f64>().unwrap_or(0.0);
-                        site_positions.insert(iq, [x, y, z]);
+                if trimmed.starts_with("ALAT=") {
+                    let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                    if let Some(val_str) = parts.get(1) {
+                        if let Ok(val) = val_str.parse::<f64>() { alat = val * 0.529177; } // Bohr -> Angstrom
                     }
+                } else if trimmed.starts_with("A1=") {
+                    if let Some(v) = parse_vec(trimmed) { lattice[0] = v; }
+                } else if trimmed.starts_with("A2=") {
+                    if let Some(v) = parse_vec(trimmed) { lattice[1] = v; }
+                } else if trimmed.starts_with("A3=") {
+                    if let Some(v) = parse_vec(trimmed) { lattice[2] = v; }
                 }
-            }
-            Section::Occupation => {
-                if trimmed.starts_with("IQ") { continue; }
-                let parts: Vec<&str> = trimmed.split_whitespace().collect();
-                if parts.len() >= 5 {
-                    if let Ok(iq) = parts[0].parse::<usize>() {
-                        if let Ok(itoq) = parts[4].parse::<usize>() {
-                            site_to_type.insert(iq, itoq);
+            },
+            Section::Sites => {
+                if let Some(idx_end) = trimmed.find(' ') {
+                    if let Ok(id) = trimmed[..idx_end].parse::<usize>() {
+                        if let Some(pos) = parse_vec(&trimmed[idx_end..]) {
+                            site_positions.insert(id, pos);
                         }
                     }
                 }
-            }
-            Section::Types => {
-                if trimmed.starts_with("IT") { continue; }
+            },
+            Section::Occupation => {
                 let parts: Vec<&str> = trimmed.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    if let Ok(it) = parts[0].parse::<usize>() {
-                        type_labels.insert(it, parts[1].to_string());
+                if parts.len() >= 6 {
+                    if let (Ok(site_id), Ok(type_id)) = (parts[0].parse::<usize>(), parts[4].parse::<usize>()) {
+                        site_to_type.insert(site_id, type_id);
                     }
                 }
-            }
-            Section::None => {}
+            },
+            Section::Types => {
+                if let (Some(_iqt_pos), Some(txt_pos)) = (trimmed.find("IQ=").or(trimmed.find(|c: char| c.is_numeric())), trimmed.find("TXT=")) {
+                     let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                     if let Ok(id) = parts[0].parse::<usize>() {
+                         let element_part = &trimmed[txt_pos+4..];
+                         let element = element_part.split_whitespace().next().unwrap_or("X");
+                         type_labels.insert(id, element.to_string());
+                     }
+                }
+            },
+            _ => {}
+        }
+    }
+
+    // Scale Lattice
+    for i in 0..3 {
+        for j in 0..3 {
+            lattice[i][j] *= alat;
         }
     }
 
     let mut atoms = Vec::new();
-    let mut iqs: Vec<&usize> = site_positions.keys().collect();
-    iqs.sort();
+    let mut index = 0;
 
-    for iq in iqs {
-        let raw_pos = site_positions[iq];
-        let mut label = "X".to_string();
-        if let Some(it) = site_to_type.get(iq) {
-            if let Some(l) = type_labels.get(it) {
-                label = l.chars().take_while(|c| c.is_alphabetic()).collect();
+    for (site_id, pos_frac) in site_positions {
+        if let Some(type_id) = site_to_type.get(&site_id) {
+            if let Some(el) = type_labels.get(type_id) {
+                // Convert Frac -> Cart
+                let x = pos_frac[0]*lattice[0][0] + pos_frac[1]*lattice[1][0] + pos_frac[2]*lattice[2][0];
+                let y = pos_frac[0]*lattice[0][1] + pos_frac[1]*lattice[1][1] + pos_frac[2]*lattice[2][1];
+                let z = pos_frac[0]*lattice[0][2] + pos_frac[1]*lattice[1][2] + pos_frac[2]*lattice[2][2];
+
+                atoms.push(Atom {
+                    element: el.clone(),
+                    position: [x, y, z],
+                    original_index: index,
+                });
+                index += 1;
             }
         }
-        let pos = [
-            raw_pos[0] * alat,
-            raw_pos[1] * alat,
-            raw_pos[2] * alat
-        ];
-        let idx = atoms.len();
-        atoms.push(Atom { element: label, position: pos, original_index: idx });
     }
-
-    // Apply ALAT Scaling to Lattice
-    for i in 0..3 { for j in 0..3 { lattice[i][j] *= alat; } }
 
     Ok(Structure { lattice, atoms, formula: "SPR-KKR Import".to_string() })
 }
 
-// --- UPDATED WRITER ---
+fn parse_vec(line: &str) -> Option<[f64; 3]> {
+    let parts: Vec<f64> = line.replace("=", " ").split_whitespace()
+        .filter_map(|s| s.parse().ok())
+        .collect();
+    if parts.len() >= 3 {
+        Some([parts[0], parts[1], parts[2]])
+    } else {
+        None
+    }
+}
 
+// --- YOUR IMPLEMENTATION (Restored) ---
 pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
     let mut file = std::fs::File::create(path)?;
 
@@ -143,9 +155,6 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
     }
 
     // 3. OCCUPATION & TYPES LOGIC
-    // We must identify unique elements to create the TYPES section
-    // and map atoms to these types for the OCCUPATION section.
-
     let mut unique_elements: Vec<String> = Vec::new();
     let mut atom_to_type_id: Vec<usize> = Vec::new();
 
@@ -172,60 +181,13 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
     writeln!(file, "   IT     TXT             ZT      NC      LC      KC      VC")?;
 
     for (i, el) in unique_elements.iter().enumerate() {
+        // CALLING SHARED LOGIC HERE:
         let z = get_atomic_number(el);
-        // IT=i+1, TXT=Element, ZT=AtomicNum
+
         writeln!(file, " {:4}     {:<8}      {:4}       0       0       0       0.0",
             i+1, el, z
         )?;
     }
 
     Ok(())
-}
-
-// --- Helpers ---
-
-fn parse_value_after_key(line: &str, key: &str) -> Option<f64> {
-    if let Some(idx) = line.find(key) {
-        let rest = &line[idx + key.len()..];
-        let clean = rest.replace('D', "E").replace('d', "e");
-        let clean = clean.trim_start_matches(|c| c == '=' || c == ' ');
-        return clean.split_whitespace().next()?.parse().ok();
-    }
-    None
-}
-
-fn parse_vector_after_key(line: &str, key: &str) -> Option<[f64; 3]> {
-    if let Some(idx) = line.find(key) {
-        let rest = &line[idx + key.len()..];
-        let clean = rest.replace('D', "E").replace('d', "e");
-        let clean = clean.trim_start_matches(|c| c == '=' || c == ' ');
-
-        let parts: Vec<f64> = clean.split_whitespace()
-            .filter_map(|s| s.parse().ok())
-            .collect();
-        if parts.len() >= 3 {
-            return Some([parts[0], parts[1], parts[2]]);
-        }
-    }
-    None
-}
-
-// Basic Atomic Number Lookup
-fn get_atomic_number(symbol: &str) -> usize {
-    match symbol.trim() {
-        "H" => 1, "He" => 2, "Li" => 3, "Be" => 4, "B" => 5, "C" => 6, "N" => 7, "O" => 8,
-        "F" => 9, "Ne" => 10, "Na" => 11, "Mg" => 12, "Al" => 13, "Si" => 14, "P" => 15,
-        "S" => 16, "Cl" => 17, "Ar" => 18, "K" => 19, "Ca" => 20, "Sc" => 21, "Ti" => 22,
-        "V" => 23, "Cr" => 24, "Mn" => 25, "Fe" => 26, "Co" => 27, "Ni" => 28, "Cu" => 29,
-        "Zn" => 30, "Ga" => 31, "Ge" => 32, "As" => 33, "Se" => 34, "Br" => 35, "Kr" => 36,
-        "Rb" => 37, "Sr" => 38, "Y" => 39, "Zr" => 40, "Nb" => 41, "Mo" => 42, "Tc" => 43,
-        "Ru" => 44, "Rh" => 45, "Pd" => 46, "Ag" => 47, "Cd" => 48, "In" => 49, "Sn" => 50,
-        "Sb" => 51, "Te" => 52, "I" => 53, "Xe" => 54, "Cs" => 55, "Ba" => 56, "La" => 57,
-        "Ce" => 58, "Pr" => 59, "Nd" => 60, "Pm" => 61, "Sm" => 62, "Eu" => 63, "Gd" => 64,
-        "Tb" => 65, "Dy" => 66, "Ho" => 67, "Er" => 68, "Tm" => 69, "Yb" => 70, "Lu" => 71,
-        "Hf" => 72, "Ta" => 73, "W" => 74, "Re" => 75, "Os" => 76, "Ir" => 77, "Pt" => 78,
-        "Au" => 79, "Hg" => 80, "Tl" => 81, "Pb" => 82, "Bi" => 83, "Po" => 84, "At" => 85,
-        "Rn" => 86, "Fr" => 87, "Ra" => 88, "Ac" => 89, "Th" => 90, "Pa" => 91, "U" => 92,
-        _ => 0, // Unknown
-    }
 }

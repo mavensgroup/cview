@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::f64::consts::PI;
 use crate::state::AppState;
-use crate::physics::slab;
+use crate::physics::operations::slab;
 use crate::model::structure::Structure;
 
 // Shared state for the visualization

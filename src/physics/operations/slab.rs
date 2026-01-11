@@ -1,7 +1,7 @@
 // src/physics/slab.rs
 use crate::model::structure::{Structure, Atom};
-use crate::physics::miller_math::find_plane_basis; // <--- Import logic
 use nalgebra::{Matrix3, Vector3};
+use crate::physics::operations::miller_algo::find_plane_basis;
 
 pub fn generate_slab(
     structure: &Structure,

@@ -43,7 +43,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
         // --- 2. Parse Lattice Block ---
         // CASE A: "CELL_PARAMETERS (alat= 10.5)" or just "CELL_PARAMETERS (angstrom)"
         if line_lower.starts_with("cell_parameters") {
-            let (unit, local_scale) = parse_header_unit(line, global_alat);
+            let (_unit, local_scale) = parse_header_unit(line, global_alat);
 
             // Read next 3 lines
             if i + 3 < lines.len() {
