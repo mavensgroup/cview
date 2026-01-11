@@ -12,6 +12,18 @@ use gtk4::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
+// Helper to append text to the TextView
+fn append_to_console(view: &gtk::TextView, text: &str) {
+  let buffer = view.buffer();
+  let mut end_iter = buffer.end_iter();
+  buffer.insert(&mut end_iter, &format!("{}\n", text));
+
+  // Auto-scroll to bottom
+  let mark = buffer.create_mark(None, &buffer.end_iter(), false);
+  view.scroll_to_mark(&mark, 0.0, true, 0.0, 1.0);
+  buffer.delete_mark(&mark);
+}
+
 pub fn setup_interactions(
   window: &ApplicationWindow,
   state: Rc<RefCell<AppState>>,
@@ -36,7 +48,7 @@ pub fn setup_interactions(
     // B. Delete
     if keyval == gdk::Key::Delete {
       let msg = st.delete_selected();
-      console.buffer().set_text(&msg);
+      append_to_console(&console, &msg); // Changed to append
       da.queue_draw();
       return glib::Propagation::Stop;
     }
@@ -44,7 +56,7 @@ pub fn setup_interactions(
     // C. Undo (Ctrl+Z)
     if state_flags.contains(gdk::ModifierType::CONTROL_MASK) && keyval == gdk::Key::z {
       let msg = st.undo();
-      console.buffer().set_text(&msg);
+      append_to_console(&console, &msg); // Changed to append
       da.queue_draw();
       return glib::Propagation::Stop;
     }
@@ -52,21 +64,17 @@ pub fn setup_interactions(
     glib::Propagation::Proceed
   });
 
+  // ... [Key Release and Drag Setup remain same until Drag End] ...
   let s = state.clone();
   key_controller.connect_key_released(move |_, keyval, _, _| {
     if keyval == gdk::Key::Shift_L || keyval == gdk::Key::Shift_R {
       s.borrow_mut().is_shift_pressed = false;
     }
   });
-
   window.add_controller(key_controller);
 
-  // 2. MOUSE DRAG
   let drag = GestureDrag::new();
   let s = state.clone();
-
-  // REMOVED UNUSED 'da' CLONE HERE
-
   drag.connect_drag_begin(move |_, x, y| {
     let mut st = s.borrow_mut();
     if st.is_shift_pressed {
@@ -99,6 +107,7 @@ pub fn setup_interactions(
     let mut st = s.borrow_mut();
     if st.is_shift_pressed {
       if let Some((start, _)) = st.selection_box {
+        // ... [Bounding box calculation remains same] ...
         let end_x = start.0 + x;
         let end_y = start.1 + y;
         let min_x = start.0.min(end_x);
@@ -121,9 +130,7 @@ pub fn setup_interactions(
         }
 
         if count > 0 {
-          console
-            .buffer()
-            .set_text(&format!("Box selected {} atoms.", count));
+          append_to_console(&console, &format!("Box selected {} atoms.", count));
         }
       }
       st.selection_box = None;
@@ -133,7 +140,7 @@ pub fn setup_interactions(
 
   drawing_area.add_controller(drag);
 
-  // 3. SCROLL
+  // ... [Scroll setup remains same] ...
   let scroll = EventControllerScroll::new(EventControllerScrollFlags::VERTICAL);
   let s = state.clone();
   let da = drawing_area.clone();
@@ -183,11 +190,11 @@ pub fn setup_interactions(
     if let Some(idx) = clicked_index {
       st.toggle_selection(idx);
       let report = st.get_geometry_report();
-      console.buffer().set_text(&report);
+      append_to_console(&console, &report); // Changed to append
     } else {
       if !st.selected_indices.is_empty() {
         st.selected_indices.clear();
-        console.buffer().set_text("Selection cleared.");
+        append_to_console(&console, "Selection cleared."); // Changed to append
       }
     }
     da.queue_draw();

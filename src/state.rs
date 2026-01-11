@@ -193,12 +193,12 @@ impl AppState {
                 loaded_style.atom_cache = Rc::new(RefCell::new(HashMap::new()));
               }
               self.style = loaded_style;
-              format!("Config loaded from {:?}", path)
+              format!("Config loaded from {:?}\n", path)
             }
-            Err(e) => format!("Error parsing config: {}", e),
+            Err(e) => format!("Error parsing config: {}\n", e),
           }
         }
-        Err(e) => format!("Error opening config file: {}", e),
+        Err(e) => format!("Error opening config file: {}\n", e),
       }
     } else {
       "No config file found. Using defaults.".to_string()
@@ -217,12 +217,12 @@ impl AppState {
     if let Ok(file) = File::create(&path) {
       let writer = BufWriter::new(file);
       if let Err(e) = serde_json::to_writer_pretty(writer, &cfg) {
-        format!("Failed to save config: {}", e)
+        format!("Failed to save config: {}\n", e)
       } else {
-        format!("Config saved to {:?}", path)
+        format!("Config saved to {:?}\n", path)
       }
     } else {
-      format!("Could not create config file at: {:?}", path)
+      format!("Could not create config file at: {:?}\n", path)
     }
   }
 

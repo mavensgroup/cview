@@ -1,6 +1,9 @@
+// src/menu/actions_file.rs
+
 use crate::io;
 use crate::rendering::export_image;
 use crate::state::{AppState, ExportFormat};
+use crate::ui::preferences::show_preferences_window;
 use gtk4::prelude::*;
 use gtk4::{
   Application, ApplicationWindow, DrawingArea, FileChooserAction, FileChooserNative, FileFilter,
@@ -8,24 +11,37 @@ use gtk4::{
 };
 use std::cell::RefCell;
 use std::rc::Rc;
-// use crate::ui::preferences::show_preferences_window;
 
+// Local helper to append text to a TextView
+fn log_msg(view: &TextView, text: &str) {
+  let buffer = view.buffer();
+  let mut end = buffer.end_iter();
+  buffer.insert(&mut end, &format!("{}\n", text));
+
+  // Auto-scroll
+  let mark = buffer.create_mark(None, &buffer.end_iter(), false);
+  view.scroll_to_mark(&mark, 0.0, true, 0.0, 1.0);
+  buffer.delete_mark(&mark);
+}
+
+// 7 Arguments to match main.rs
 pub fn setup(
   app: &Application,
   window: &ApplicationWindow,
   state: Rc<RefCell<AppState>>,
   drawing_area: &DrawingArea,
-  console_view: &TextView,
-  atom_list_box: &gtk4::Box, // <--- Argument for Sidebar update
+  system_log_view: &TextView,   // Arg 5
+  interactions_view: &TextView, // Arg 6
+  atom_list_box: &gtk4::Box,    // Arg 7
 ) {
   // --- OPEN ACTION ---
   let open_action = gtk4::gio::SimpleAction::new("open", None);
   let win_weak = window.downgrade();
   let state_weak = Rc::downgrade(&state);
   let da_weak = drawing_area.downgrade();
-  let console_weak = console_view.downgrade();
 
-  // 1. Create weak reference to the atom container (Sidebar)
+  let sys_log_weak = system_log_view.downgrade();
+  let interact_weak = interactions_view.downgrade();
   let atom_box_weak = atom_list_box.downgrade();
 
   open_action.connect_activate(move |_, _| {
@@ -60,9 +76,8 @@ pub fn setup(
 
     let state_weak_inner = state_weak.clone();
     let da_weak_inner = da_weak.clone();
-    let console_weak_inner = console_weak.clone();
-
-    // 2. Clone weak ref for the inner closure
+    let sys_log_inner = sys_log_weak.clone();
+    let interact_inner = interact_weak.clone();
     let atom_box_inner = atom_box_weak.clone();
 
     dialog.connect_response(move |d, response| {
@@ -71,7 +86,10 @@ pub fn setup(
           if let Some(path) = file.path() {
             let path_str = path.to_string_lossy().to_string();
 
-            // We need the state to exist
+            if let Some(log_v) = sys_log_inner.upgrade() {
+              log_msg(&log_v, &format!("Loading file: {}", path_str));
+            }
+
             if let Some(st) = state_weak_inner.upgrade() {
               match crate::io::load_structure(&path_str) {
                 Ok(structure) => {
@@ -86,23 +104,30 @@ pub fn setup(
                       .to_string();
                     s.selected_indices.clear();
 
-                    if let Some(con) = console_weak_inner.upgrade() {
+                    if let Some(interact_v) = interact_inner.upgrade() {
                       let report = s.get_structure_report();
-                      crate::ui::log_to_console(&con, &report);
+                      log_msg(&interact_v, &report);
                     }
-                  } // Drop RefMut borrow here so we can use 'st' again below
+                  }
 
-                  // 3. REFRESH SIDEBAR AND DRAW
+                  if let Some(log_v) = sys_log_inner.upgrade() {
+                    log_msg(&log_v, "File loaded successfully.\n");
+                  }
+
                   if let Some(da) = da_weak_inner.upgrade() {
-                    // Refresh the Atom List in Sidebar
                     if let Some(ab) = atom_box_inner.upgrade() {
-                      // Call the public helper function we created in sidebar.rs
                       crate::panels::sidebar::refresh_atom_list(&ab, st.clone(), &da);
                     }
                     da.queue_draw();
                   }
                 }
-                Err(e) => eprintln!("Error loading file: {}", e),
+                Err(e) => {
+                  let err = format!("Error loading file: {}", e);
+                  if let Some(log_v) = sys_log_inner.upgrade() {
+                    log_msg(&log_v, &err);
+                  }
+                  eprintln!("{}", err);
+                }
               }
             }
           }
@@ -118,6 +143,7 @@ pub fn setup(
   let save_action = gtk4::gio::SimpleAction::new("save_as", None);
   let win_weak_s = window.downgrade();
   let state_weak_s = Rc::downgrade(&state);
+  let sys_log_weak_s = system_log_view.downgrade();
 
   save_action.connect_activate(move |_, _| {
     let win = match win_weak_s.upgrade() {
@@ -147,6 +173,7 @@ pub fn setup(
 
     dialog.set_current_name("structure.cif");
     let state_weak_inner = state_weak_s.clone();
+    let sys_log_inner = sys_log_weak_s.clone();
 
     dialog.connect_response(move |d, response| {
       if response == ResponseType::Accept {
@@ -157,8 +184,13 @@ pub fn setup(
               let s = st.borrow();
               if let Some(structure) = &s.structure {
                 if let Err(e) = io::save_structure(&path_str, structure) {
-                  eprintln!("Failed: {}", e);
+                  if let Some(log) = sys_log_inner.upgrade() {
+                    log_msg(&log, &format!("Failed to save: {}", e));
+                  }
                 } else {
+                  if let Some(log) = sys_log_inner.upgrade() {
+                    log_msg(&log, &format!("Saved to {}", path_str));
+                  }
                   println!("Saved to {}", path_str);
                 }
               }
@@ -176,6 +208,7 @@ pub fn setup(
   let export_action = gtk4::gio::SimpleAction::new("export", None);
   let win_weak_e = window.downgrade();
   let state_weak_e = Rc::downgrade(&state);
+  let sys_log_weak_e = system_log_view.downgrade();
 
   export_action.connect_activate(move |_, _| {
     let win = match win_weak_e.upgrade() {
@@ -187,6 +220,7 @@ pub fn setup(
       None => return,
     };
     let state_weak_inner = state_weak_e.clone();
+    let sys_log_inner = sys_log_weak_e.clone();
 
     let dialog = FileChooserNative::new(
       Some("Export Image"),
@@ -225,7 +259,12 @@ pub fn setup(
             let is_pdf = path_str.to_lowercase().ends_with(".pdf");
             if let Some(st) = state_weak_inner.upgrade() {
               let s = st.borrow();
+              // Assuming export_image returns unit
               let _ = export_image(&s, &path_str, 2000.0, 1500.0, is_pdf);
+
+              if let Some(log) = sys_log_inner.upgrade() {
+                log_msg(&log, &format!("Exported to {}", path_str));
+              }
               println!("Exported to {}", path_str);
             }
           }
@@ -238,34 +277,30 @@ pub fn setup(
   app.add_action(&export_action);
 
   // --- PREFERENCES ACTION ---
-  // (Note: Since we moved appearance to the Sidebar, this might be redundant,
-  // but we keep it here to avoid breaking your existing logic).
-  // let pref_action = gtk4::gio::SimpleAction::new("preferences", None);
-  // let win_weak_p = window.downgrade();
-  // let state_weak_p = Rc::downgrade(&state);
-  // let da_weak_p = drawing_area.downgrade();
+  let pref_action = gtk4::gio::SimpleAction::new("preferences", None);
+  let win_weak_p = window.downgrade();
+  let state_weak_p = Rc::downgrade(&state);
 
-  // pref_action.connect_activate(move |_, _| {
-  // if let Some(win) = win_weak_p.upgrade() {
-  // if let Some(st) = state_weak_p.upgrade() {
-  // if let Some(da) = da_weak_p.upgrade() {
-  // show_preferences_window(&win, st);
-  // }
-  // }
-  // }
-  // });
-  // app.add_action(&pref_action);
+  // CAPTURE DRAWING AREA FOR PREFERENCES
+  let da_weak_p = drawing_area.downgrade();
+
+  pref_action.connect_activate(move |_, _| {
+    if let Some(win) = win_weak_p.upgrade() {
+      if let Some(st) = state_weak_p.upgrade() {
+        if let Some(da) = da_weak_p.upgrade() {
+          // PASS 3 ARGS (window, state, drawing_area)
+          show_preferences_window(&win, st, da.clone());
+        }
+      }
+    }
+  });
+  app.add_action(&pref_action);
 
   // --- QUIT ACTION ---
   let quit_action = gtk4::gio::SimpleAction::new("quit", None);
   let win_weak_q = window.downgrade();
-  let state_quit = state.clone(); // <--- Clone state reference here
 
   quit_action.connect_activate(move |_, _| {
-    // 1. Save configuration to ~/.config/cview/settings.json
-    state_quit.borrow().save_config();
-
-    // 2. Close the window
     if let Some(win) = win_weak_q.upgrade() {
       win.close();
     }

@@ -3,12 +3,14 @@
 use gtk4::prelude::*;
 use gtk4::Box as GtkBox;
 use gtk4::{
-  Application, ApplicationWindow, DrawingArea, Frame, Orientation, ScrolledWindow, TextView,
+  Application, ApplicationWindow, DrawingArea, Frame, Notebook, Orientation, ScrolledWindow,
+  TextView,
 };
 use gtk4::{Revealer, RevealerTransitionType};
 use std::cell::RefCell;
 use std::rc::Rc;
 
+// Declare modules
 pub mod config;
 pub mod io;
 pub mod menu;
@@ -22,6 +24,18 @@ pub mod utils;
 
 use state::AppState;
 use ui::interactions::setup_interactions;
+
+// Helper function to append text and scroll (matches actions_file.rs)
+fn log_msg(view: &TextView, text: &str) {
+  let buffer = view.buffer();
+  let mut end = buffer.end_iter();
+  buffer.insert(&mut end, &format!("{}\n", text));
+
+  // Auto-scroll to the end
+  let mark = buffer.create_mark(None, &buffer.end_iter(), false);
+  view.scroll_to_mark(&mark, 0.0, true, 0.0, 1.0);
+  buffer.delete_mark(&mark);
+}
 
 fn main() {
   let app = Application::builder()
@@ -38,41 +52,20 @@ fn build_ui(app: &Application) {
   // 1. Initialize State & Capture Startup Log
   let (mut initial_state, startup_log) = AppState::new_with_log();
 
-  // ============================================================
   // CLI ARGUMENT PARSING
-  // ============================================================
   let args: Vec<String> = std::env::args().collect();
   if args.len() > 1 {
     let path = &args[1];
     println!("CLI: Attempting to open '{}'", path);
-
-    let result = if path.to_lowercase().ends_with(".cif") {
-      io::cif::parse(path)
-    } else if path.to_uppercase().contains("POSCAR")
-      || path.to_uppercase().contains("CONTCAR")
-      || path.to_lowercase().contains(".vasp")
-    {
-      io::poscar::parse(path)
-    } else if path.to_lowercase().ends_with(".pwo") || path.to_lowercase().ends_with(".in") {
-      io::qe::parse(path)
-    } else {
-      Err(std::io::Error::new(
-        std::io::ErrorKind::Other,
-        "Unknown file format",
-      ))
-    };
-
-    match result {
-      Ok(structure) => {
-        println!("CLI: Successfully loaded {} atoms.", structure.atoms.len());
-        initial_state.structure = Some(structure);
-      }
-      Err(e) => {
-        eprintln!("CLI Error: Failed to load '{}': {}", path, e);
-      }
+    if let Ok(structure) = io::load_structure(path) {
+      initial_state.structure = Some(structure);
+      initial_state.file_name = std::path::Path::new(path)
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
     }
   }
-  // ============================================================
 
   let state = Rc::new(RefCell::new(initial_state));
 
@@ -97,8 +90,12 @@ fn build_ui(app: &Application) {
   let drawing_area = DrawingArea::new();
   drawing_area.set_vexpand(true);
 
-  let info_frame = Frame::new(None);
-  let console_view = TextView::builder()
+  // --- CONSOLE NOTEBOOK SETUP ---
+  let console_notebook = Notebook::new();
+  console_notebook.set_height_request(200);
+
+  // Tab 1: Interactions View (Geometry, Selection)
+  let interactions_view = TextView::builder()
     .editable(false)
     .cursor_visible(false)
     .monospace(true)
@@ -108,14 +105,55 @@ fn build_ui(app: &Application) {
     .bottom_margin(10)
     .build();
 
-  // --- LOG STARTUP MESSAGE ---
-  console_view.buffer().set_text(&startup_log);
+  // --- POPULATE TAB 1 (CLI LOAD) ---
+  {
+    let st = state.borrow();
+    if st.structure.is_some() {
+      // Use the standard report method from state.rs
+      let report = st.get_structure_report();
+      log_msg(&interactions_view, &report);
+    }
+  }
 
-  let scroll_win = ScrolledWindow::builder()
-    .min_content_height(150)
-    .child(&console_view)
+  let scroll_interactions = ScrolledWindow::builder().child(&interactions_view).build();
+
+  console_notebook.append_page(
+    &scroll_interactions,
+    Some(&gtk4::Label::new(Some("Interactions"))),
+  );
+
+  // Tab 2: System Logs View (Loading, Errors)
+  let system_log_view = TextView::builder()
+    .editable(false)
+    .cursor_visible(false)
+    .monospace(true)
+    .left_margin(10)
+    .right_margin(10)
+    .top_margin(10)
+    .bottom_margin(10)
     .build();
-  info_frame.set_child(Some(&scroll_win));
+
+  // Write startup log
+  log_msg(&system_log_view, &startup_log);
+
+  // Confirm CLI Load in System Log
+  {
+    let st = state.borrow();
+    if st.structure.is_some() {
+      log_msg(
+        &system_log_view,
+        &format!("File loaded successfully via CLI: {}", st.file_name),
+      );
+    }
+  }
+
+  let scroll_logs = ScrolledWindow::builder().child(&system_log_view).build();
+
+  console_notebook.append_page(&scroll_logs, Some(&gtk4::Label::new(Some("System Logs"))));
+
+  let info_frame = Frame::new(None);
+  info_frame.set_child(Some(&console_notebook));
+  // ------------------------------
 
   right_vbox.append(&drawing_area);
   right_vbox.append(&info_frame);
@@ -134,16 +172,17 @@ fn build_ui(app: &Application) {
   main_hbox.append(&right_vbox);
 
   // 3. Menu Bar
+  // Pass both views here
   let menu_bar = menu::build_menu_and_actions(
     app,
     &window,
     state.clone(),
     &drawing_area,
-    &console_view,
+    &system_log_view,
+    &interactions_view,
     &atom_list_box,
   );
 
-  // 4. Action: Toggle Sidebar
   let toggle_action = gtk4::gio::SimpleAction::new("toggle_sidebar", None);
   let rev_weak = sidebar_revealer.downgrade();
   toggle_action.connect_activate(move |_, _| {
@@ -154,16 +193,13 @@ fn build_ui(app: &Application) {
   app.add_action(&toggle_action);
   app.set_accels_for_action("app.toggle_sidebar", &["F9"]);
 
-  // 5. Action: Quit (Save Config)
+  // Quit
   let quit_action = gtk4::gio::SimpleAction::new("quit", None);
   let win_weak_q = window.downgrade();
   let state_quit = state.clone();
-
   quit_action.connect_activate(move |_, _| {
-    // Save config to JSON
     let msg = state_quit.borrow().save_config();
-    println!("{}", msg); // Print to terminal as app closes
-
+    println!("{}", msg);
     if let Some(win) = win_weak_q.upgrade() {
       win.close();
     }
@@ -173,23 +209,20 @@ fn build_ui(app: &Application) {
   root_vbox.append(&menu_bar);
   root_vbox.append(&main_hbox);
 
-  setup_interactions(&window, state.clone(), &drawing_area, &console_view);
+  // Interactions setup uses the interactions_view
+  setup_interactions(&window, state.clone(), &drawing_area, &interactions_view);
 
-  // --- DRAWING LOOP ---
+  // Drawing Loop
   let s = state.clone();
   drawing_area.set_draw_func(move |_, cr, w, h| {
     let st = s.borrow();
-
-    // Background
     let (bg_r, bg_g, bg_b) = st.style.background_color;
     cr.set_source_rgb(bg_r, bg_g, bg_b);
     cr.paint().unwrap();
 
-    // Scene
     let (atoms, lattice_corners, bounds) =
       rendering::scene::calculate_scene(&st, w as f64, h as f64, false, None, None);
 
-    // Draw Components
     rendering::painter::draw_unit_cell(cr, &lattice_corners, false);
     rendering::painter::draw_structure(cr, &atoms, &st, bounds.scale, false);
     rendering::painter::draw_miller_planes(
@@ -201,8 +234,6 @@ fn build_ui(app: &Application) {
       h as f64,
     );
     rendering::painter::draw_axes(cr, &st, w as f64, h as f64);
-
-    // --- DRAW SELECTION BOX ---
     rendering::painter::draw_selection_box(cr, &st);
   });
 
