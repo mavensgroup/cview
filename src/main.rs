@@ -3,7 +3,7 @@
 use gtk4::prelude::*;
 use gtk4::Box as GtkBox;
 use gtk4::{
-  Application, ApplicationWindow, DrawingArea, Frame, Notebook, Orientation, ScrolledWindow,
+  Application, ApplicationWindow, DrawingArea, Frame, Label, Notebook, Orientation, ScrolledWindow,
   TextView,
 };
 use gtk4::{Revealer, RevealerTransitionType};
@@ -25,13 +25,12 @@ pub mod utils;
 use state::AppState;
 use ui::interactions::setup_interactions;
 
-// Helper function to append text and scroll (matches actions_file.rs)
+// Helper function to append text and scroll
 fn log_msg(view: &TextView, text: &str) {
   let buffer = view.buffer();
   let mut end = buffer.end_iter();
   buffer.insert(&mut end, &format!("{}\n", text));
 
-  // Auto-scroll to the end
   let mark = buffer.create_mark(None, &buffer.end_iter(), false);
   view.scroll_to_mark(&mark, 0.0, true, 0.0, 1.0);
   buffer.delete_mark(&mark);
@@ -44,29 +43,12 @@ fn main() {
 
   app.connect_activate(build_ui);
 
-  // Fix for CLI args being interpreted by GTK
   app.run_with_args(&Vec::<String>::new());
 }
 
 fn build_ui(app: &Application) {
-  // 1. Initialize State & Capture Startup Log
-  let (mut initial_state, startup_log) = AppState::new_with_log();
-
-  // CLI ARGUMENT PARSING
-  let args: Vec<String> = std::env::args().collect();
-  if args.len() > 1 {
-    let path = &args[1];
-    println!("CLI: Attempting to open '{}'", path);
-    if let Ok(structure) = io::load_structure(path) {
-      initial_state.structure = Some(structure);
-      initial_state.file_name = std::path::Path::new(path)
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_string();
-    }
-  }
-
+  // 1. Initialize State (Start Empty)
+  let (initial_state, startup_log) = AppState::new_with_log();
   let state = Rc::new(RefCell::new(initial_state));
 
   let window = ApplicationWindow::builder()
@@ -76,11 +58,10 @@ fn build_ui(app: &Application) {
     .default_height(800)
     .build();
 
-  // 1. TOP LEVEL
+  // --- LAYOUT ---
   let root_vbox = GtkBox::new(Orientation::Vertical, 0);
   window.set_child(Some(&root_vbox));
 
-  // 2. MAIN CONTENT
   let main_hbox = GtkBox::new(Orientation::Horizontal, 0);
 
   // Right Panel
@@ -90,11 +71,11 @@ fn build_ui(app: &Application) {
   let drawing_area = DrawingArea::new();
   drawing_area.set_vexpand(true);
 
-  // --- CONSOLE NOTEBOOK SETUP ---
+  // Console Notebook
   let console_notebook = Notebook::new();
   console_notebook.set_height_request(200);
 
-  // Tab 1: Interactions View (Geometry, Selection)
+  // Tab 1: Interactions
   let interactions_view = TextView::builder()
     .editable(false)
     .cursor_visible(false)
@@ -104,25 +85,13 @@ fn build_ui(app: &Application) {
     .top_margin(10)
     .bottom_margin(10)
     .build();
-
-  // --- POPULATE TAB 1 (CLI LOAD) ---
-  {
-    let st = state.borrow();
-    if st.structure.is_some() {
-      // Use the standard report method from state.rs
-      let report = st.get_structure_report();
-      log_msg(&interactions_view, &report);
-    }
-  }
-
   let scroll_interactions = ScrolledWindow::builder().child(&interactions_view).build();
-
   console_notebook.append_page(
     &scroll_interactions,
-    Some(&gtk4::Label::new(Some("Interactions"))),
+    Some(&Label::new(Some("Interactions"))),
   );
 
-  // Tab 2: System Logs View (Loading, Errors)
+  // Tab 2: System Logs
   let system_log_view = TextView::builder()
     .editable(false)
     .cursor_visible(false)
@@ -132,34 +101,20 @@ fn build_ui(app: &Application) {
     .top_margin(10)
     .bottom_margin(10)
     .build();
-
-  // Write startup log
-  log_msg(&system_log_view, &startup_log);
-
-  // Confirm CLI Load in System Log
-  {
-    let st = state.borrow();
-    if st.structure.is_some() {
-      log_msg(
-        &system_log_view,
-        &format!("File loaded successfully via CLI: {}", st.file_name),
-      );
-    }
-  }
+  log_msg(&system_log_view, &startup_log); // Log startup
 
   let scroll_logs = ScrolledWindow::builder().child(&system_log_view).build();
-
-  console_notebook.append_page(&scroll_logs, Some(&gtk4::Label::new(Some("System Logs"))));
+  console_notebook.append_page(&scroll_logs, Some(&Label::new(Some("System Logs"))));
 
   let info_frame = Frame::new(None);
   info_frame.set_child(Some(&console_notebook));
-  // ------------------------------
 
   right_vbox.append(&drawing_area);
   right_vbox.append(&info_frame);
 
   // Left Panel (Sidebar)
   use panels::sidebar;
+  // We capture atom_list_box here so we can refresh it later
   let (sidebar_widget, atom_list_box) = sidebar::build(state.clone(), &drawing_area);
 
   let sidebar_revealer = Revealer::builder()
@@ -171,8 +126,7 @@ fn build_ui(app: &Application) {
   main_hbox.append(&sidebar_revealer);
   main_hbox.append(&right_vbox);
 
-  // 3. Menu Bar
-  // Pass both views here
+  // Menu Bar
   let menu_bar = menu::build_menu_and_actions(
     app,
     &window,
@@ -183,6 +137,7 @@ fn build_ui(app: &Application) {
     &atom_list_box,
   );
 
+  // Actions
   let toggle_action = gtk4::gio::SimpleAction::new("toggle_sidebar", None);
   let rev_weak = sidebar_revealer.downgrade();
   toggle_action.connect_activate(move |_, _| {
@@ -193,7 +148,6 @@ fn build_ui(app: &Application) {
   app.add_action(&toggle_action);
   app.set_accels_for_action("app.toggle_sidebar", &["F9"]);
 
-  // Quit
   let quit_action = gtk4::gio::SimpleAction::new("quit", None);
   let win_weak_q = window.downgrade();
   let state_quit = state.clone();
@@ -209,10 +163,9 @@ fn build_ui(app: &Application) {
   root_vbox.append(&menu_bar);
   root_vbox.append(&main_hbox);
 
-  // Interactions setup uses the interactions_view
   setup_interactions(&window, state.clone(), &drawing_area, &interactions_view);
 
-  // Drawing Loop
+  // Drawing Function
   let s = state.clone();
   drawing_area.set_draw_func(move |_, cr, w, h| {
     let st = s.borrow();
@@ -238,4 +191,48 @@ fn build_ui(app: &Application) {
   });
 
   window.present();
+
+  // --- CLI LATE LOAD (MATCHING ACTIONS_FILE.RS LOGIC) ---
+  // Moved to the end so UI widgets (Sidebar, DrawingArea) are ready.
+  let args: Vec<String> = std::env::args().collect();
+  if args.len() > 1 {
+    let path = &args[1];
+    println!("CLI: Attempting to open '{}'", path);
+
+    match io::load_structure(path) {
+      Ok(structure) => {
+        // 1. Update State
+        {
+          let mut st = state.borrow_mut();
+
+          // CRITICAL FIX: Set BOTH structure AND original_structure.
+          // This ensures Supercell works (it needs original_structure).
+          st.original_structure = Some(structure.clone());
+          st.structure = Some(structure);
+
+          st.file_name = std::path::Path::new(path)
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+        }
+
+        // 2. Log Success
+        log_msg(&system_log_view, &format!("File loaded via CLI: {}", path));
+        let report = state.borrow().get_structure_report();
+        log_msg(&interactions_view, &report);
+
+        // 3. Refresh Sidebar (CRITICAL FIX FOR COLOR PICKER)
+        // Use the shared helper from panels::sidebar, just like actions_file.rs does.
+        // This ensures color pickers and signals are set up correctly.
+        panels::sidebar::refresh_atom_list(&atom_list_box, state.clone(), &drawing_area);
+
+        // 4. Trigger Draw
+        drawing_area.queue_draw();
+      }
+      Err(e) => {
+        log_msg(&system_log_view, &format!("Error loading CLI file: {}", e));
+      }
+    }
+  }
 }

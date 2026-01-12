@@ -7,14 +7,20 @@ edition = "2021"
 gtk4 = { version = "0.8", features = ["v4_6"] }
 cairo-rs = { version = "0.19", features = ["pdf", "png"] }
 gdk4 = "0.8"
-# spglib = "1.15.1"
 moyo = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 directories = "5.0"
 plotters = "0.3"
 plotters-cairo = "0.6"
-nalgebra = "0.34"
+nalgebra = { version = "0.34", default-features = false, features = ["macros", "std"] }
 num-complex = "0.4"
-eframe = "0.29.0"
 rayon = "1.8"
+
+# REMOVED: eframe = "0.29.0"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
