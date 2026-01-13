@@ -2,6 +2,7 @@
 
 use super::primitives::*;
 use super::scene::RenderAtom;
+use crate::config::RenderStyle;
 use crate::model::elements::{get_atom_cov, get_atom_properties};
 use crate::state::AppState;
 use gtk4::cairo;
@@ -48,10 +49,10 @@ pub fn draw_structure(
   scale: f64,
   _is_export: bool,
 ) {
-  let tolerance = if state.bond_cutoff < 0.1 || state.bond_cutoff > 2.0 {
+  let tolerance = if state.view.bond_cutoff < 0.1 || state.view.bond_cutoff > 2.0 {
     1.15
   } else {
-    state.bond_cutoff
+    state.view.bond_cutoff
   };
 
   // Separate lists for strict layering
@@ -99,8 +100,8 @@ pub fn draw_structure(
         let (raw_r1, _) = get_atom_properties(&r1.element);
         let (raw_r2, _) = get_atom_properties(&r2.element);
 
-        let r1_px = raw_r1 * state.style.atom_scale * scale;
-        let r2_px = raw_r2 * state.style.atom_scale * scale;
+        let r1_px = raw_r1 * state.config.style.atom_scale * scale;
+        let r2_px = raw_r2 * state.config.style.atom_scale * scale;
 
         let full_screen_dist = (v_x * v_x + v_y * v_y + v_z * v_z).sqrt();
 
@@ -125,7 +126,7 @@ pub fn draw_structure(
           render_bonds.push(RenderBond {
             start,
             end,
-            radius: state.style.bond_radius * scale,
+            radius: state.config.style.bond_radius * scale,
           });
         }
       }
@@ -152,29 +153,34 @@ pub fn draw_structure(
       bond.start,
       bond.end,
       bond.radius,
-      state.style.bond_color,
-      state.style.metallic,
-      state.style.roughness,
-      state.style.transmission,
+      state.config.style.bond_color,
+      state.config.style.metallic,
+      state.config.style.roughness,
+      state.config.style.transmission,
     );
   }
 
   // 5. DRAW ATOMS SECOND (Layer 1)
   let sprite_size = 128.0;
-  let mut cache_access = state.style.atom_cache.borrow_mut();
+  let mut cache_access = state.config.style.atom_cache.borrow_mut();
 
   for atom in render_atoms {
     let (raw_r, default_rgb) = get_atom_properties(&atom.element);
     let rgb = state
+      .config
       .style
       .element_colors
       .get(&atom.element)
       .copied()
       .unwrap_or(default_rgb);
-    let target_atom_cov = raw_r * state.style.atom_scale * scale;
+    let target_atom_cov = raw_r * state.config.style.atom_scale * scale;
 
     // Selection Glow
-    if state.selected_indices.contains(&atom.original_index) {
+    if state
+      .interaction
+      .selected_indices
+      .contains(&atom.original_index)
+    {
       cr.save().unwrap();
       let highlight_radius = target_atom_cov + 4.0;
       cr.set_source_rgba(1.0, 0.85, 0.0, 0.8);
@@ -195,9 +201,9 @@ pub fn draw_structure(
         rgb.0,
         rgb.1,
         rgb.2,
-        state.style.metallic,
-        state.style.roughness,
-        state.style.transmission,
+        state.config.style.metallic,
+        state.config.style.roughness,
+        state.config.style.transmission,
       );
       cache_access.insert(atom.element.clone(), sprite);
     }
@@ -219,8 +225,8 @@ pub fn draw_axes(cr: &cairo::Context, state: &AppState, width: f64, height: f64)
   let hud_cx = hud_size * 0.6;
   let hud_cy = height - hud_size * 0.6;
 
-  let (sin_x, cos_x) = state.rot_x.to_radians().sin_cos();
-  let (sin_y, cos_y) = state.rot_y.to_radians().sin_cos();
+  let (sin_x, cos_x) = state.view.rot_x.to_radians().sin_cos();
+  let (sin_y, cos_y) = state.view.rot_y.to_radians().sin_cos();
 
   let rotate_vec = |v: [f64; 3]| -> [f64; 3] {
     let x = v[0];
@@ -241,9 +247,9 @@ pub fn draw_axes(cr: &cairo::Context, state: &AppState, width: f64, height: f64)
   };
 
   let axes_data = [
-    ([1.0, 0.0, 0.0], (0.85, 0.2, 0.2), state.show_axis_x), // X Red
-    ([0.0, 1.0, 0.0], (0.2, 0.7, 0.2), state.show_axis_y),  // Y Green
-    ([0.0, 0.0, 1.0], (0.2, 0.4, 0.85), state.show_axis_z), // Z Blue
+    ([1.0, 0.0, 0.0], (0.85, 0.2, 0.2), state.view.show_axes[0]), // X Red
+    ([0.0, 1.0, 0.0], (0.2, 0.7, 0.2), state.view.show_axes[1]),  // Y Green
+    ([0.0, 0.0, 1.0], (0.2, 0.4, 0.85), state.view.show_axes[2]), // Z Blue
   ];
 
   let mut sorted_axes: Vec<_> = axes_data
@@ -442,7 +448,7 @@ pub fn draw_miller_planes(
 
 // --- NEW FUNCTION: Draw Box Selection ---
 pub fn draw_selection_box(cr: &cairo::Context, state: &AppState) {
-  if let Some(((start_x, start_y), (curr_x, curr_y))) = state.selection_box {
+  if let Some(((start_x, start_y), (curr_x, curr_y))) = state.interaction.selection_box {
     let width = curr_x - start_x;
     let height = curr_y - start_y;
 

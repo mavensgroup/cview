@@ -76,7 +76,7 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, drawing_are
             let new_s = supercell::generate(orig, nx, ny, nz);
 
             s.structure = Some(new_s);
-            s.selected_indices.clear(); // Clear selection as indices changed
+            s.interaction.selected_indices.clear(); // Clear selection as indices changed
 
             println!("Supercell generated: {}x{}x{}", nx, ny, nz);
 
@@ -92,7 +92,7 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, drawing_are
           // RESET
           if let Some(orig) = &s.original_structure {
             s.structure = Some(orig.clone());
-            s.selected_indices.clear();
+            s.interaction.selected_indices.clear();
             println!("Structure reset to original.");
 
             // Trigger redraw

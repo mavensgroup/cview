@@ -1,8 +1,9 @@
 // src/menu/actions_file.rs
 
+use crate::config::ExportFormat;
 use crate::io;
 use crate::rendering::export_image;
-use crate::state::{AppState, ExportFormat};
+use crate::state::AppState;
 use crate::ui::preferences::show_preferences_window;
 use gtk4::prelude::*;
 use gtk4::{
@@ -102,10 +103,13 @@ pub fn setup(
                       .unwrap_or_default()
                       .to_string_lossy()
                       .to_string();
-                    s.selected_indices.clear();
+                    s.interaction.selected_indices.clear();
 
                     if let Some(interact_v) = interact_inner.upgrade() {
-                      let report = s.get_structure_report();
+                      let report = crate::utils::report::structure_summary(
+                        s.structure.as_ref().unwrap(),
+                        &s.file_name,
+                      );
                       log_msg(&interact_v, &report);
                     }
                   }
@@ -239,7 +243,7 @@ pub fn setup(
     filter_pdf.add_pattern("*.pdf");
     dialog.add_filter(&filter_pdf);
 
-    let format = st_rc.borrow().default_export_format;
+    let format = st_rc.borrow().config.default_export_format;
     match format {
       ExportFormat::Png => {
         dialog.set_filter(&filter_png);

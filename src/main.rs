@@ -47,7 +47,7 @@ fn main() {
 }
 
 fn build_ui(app: &Application) {
-  // 1. Initialize State (Start Empty)
+  // 1. Initialize State
   let (initial_state, startup_log) = AppState::new_with_log();
   let state = Rc::new(RefCell::new(initial_state));
 
@@ -169,15 +169,23 @@ fn build_ui(app: &Application) {
   let s = state.clone();
   drawing_area.set_draw_func(move |_, cr, w, h| {
     let st = s.borrow();
-    let (bg_r, bg_g, bg_b) = st.style.background_color;
+
+    // 1. Background
+    let (bg_r, bg_g, bg_b) = st.config.style.background_color;
     cr.set_source_rgb(bg_r, bg_g, bg_b);
     cr.paint().unwrap();
 
+    // 2. Calculate Scene
+    // FIX: Pass the entire state '&st' (type &AppState), not just the style.
     let (atoms, lattice_corners, bounds) =
       rendering::scene::calculate_scene(&st, w as f64, h as f64, false, None, None);
 
+    // 3. Draw Structure
     rendering::painter::draw_unit_cell(cr, &lattice_corners, false);
+
+    // FIX: Pass '&st' to painter functions
     rendering::painter::draw_structure(cr, &atoms, &st, bounds.scale, false);
+
     rendering::painter::draw_miller_planes(
       cr,
       &st,
@@ -186,14 +194,15 @@ fn build_ui(app: &Application) {
       w as f64,
       h as f64,
     );
+
     rendering::painter::draw_axes(cr, &st, w as f64, h as f64);
+
     rendering::painter::draw_selection_box(cr, &st);
   });
 
   window.present();
 
-  // --- CLI LATE LOAD (MATCHING ACTIONS_FILE.RS LOGIC) ---
-  // Moved to the end so UI widgets (Sidebar, DrawingArea) are ready.
+  // --- CLI LATE LOAD ---
   let args: Vec<String> = std::env::args().collect();
   if args.len() > 1 {
     let path = &args[1];
@@ -205,8 +214,6 @@ fn build_ui(app: &Application) {
         {
           let mut st = state.borrow_mut();
 
-          // CRITICAL FIX: Set BOTH structure AND original_structure.
-          // This ensures Supercell works (it needs original_structure).
           st.original_structure = Some(structure.clone());
           st.structure = Some(structure);
 
@@ -219,15 +226,19 @@ fn build_ui(app: &Application) {
 
         // 2. Log Success
         log_msg(&system_log_view, &format!("File loaded via CLI: {}", path));
-        let report = state.borrow().get_structure_report();
-        log_msg(&interactions_view, &report);
 
-        // 3. Refresh Sidebar (CRITICAL FIX FOR COLOR PICKER)
-        // Use the shared helper from panels::sidebar, just like actions_file.rs does.
-        // This ensures color pickers and signals are set up correctly.
+        // 3. New Report Logic (Accessing state via borrow)
+        let st = state.borrow();
+        if let Some(s) = &st.structure {
+          let report = utils::report::structure_summary(s, &st.file_name);
+          log_msg(&interactions_view, &report);
+        }
+        drop(st); // drop borrow before passing state to panels::sidebar
+
+        // 4. Refresh Sidebar
         panels::sidebar::refresh_atom_list(&atom_list_box, state.clone(), &drawing_area);
 
-        // 4. Trigger Draw
+        // 5. Trigger Draw
         drawing_area.queue_draw();
       }
       Err(e) => {

@@ -1,7 +1,10 @@
 // src/rendering/scene.rs
-use crate::state::{AppState, RotationCenter};
 
-// FIXED: Clean struct definition
+use crate::config::RotationCenter;
+use crate::state::AppState;
+
+// This struct is used by interactions.rs for hit-testing
+// and by painter.rs for drawing.
 pub struct RenderAtom {
   pub screen_pos: [f64; 3], // x, y, z (depth)
   pub element: String,
@@ -39,37 +42,34 @@ pub fn calculate_scene(
     }
   };
 
-  // --- FIX 1: Convert Degrees to Radians & Get Z Trig ---
-  // Your sliders output 0.0 to 360.0, but sin() expects radians.
-  let (sin_x, cos_x) = state.rot_x.to_radians().sin_cos();
-  let (sin_y, cos_y) = state.rot_y.to_radians().sin_cos();
-  let (sin_z, cos_z) = state.rot_z.to_radians().sin_cos(); // <--- Added Z
+  // 1. Setup Rotation (Degrees -> Radians)
+  let (sin_x, cos_x) = state.view.rot_x.to_radians().sin_cos();
+  let (sin_y, cos_y) = state.view.rot_y.to_radians().sin_cos();
+  let (sin_z, cos_z) = state.view.rot_z.to_radians().sin_cos();
 
   let center = get_rotation_center(state);
   let lattice = structure.lattice;
   let inv_lattice = invert_matrix(lattice);
 
-  // --- FIX 2: Update Rotation Logic (X -> Y -> Z) ---
+  // Rotation Closure: X -> Y -> Z
   let rotate = |p: [f64; 3]| -> [f64; 3] {
-    // 1. Shift to center
+    // Shift to center
     let x = p[0] - center[0];
     let y = p[1] - center[1];
     let z = p[2] - center[2];
 
-    // 2. Rotate around X
+    // Rotate around X
     let y1 = y * cos_x - z * sin_x;
     let z1 = y * sin_x + z * cos_x;
 
-    // 3. Rotate around Y (using z1 from above)
+    // Rotate around Y
     let x2 = x * cos_y - z1 * sin_y;
     let z2 = x * sin_y + z1 * cos_y;
 
-    // 4. Rotate around Z (using x2, y1 from above)
-    // Note: Z-rotation mixes X and Y, leaving Z unchanged
+    // Rotate around Z
     let x3 = x2 * cos_z - y1 * sin_z;
     let y3 = x2 * sin_z + y1 * cos_z;
 
-    // Return final rotated coords
     [x3, y3, z2]
   };
 
@@ -79,9 +79,7 @@ pub fn calculate_scene(
   let mut min_y = f64::MAX;
   let mut max_y = f64::MIN;
 
-  // ... (The rest of your code remains exactly the same) ...
-
-  // --- 1. Calculate Lattice Corners ---
+  // --- 2. Calculate Lattice Corners ---
   let mut raw_corners = Vec::new();
   for x in 0..=1 {
     for y in 0..=1 {
@@ -115,15 +113,17 @@ pub fn calculate_scene(
     }
   }
 
-  // --- 2. Generate Atoms (Real + Ghosts) ---
+  // --- 3. Generate Atoms (Real + Ghosts) ---
   for (i, atom) in structure.atoms.iter().enumerate() {
+    // Logic to handle atoms near boundaries (ghosts) if lattice inversion exists
     let positions = if let Some(inv) = inv_lattice {
       let p = atom.position;
-      // Frac coords
+      // Fractional coords
       let fx = p[0] * inv[0][0] + p[1] * inv[1][0] + p[2] * inv[2][0];
       let fy = p[0] * inv[0][1] + p[1] * inv[1][1] + p[2] * inv[2][1];
       let fz = p[0] * inv[0][2] + p[1] * inv[1][2] + p[2] * inv[2][2];
 
+      // Simple boundary check for ghost generation
       let dx_list = if fx.abs() < 0.05 {
         vec![0.0, 1.0]
       } else {
@@ -174,7 +174,7 @@ pub fn calculate_scene(
       }
 
       render_atoms.push(RenderAtom {
-        screen_pos: r_pos,
+        screen_pos: r_pos, // This is rotated, but NOT yet scaled to pixels
         element: atom.element.clone(),
         original_index: i,
         is_ghost: ghost,
@@ -182,7 +182,7 @@ pub fn calculate_scene(
     }
   }
 
-  // --- 3. Calculate Scaling to Pixels ---
+  // --- 4. Calculate Scaling to Pixels ---
   let final_scale;
   let box_cx = (min_x + max_x) / 2.0;
   let box_cy = (min_y + max_y) / 2.0;
@@ -195,7 +195,7 @@ pub fn calculate_scene(
     let margin = 0.8;
     let scale_x = (win_w * margin) / model_w;
     let scale_y = (win_h * margin) / model_h;
-    final_scale = scale_x.min(scale_y) * state.zoom;
+    final_scale = scale_x.min(scale_y) * state.view.zoom;
   }
 
   let export_margin = if is_export { final_scale * 1.5 } else { 0.0 };
@@ -213,10 +213,11 @@ pub fn calculate_scene(
     win_h / 2.0
   };
 
-  // --- 4. Apply Screen Transform ---
+  // --- 5. Apply Screen Transform (World -> Pixel) ---
   for atom in &mut render_atoms {
     atom.screen_pos[0] = (atom.screen_pos[0] - box_cx) * final_scale + win_cx;
     atom.screen_pos[1] = (atom.screen_pos[1] - box_cy) * final_scale + win_cy;
+    // z remains "depth" for sorting, but we could scale it if needed
   }
 
   let final_corners: Vec<[f64; 2]> = rotated_corners
@@ -229,6 +230,7 @@ pub fn calculate_scene(
     })
     .collect();
 
+  // Sort by Depth (Z) for Painter's Algorithm
   render_atoms.sort_by(|a, b| a.screen_pos[2].partial_cmp(&b.screen_pos[2]).unwrap());
 
   (
@@ -244,7 +246,8 @@ pub fn calculate_scene(
 
 fn get_rotation_center(state: &AppState) -> [f64; 3] {
   if let Some(s) = &state.structure {
-    if matches!(state.rotation_mode, RotationCenter::UnitCell) {
+    // Access via state.config based on our refactor
+    if matches!(state.config.rotation_mode, RotationCenter::UnitCell) {
       let v = s.lattice;
       return [
         (v[0][0] + v[1][0] + v[2][0]) * 0.5,
