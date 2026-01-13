@@ -1,256 +1,195 @@
 // src/physics/xrd.rs
+
 use crate::model::elements;
 use crate::model::structure::Structure;
+use nalgebra::Vector3;
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::f64::consts::PI;
 
 #[derive(Debug, Clone)]
 pub struct XRDSettings {
-    pub wavelength: f64,
-    pub min_2theta: f64,
-    pub max_2theta: f64,
-    pub smoothing: f64,
-    pub temperature_factor: f64, // B-factor
+  pub wavelength: f64, // e.g. 1.5406 for Cu K-alpha
+  pub min_2theta: f64,
+  pub max_2theta: f64,
+  pub smoothing: f64,          // For potential future Gaussian broadening
+  pub temperature_factor: f64, // Debye-Waller B-factor (approx 1.0)
 }
 
 impl Default for XRDSettings {
-    fn default() -> Self {
-        Self {
-            wavelength: 1.5406, // Cu Kα
-            min_2theta: 10.0,
-            max_2theta: 90.0,
-            smoothing: 0.2,
-            temperature_factor: 1.0, // Default B-factor
-        }
+  fn default() -> Self {
+    Self {
+      wavelength: 1.5406,
+      min_2theta: 10.0,
+      max_2theta: 90.0,
+      smoothing: 0.2,
+      temperature_factor: 1.0,
     }
+  }
 }
 
 #[derive(Debug, Clone)]
 pub struct XRDPattern {
-    pub two_theta: f64,
-    pub intensity: f64,
-    pub hkl: Vec<(i32, i32, i32)>, // List of equivalent indices
-    pub d_spacing: f64,
-    pub multiplicity: u32,
+  pub two_theta: f64,
+  pub intensity: f64,
+  pub hkl: Vec<(i32, i32, i32)>,
+  pub d_spacing: f64,
+  pub multiplicity: u32,
 }
 
-/// Main calculation: Returns discrete peaks with proper physics
+/// Main calculation: Returns discrete peaks with proper physics (Structure Factor)
 pub fn calculate_pattern(structure: &Structure, settings: &XRDSettings) -> Vec<XRDPattern> {
-    // 1. Reciprocal Lattice Vectors
-    let a = structure.lattice[0];
-    let b = structure.lattice[1];
-    let c = structure.lattice[2];
+  // 1. Calculate Real Lattice Vectors (a1, a2, a3)
+  let a1 = Vector3::from(structure.lattice[0]);
+  let a2 = Vector3::from(structure.lattice[1]);
+  let a3 = Vector3::from(structure.lattice[2]);
 
-    let v_cross = cross(b, c);
-    let volume = dot(a, v_cross);
-    if volume.abs() < 1e-10 {
-        return Vec::new();
-    }
+  // Calculate Volume of the unit cell
+  let volume = a1.dot(&a2.cross(&a3)).abs();
 
-    let inv_vol = 1.0 / volume;
-    let a_star = scale(cross(b, c), inv_vol);
-    let b_star = scale(cross(c, a), inv_vol);
-    let c_star = scale(cross(a, b), inv_vol);
+  // Safety check for invalid volume
+  if volume < 1e-6 {
+    return vec![];
+  }
 
-    // 2. Generate all reflections and group by d-spacing
-    let theta_max_rad = (settings.max_2theta / 2.0).to_radians();
-    // Safety check for very small angles or invalid settings
-    if theta_max_rad.sin().abs() < 1e-6 {
-        return Vec::new();
-    }
+  // 2. Calculate Reciprocal Lattice Vectors (b1, b2, b3)
+  // Using Crystallography definition (without 2*PI factor here, we add it in phase)
+  // b1 = (a2 x a3) / V
+  let b1 = a2.cross(&a3) / volume;
+  let b2 = a3.cross(&a1) / volume;
+  let b3 = a1.cross(&a2) / volume;
 
-    let d_min = settings.wavelength / (2.0 * theta_max_rad.sin());
+  let mut raw_peaks: Vec<XRDPattern> = Vec::new();
 
-    // Calculate maximum Miller indices needed
-    let h_max = ((magnitude(a_star) / d_min).ceil() as i32 + 1).max(2);
-    let k_max = ((magnitude(b_star) / d_min).ceil() as i32 + 1).max(2);
-    let l_max = ((magnitude(c_star) / d_min).ceil() as i32 + 1).max(2);
+  // 3. Scan HKL Loop
+  // Limit range based on d-spacing
+  let range = 6;
 
-    // Group reflections by their unique d-spacing (handle multiplicity)
-    let mut reflection_groups: HashMap<String, Vec<(i32, i32, i32)>> = HashMap::new();
-
-    for h in -h_max..=h_max {
-        for k in -k_max..=k_max {
-            for l in -l_max..=l_max {
-                if h == 0 && k == 0 && l == 0 {
-                    continue;
-                }
-
-                // Calculate reciprocal lattice vector
-                let g = [
-                    h as f64 * a_star[0] + k as f64 * b_star[0] + l as f64 * c_star[0],
-                    h as f64 * a_star[1] + k as f64 * b_star[1] + l as f64 * c_star[1],
-                    h as f64 * a_star[2] + k as f64 * b_star[2] + l as f64 * c_star[2],
-                ];
-
-                let g_mag = magnitude(g);
-                if g_mag < 1e-10 {
-                    continue;
-                }
-
-                let d_spacing = 1.0 / g_mag;
-
-                // Check if this reflection is physically observable
-                let sin_theta = settings.wavelength / (2.0 * d_spacing);
-                if sin_theta > 1.0 || sin_theta < 0.0 {
-                    continue;
-                }
-
-                let two_theta = 2.0 * sin_theta.asin().to_degrees();
-                if two_theta < settings.min_2theta || two_theta > settings.max_2theta {
-                    continue;
-                }
-
-                // Group by d-spacing (rounded to avoid floating point issues)
-                let d_key = format!("{:.5}", d_spacing);
-                reflection_groups
-                    .entry(d_key)
-                    .or_insert_with(Vec::new)
-                    .push((h, k, l));
-            }
+  for h in -range..=range {
+    for k in -range..=range {
+      for l in -range..=range {
+        // Skip the origin
+        if h == 0 && k == 0 && l == 0 {
+          continue;
         }
-    }
 
-    // 3. Calculate intensity for each unique reflection
-    let mut peaks = Vec::new();
+        // Construct Reciprocal Vector g = h*b1 + k*b2 + l*b3
+        let g = b1.scale(h as f64) + b2.scale(k as f64) + b3.scale(l as f64);
 
-    for (_d_key, hkl_list) in reflection_groups.iter() {
-        // Use the first reflection to get geometric parameters
-        let (h0, k0, l0) = hkl_list[0];
+        // Magnitude of g is 1/d
+        let g_mag = g.norm();
+        if g_mag < 1e-6 {
+          continue;
+        }
 
-        let g = [
-            h0 as f64 * a_star[0] + k0 as f64 * b_star[0] + l0 as f64 * c_star[0],
-            h0 as f64 * a_star[1] + k0 as f64 * b_star[1] + l0 as f64 * c_star[1],
-            h0 as f64 * a_star[2] + k0 as f64 * b_star[2] + l0 as f64 * c_star[2],
-        ];
+        let d = 1.0 / g_mag;
 
-        let g_mag = magnitude(g);
-        let d_spacing = 1.0 / g_mag;
-        let sin_theta = settings.wavelength / (2.0 * d_spacing);
-        let theta_rad = sin_theta.asin();
-        let two_theta = 2.0 * theta_rad.to_degrees();
+        // Bragg's Law: lambda = 2d sin(theta)
+        // -> sin(theta) = lambda / 2d
+        let sin_theta = settings.wavelength / (2.0 * d);
 
-        // Calculate structure factor for this (hkl)
-        // s = sin(θ)/λ for form factor calculation
-        let s = sin_theta / settings.wavelength;
-        let s_squared = s * s;
+        // If sin_theta > 1, diffraction is impossible for this wavelength
+        if sin_theta > 1.0 {
+          continue;
+        }
 
+        let theta = sin_theta.asin();
+        let two_theta_deg = 2.0 * theta * 180.0 / PI;
+
+        // Filter by angular range
+        if two_theta_deg < settings.min_2theta || two_theta_deg > settings.max_2theta {
+          continue;
+        }
+
+        // 4. Structure Factor Calculation (F_hkl)
+        // F = Sum( f_j * exp(2*pi*i * (g . r_j)) )
         let mut f_real = 0.0;
         let mut f_imag = 0.0;
 
         for atom in &structure.atoms {
-            // Get atomic form factor (Cromer-Mann approximation)
-            let coeffs = elements::get_cromer_mann_coeffs(&atom.element);
-            let f0 = calculate_atomic_form_factor(s, &coeffs);
+          // Atomic Form Factor (f0)
+          // FIXED: get_atomic_number returns i32, not Option<i32>
+          let z = elements::get_atomic_number(&atom.element);
+          let f0 = if z > 0 { z as f64 } else { 1.0 };
 
-            // Debye-Waller temperature factor
-            let b_factor = settings.temperature_factor;
-            let debye_waller = (-b_factor * s_squared).exp();
+          // Temperature Factor (Debye-Waller)
+          // exp(-B * (sin(theta)/lambda)^2) -> simplified using g (1/d = 2sin(theta)/lambda)
+          // Common approx: exp( -B * g^2 / 4 )
+          let debye = (-settings.temperature_factor * (g_mag * g_mag) / 4.0).exp();
+          let f_eff = f0 * debye;
 
-            // Phase calculation: 2π(h·x + k·y + l·z)
-            let phase = 2.0
-                * PI
-                * (h0 as f64 * atom.position[0]
-                    + k0 as f64 * atom.position[1]
-                    + l0 as f64 * atom.position[2]);
+          // Phase = 2 * PI * (g_vector dot position_vector)
+          let pos = Vector3::from(atom.position);
+          let phase = 2.0 * PI * g.dot(&pos);
 
-            let f_atom = f0 * debye_waller;
-            f_real += f_atom * phase.cos();
-            f_imag += f_atom * phase.sin();
+          f_real += f_eff * phase.cos();
+          f_imag += f_eff * phase.sin();
         }
 
-        // Structure factor squared
-        let f_squared = f_real * f_real + f_imag * f_imag;
+        // Intensity is magnitude squared of Structure Factor
+        let intensity_sq = f_real * f_real + f_imag * f_imag;
 
-        // Check for systematic absences (structure factor = 0)
-        if f_squared < 1e-6 {
-            continue;
+        // 5. Lorentz-Polarization Factor (LP)
+        // Standard for powder diffraction: (1 + cos^2(2theta)) / (sin^2(theta) * cos(theta))
+        let cos_2theta = (2.0 * theta).cos();
+        let cos_theta = theta.cos();
+        let sin_theta_sq = sin_theta * sin_theta;
+
+        // Avoid division by zero at theta=0 or theta=90
+        if sin_theta_sq < 1e-6 || cos_theta.abs() < 1e-6 {
+          continue;
         }
 
-        // Lorentz-Polarization factor for powder diffraction
-        // LP = (1 + cos²(2θ)) / (sin²(θ)·cos(θ))
-        let cos_2theta = (2.0 * theta_rad).cos();
-        let sin_theta = theta_rad.sin();
-        let cos_theta = theta_rad.cos();
+        let lp = (1.0 + cos_2theta * cos_2theta) / (sin_theta_sq * cos_theta);
 
-        if sin_theta.abs() < 1e-10 || cos_theta.abs() < 1e-10 {
-            continue;
+        let final_intensity = intensity_sq * lp;
+
+        // Threshold to ignore extremely weak peaks
+        if final_intensity > 1e-4 {
+          raw_peaks.push(XRDPattern {
+            two_theta: two_theta_deg,
+            intensity: final_intensity,
+            hkl: vec![(h, k, l)],
+            d_spacing: d,
+            multiplicity: 1,
+          });
         }
-
-        let lp_factor = (1.0 + cos_2theta * cos_2theta) / (sin_theta * sin_theta * cos_theta);
-
-        // Multiplicity = number of symmetrically equivalent reflections
-        let multiplicity = hkl_list.len() as u32;
-
-        // Final intensity with all corrections
-        let intensity = f_squared * lp_factor * multiplicity as f64;
-
-        if intensity > 0.01 {
-            // Lower threshold slightly
-            peaks.push(XRDPattern {
-                two_theta,
-                intensity,
-                hkl: hkl_list.clone(),
-                d_spacing,
-                multiplicity,
-            });
-        }
+      }
     }
+  }
 
-    // 4. Sort by angle and normalize
-    peaks.sort_by(|a, b| {
-        a.two_theta
-            .partial_cmp(&b.two_theta)
-            .unwrap_or(Ordering::Equal)
-    });
+  // 6. Sort by 2Theta
+  raw_peaks.sort_by(|a, b| {
+    a.two_theta
+      .partial_cmp(&b.two_theta)
+      .unwrap_or(Ordering::Equal)
+  });
 
-    // Normalize to 100 for strongest peak
-    let max_intensity = peaks.iter().map(|p| p.intensity).fold(0.0_f64, f64::max);
+  // 7. Merge overlapping peaks (multiplicity)
+  let mut merged_peaks: Vec<XRDPattern> = Vec::new();
 
-    if max_intensity > 1e-6 {
-        for peak in &mut peaks {
-            peak.intensity = (peak.intensity / max_intensity) * 100.0;
+  for peak in raw_peaks {
+    match merged_peaks.last_mut() {
+      // If peaks are within 0.05 degrees, consider them the same peak
+      Some(last) if (peak.two_theta - last.two_theta).abs() < 0.05 => {
+        last.intensity += peak.intensity;
+        last.multiplicity += 1;
+        // Add index to list if unique (limit to 6 to save UI space)
+        if last.hkl.len() < 6 && !last.hkl.contains(&peak.hkl[0]) {
+          last.hkl.push(peak.hkl[0]);
         }
+      }
+      _ => merged_peaks.push(peak),
     }
+  }
 
-    peaks
-}
+  // 8. Normalize intensities (0 to 100)
+  let max_i = merged_peaks.iter().map(|p| p.intensity).fold(0.0, f64::max);
 
-/// Calculate atomic form factor using Cromer-Mann 9-parameter approximation
-fn calculate_atomic_form_factor(s: f64, coeffs: &[f64; 9]) -> f64 {
-    let s_squared = s * s;
-    coeffs[0] * (-coeffs[1] * s_squared).exp()
-        + coeffs[2] * (-coeffs[3] * s_squared).exp()
-        + coeffs[4] * (-coeffs[5] * s_squared).exp()
-        + coeffs[6] * (-coeffs[7] * s_squared).exp()
-        + coeffs[8]
-}
+  if max_i > 0.0 {
+    for p in &mut merged_peaks {
+      p.intensity = (p.intensity / max_i) * 100.0;
+    }
+  }
 
-// ============================================================================
-// Vector Math Utilities
-// ============================================================================
-
-#[inline]
-fn dot(u: [f64; 3], v: [f64; 3]) -> f64 {
-    u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
-}
-
-#[inline]
-fn cross(u: [f64; 3], v: [f64; 3]) -> [f64; 3] {
-    [
-        u[1] * v[2] - u[2] * v[1],
-        u[2] * v[0] - u[0] * v[2],
-        u[0] * v[1] - u[1] * v[0],
-    ]
-}
-
-#[inline]
-fn scale(v: [f64; 3], s: f64) -> [f64; 3] {
-    [v[0] * s, v[1] * s, v[2] * s]
-}
-
-#[inline]
-fn magnitude(v: [f64; 3]) -> f64 {
-    (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt()
+  merged_peaks
 }

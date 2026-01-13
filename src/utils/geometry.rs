@@ -1,63 +1,55 @@
 // src/geometry.rs
+use nalgebra::Vector3;
 
 type Point3 = [f64; 3];
 
 /// Calculates distance between two points (Angstroms)
 pub fn calculate_distance(p1: Point3, p2: Point3) -> f64 {
-    let diff = sub(p1, p2);
-    len(diff)
+  let v1 = Vector3::from(p1);
+  let v2 = Vector3::from(p2);
+  // nalgebra's metric_distance is |v1 - v2|
+  nalgebra::distance(&v1.into(), &v2.into())
 }
 
 /// Calculates angle P1-P2-P3 in degrees
 pub fn calculate_angle(p1: Point3, center: Point3, p3: Point3) -> f64 {
-    let v1 = normalize(sub(p1, center));
-    let v2 = normalize(sub(p3, center));
-    dot(v1, v2).clamp(-1.0, 1.0).acos().to_degrees()
+  let c = Vector3::from(center);
+  let v1 = Vector3::from(p1) - c;
+  let v2 = Vector3::from(p3) - c;
+
+  // angle() handles normalization and clamping safely internally
+  v1.angle(&v2).to_degrees()
 }
 
 /// Calculates torsion (dihedral) angle P1-P2-P3-P4 in degrees
 pub fn calculate_dihedral(p1: Point3, p2: Point3, p3: Point3, p4: Point3) -> f64 {
-    let b1 = sub(p2, p1);
-    let b2 = sub(p3, p2);
-    let b3 = sub(p4, p3);
+  let v1 = Vector3::from(p1);
+  let v2 = Vector3::from(p2);
+  let v3 = Vector3::from(p3);
+  let v4 = Vector3::from(p4);
 
-    // Normalize b2 for projection
-    let b2_u = normalize(b2);
+  let b1 = v2 - v1;
+  let b2 = v3 - v2;
+  let b3 = v4 - v3;
 
-    // v = vector perpendicular to plane defined by b1, b2
-    let v = cross(b1, b2);
-    // w = vector perpendicular to plane defined by b2, b3
-    let w = cross(b2, b3);
+  // Normal to plane (p1, p2, p3)
+  let n1 = b1.cross(&b2);
+  // Normal to plane (p2, p3, p4)
+  let n2 = b2.cross(&b3);
 
-    let x = dot(v, w);
-    let y = dot(b2_u, cross(v, w));
+  // Calculate angle using atan2 for the correct sign
+  // x = dot(n1, n2)
+  // y = dot(normalize(b2), cross(n1, n2))
 
-    y.atan2(x).to_degrees()
+  // Safety: Handle the case where b2 is zero length to avoid NaN
+  let b2_u = b2.try_normalize(1e-6).unwrap_or(Vector3::zeros());
+
+  let x = n1.dot(&n2);
+  let y = b2_u.dot(&n1.cross(&n2));
+
+  y.atan2(x).to_degrees()
 }
 
-// --- Internal Math Helpers for [f64; 3] ---
-
-fn sub(a: Point3, b: Point3) -> Point3 {
-    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
-}
-
-fn dot(a: Point3, b: Point3) -> f64 {
-    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-}
-
-fn cross(a: Point3, b: Point3) -> Point3 {
-    [
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0],
-    ]
-}
-
-fn len(a: Point3) -> f64 {
-    dot(a, a).sqrt()
-}
-
-fn normalize(a: Point3) -> Point3 {
-    let l = len(a);
-    if l == 0.0 { [0.0, 0.0, 0.0] } else { [a[0] / l, a[1] / l, a[2] / l] }
-}
+// --- Internal Math Helpers ---
+// WE NO LONGER NEED THESE!
+// nalgebra::Vector3 handles sub, dot, cross, len, and normalize.
