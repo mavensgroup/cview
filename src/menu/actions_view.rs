@@ -106,4 +106,16 @@ pub fn setup(
     }
   });
   app.add_action(&act_pref);
+
+  // 6. Toggle Full Unit Cell (Asymmetric vs Full)
+  // Replaces the previous boundary action
+  let act_boundary = gtk4::gio::SimpleAction::new("toggle_boundaries", None);
+  let s_bound = state.clone();
+  let da_bound = drawing_area.clone();
+  act_boundary.connect_activate(move |_, _| {
+    let mut st = s_bound.borrow_mut();
+    st.config.show_full_unit_cell = !st.config.show_full_unit_cell;
+    da_bound.queue_draw();
+  });
+  app.add_action(&act_boundary);
 }

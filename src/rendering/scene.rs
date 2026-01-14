@@ -2,9 +2,9 @@
 
 use crate::config::RotationCenter;
 use crate::state::AppState;
+use nalgebra::{Matrix3, Rotation3, Vector3};
 
-// This struct is used by interactions.rs for hit-testing
-// and by painter.rs for drawing.
+// This struct is used by interactions.rs for hit-testing and painter.rs
 pub struct RenderAtom {
   pub screen_pos: [f64; 3], // x, y, z (depth)
   pub element: String,
@@ -42,35 +42,35 @@ pub fn calculate_scene(
     }
   };
 
-  // 1. Setup Rotation (Degrees -> Radians)
-  let (sin_x, cos_x) = state.view.rot_x.to_radians().sin_cos();
-  let (sin_y, cos_y) = state.view.rot_y.to_radians().sin_cos();
-  let (sin_z, cos_z) = state.view.rot_z.to_radians().sin_cos();
+  // --- 1. Prepare Matrices (Nalgebra) ---
 
-  let center = get_rotation_center(state);
-  let lattice = structure.lattice;
-  let inv_lattice = invert_matrix(lattice);
+  // Rotation Matrix: R = Rz * Ry * Rx
+  let rx = Rotation3::from_axis_angle(&Vector3::x_axis(), state.view.rot_x.to_radians());
+  let ry = Rotation3::from_axis_angle(&Vector3::y_axis(), state.view.rot_y.to_radians());
+  let rz = Rotation3::from_axis_angle(&Vector3::z_axis(), state.view.rot_z.to_radians());
+  // Combine rotations (Order matters: Apply X, then Y, then Z)
+  let rotation_matrix = rz * ry * rx;
 
-  // Rotation Closure: X -> Y -> Z
-  let rotate = |p: [f64; 3]| -> [f64; 3] {
-    // Shift to center
-    let x = p[0] - center[0];
-    let y = p[1] - center[1];
-    let z = p[2] - center[2];
+  // Lattice Matrix
+  // Structure.lattice stores vectors as rows: [[Ax, Ay, Az], [Bx, By, Bz], [Cx, Cy, Cz]]
+  // Matrix3::new is row-major, so this matches the structure layout.
+  let lat = structure.lattice;
+  let lattice_mat = Matrix3::new(
+    lat[0][0], lat[0][1], lat[0][2], lat[1][0], lat[1][1], lat[1][2], lat[2][0], lat[2][1],
+    lat[2][2],
+  );
 
-    // Rotate around X
-    let y1 = y * cos_x - z * sin_x;
-    let z1 = y * sin_x + z * cos_x;
+  // Inverse Lattice (for fractional conversion)
+  let inv_lattice_mat = lattice_mat.try_inverse();
 
-    // Rotate around Y
-    let x2 = x * cos_y - z1 * sin_y;
-    let z2 = x * sin_y + z1 * cos_y;
+  // Rotation Center
+  let center_arr = get_rotation_center(state);
+  let center = Vector3::new(center_arr[0], center_arr[1], center_arr[2]);
 
-    // Rotate around Z
-    let x3 = x2 * cos_z - y1 * sin_z;
-    let y3 = x2 * sin_z + y1 * cos_z;
-
-    [x3, y3, z2]
+  // Helper Closure to Rotate and Project 3D Point
+  let transform_point = |p: Vector3<f64>| -> Vector3<f64> {
+    let centered = p - center;
+    rotation_matrix * centered
   };
 
   let mut render_atoms = Vec::new();
@@ -79,110 +79,117 @@ pub fn calculate_scene(
   let mut min_y = f64::MAX;
   let mut max_y = f64::MIN;
 
-  // --- 2. Calculate Lattice Corners ---
+  // --- 2. Lattice Corners (Visual Box) ---
   let mut raw_corners = Vec::new();
   for x in 0..=1 {
     for y in 0..=1 {
       for z in 0..=1 {
-        let fx = x as f64;
-        let fy = y as f64;
-        let fz = z as f64;
-        let cx = fx * lattice[0][0] + fy * lattice[1][0] + fz * lattice[2][0];
-        let cy = fx * lattice[0][1] + fy * lattice[1][1] + fz * lattice[2][1];
-        let cz = fx * lattice[0][2] + fy * lattice[1][2] + fz * lattice[2][2];
-        raw_corners.push([cx, cy, cz]);
+        let frac = Vector3::new(x as f64, y as f64, z as f64);
+        // Convert Fractional -> Cartesian
+        // C = x*A + y*B + z*C. Since A,B,C are rows of lattice_mat,
+        // we transpose lattice_mat so they become columns.
+        let cart = lattice_mat.transpose() * frac;
+        raw_corners.push(cart);
       }
     }
   }
 
   let mut rotated_corners = Vec::new();
-  for &p in &raw_corners {
-    let r = rotate(p);
-    rotated_corners.push(r);
-    if r[0] < min_x {
-      min_x = r[0];
+  for p in raw_corners {
+    let r = transform_point(p);
+    rotated_corners.push([r.x, r.y]);
+
+    // Track Bounds
+    if r.x < min_x {
+      min_x = r.x;
     }
-    if r[0] > max_x {
-      max_x = r[0];
+    if r.x > max_x {
+      max_x = r.x;
     }
-    if r[1] < min_y {
-      min_y = r[1];
+    if r.y < min_y {
+      min_y = r.y;
     }
-    if r[1] > max_y {
-      max_y = r[1];
+    if r.y > max_y {
+      max_y = r.y;
     }
   }
 
-  // --- 3. Generate Atoms (Real + Ghosts) ---
+  // --- 3. Determine Atom Visibility (Ghost Logic) ---
+  // If config.show_full_unit_cell is TRUE, we search [-1, 0, 1] for boundary ghosts.
+  // If FALSE, we only look at [0] (the exact input atoms).
+  let shifts: Vec<f64> = if state.config.show_full_unit_cell {
+    vec![-1.0, 0.0, 1.0]
+  } else {
+    vec![0.0]
+  };
+
+  let tol = 0.05; // Tolerance for boundary clipping
+
+  // --- 4. Process Atoms ---
   for (i, atom) in structure.atoms.iter().enumerate() {
-    // Logic to handle atoms near boundaries (ghosts) if lattice inversion exists
-    let positions = if let Some(inv) = inv_lattice {
-      let p = atom.position;
-      // Fractional coords
-      let fx = p[0] * inv[0][0] + p[1] * inv[1][0] + p[2] * inv[2][0];
-      let fy = p[0] * inv[0][1] + p[1] * inv[1][1] + p[2] * inv[2][1];
-      let fz = p[0] * inv[0][2] + p[1] * inv[1][2] + p[2] * inv[2][2];
+    let pos_cart = Vector3::new(atom.position[0], atom.position[1], atom.position[2]);
 
-      // Simple boundary check for ghost generation
-      let dx_list = if fx.abs() < 0.05 {
-        vec![0.0, 1.0]
-      } else {
-        vec![fx]
-      };
-      let dy_list = if fy.abs() < 0.05 {
-        vec![0.0, 1.0]
-      } else {
-        vec![fy]
-      };
-      let dz_list = if fz.abs() < 0.05 {
-        vec![0.0, 1.0]
-      } else {
-        vec![fz]
-      };
+    // 1. Convert to Fractional
+    let pos_frac = if let Some(inv) = inv_lattice_mat {
+      // fractional = (Inverse of Lattice Transposed) * Cartesian
+      // Corresponds to f = (L^T)^-1 * C
+      inv.transpose() * pos_cart
+    } else {
+      pos_cart // Fallback
+    };
 
-      let mut clones = Vec::new();
-      for &dx in &dx_list {
-        for &dy in &dy_list {
-          for &dz in &dz_list {
-            let cx = dx * lattice[0][0] + dy * lattice[1][0] + dz * lattice[2][0];
-            let cy = dx * lattice[0][1] + dy * lattice[1][1] + dz * lattice[2][1];
-            let cz = dx * lattice[0][2] + dy * lattice[1][2] + dz * lattice[2][2];
-            let is_ghost =
-              (dx - fx).abs() > 0.01 || (dy - fy).abs() > 0.01 || (dz - fz).abs() > 0.01;
-            clones.push(([cx, cy, cz], is_ghost));
+    // 2. Generate Clones (Ghosts)
+    for &sx in &shifts {
+      for &sy in &shifts {
+        for &sz in &shifts {
+          let nx = pos_frac.x + sx;
+          let ny = pos_frac.y + sy;
+          let nz = pos_frac.z + sz;
+
+          // Check if the resulting atom is INSIDE the unit cell box [0, 1]
+          if nx >= -tol
+            && nx <= 1.0 + tol
+            && ny >= -tol
+            && ny <= 1.0 + tol
+            && nz >= -tol
+            && nz <= 1.0 + tol
+          {
+            // Convert back to Cartesian
+            let frac_vec = Vector3::new(nx, ny, nz);
+            let cart_vec = lattice_mat.transpose() * frac_vec;
+
+            // Rotate
+            let r_pos = transform_point(cart_vec);
+
+            // Update Bounds (to ensure atoms outside corners are visible)
+            if r_pos.x < min_x {
+              min_x = r_pos.x;
+            }
+            if r_pos.x > max_x {
+              max_x = r_pos.x;
+            }
+            if r_pos.y < min_y {
+              min_y = r_pos.y;
+            }
+            if r_pos.y > max_y {
+              max_y = r_pos.y;
+            }
+
+            let is_ghost = sx != 0.0 || sy != 0.0 || sz != 0.0;
+
+            render_atoms.push(RenderAtom {
+              screen_pos: [r_pos.x, r_pos.y, r_pos.z],
+              element: atom.element.clone(),
+              original_index: i,
+              is_ghost,
+            });
           }
         }
       }
-      clones
-    } else {
-      vec![(atom.position, false)]
-    };
-
-    for (pos, ghost) in positions {
-      let r_pos = rotate(pos);
-      if r_pos[0] < min_x {
-        min_x = r_pos[0];
-      }
-      if r_pos[0] > max_x {
-        max_x = r_pos[0];
-      }
-      if r_pos[1] < min_y {
-        min_y = r_pos[1];
-      }
-      if r_pos[1] > max_y {
-        max_y = r_pos[1];
-      }
-
-      render_atoms.push(RenderAtom {
-        screen_pos: r_pos, // This is rotated, but NOT yet scaled to pixels
-        element: atom.element.clone(),
-        original_index: i,
-        is_ghost: ghost,
-      });
     }
   }
 
-  // --- 4. Calculate Scaling to Pixels ---
+  // --- 5. Calculate Scaling (World -> Pixel) ---
   let final_scale;
   let box_cx = (min_x + max_x) / 2.0;
   let box_cy = (min_y + max_y) / 2.0;
@@ -213,11 +220,11 @@ pub fn calculate_scene(
     win_h / 2.0
   };
 
-  // --- 5. Apply Screen Transform (World -> Pixel) ---
+  // --- 6. Apply Screen Transform ---
   for atom in &mut render_atoms {
     atom.screen_pos[0] = (atom.screen_pos[0] - box_cx) * final_scale + win_cx;
     atom.screen_pos[1] = (atom.screen_pos[1] - box_cy) * final_scale + win_cy;
-    // z remains "depth" for sorting, but we could scale it if needed
+    // z remains depth
   }
 
   let final_corners: Vec<[f64; 2]> = rotated_corners
@@ -246,7 +253,6 @@ pub fn calculate_scene(
 
 fn get_rotation_center(state: &AppState) -> [f64; 3] {
   if let Some(s) = &state.structure {
-    // Access via state.config based on our refactor
     if matches!(state.config.rotation_mode, RotationCenter::UnitCell) {
       let v = s.lattice;
       return [
@@ -255,43 +261,20 @@ fn get_rotation_center(state: &AppState) -> [f64; 3] {
         (v[0][2] + v[1][2] + v[2][2]) * 0.5,
       ];
     }
-    let mut sum = [0.0; 3];
-    for a in &s.atoms {
-      sum[0] += a.position[0];
-      sum[1] += a.position[1];
-      sum[2] += a.position[2];
-    }
+
+    // Centroid of atoms
+    let mut sum = Vector3::new(0.0, 0.0, 0.0);
     let n = s.atoms.len() as f64;
+
+    for a in &s.atoms {
+      sum.x += a.position[0];
+      sum.y += a.position[1];
+      sum.z += a.position[2];
+    }
+
     if n > 0.0 {
-      return [sum[0] / n, sum[1] / n, sum[2] / n];
+      return [sum.x / n, sum.y / n, sum.z / n];
     }
   }
   [0.0; 3]
-}
-
-fn invert_matrix(m: [[f64; 3]; 3]) -> Option<[[f64; 3]; 3]> {
-  let det = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
-    - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
-    + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
-  if det.abs() < 1e-6 {
-    return None;
-  }
-  let inv = 1.0 / det;
-  Some([
-    [
-      (m[1][1] * m[2][2] - m[1][2] * m[2][1]) * inv,
-      (m[0][2] * m[2][1] - m[0][1] * m[2][2]) * inv,
-      (m[0][1] * m[1][2] - m[0][2] * m[1][1]) * inv,
-    ],
-    [
-      (m[1][2] * m[2][0] - m[1][0] * m[2][2]) * inv,
-      (m[0][0] * m[2][2] - m[0][2] * m[2][0]) * inv,
-      (m[1][0] * m[0][2] - m[0][0] * m[1][2]) * inv,
-    ],
-    [
-      (m[1][0] * m[2][1] - m[1][1] * m[2][0]) * inv,
-      (m[2][0] * m[0][1] - m[0][0] * m[2][1]) * inv,
-      (m[0][0] * m[1][1] - m[1][0] * m[0][1]) * inv,
-    ],
-  ])
 }

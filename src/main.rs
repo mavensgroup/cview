@@ -3,10 +3,9 @@
 use gtk4::prelude::*;
 use gtk4::Box as GtkBox;
 use gtk4::{
-  Application, ApplicationWindow, DrawingArea, Frame, Label, Notebook, Orientation, ScrolledWindow,
-  TextView,
+  Application, ApplicationWindow, DrawingArea, Frame, Label, Notebook, Orientation, Revealer,
+  RevealerTransitionType, ScrolledWindow, TextView,
 };
-use gtk4::{Revealer, RevealerTransitionType};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -43,12 +42,14 @@ fn main() {
 
   app.connect_activate(build_ui);
 
+  // Run with empty args to prevent GTK from swallowing the filename argument,
+  // allowing us to parse std::env::args() manually in build_ui.
   app.run_with_args(&Vec::<String>::new());
 }
 
 fn build_ui(app: &Application) {
   // 1. Initialize State
-  let (initial_state, startup_log) = AppState::new_with_log();
+  let (initial_state, _startup_log) = AppState::new_with_log();
   let state = Rc::new(RefCell::new(initial_state));
 
   let window = ApplicationWindow::builder()
@@ -96,12 +97,19 @@ fn build_ui(app: &Application) {
     .editable(false)
     .cursor_visible(false)
     .monospace(true)
-    .left_margin(10)
-    .right_margin(10)
-    .top_margin(10)
-    .bottom_margin(10)
+    .margin_top(10)
+    .margin_bottom(10)
+    .margin_start(10)
+    .margin_end(10)
     .build();
-  log_msg(&system_log_view, &startup_log); // Log startup
+
+  // --- Hook up the Logger ---
+  // This connects the standard 'log' crate to this specific TextView.
+  if let Err(e) = utils::logger::init(&system_log_view) {
+    eprintln!("Failed to initialize logger: {}", e);
+  }
+
+  log::info!("System started ready.");
 
   let scroll_logs = ScrolledWindow::builder().child(&system_log_view).build();
   console_notebook.append_page(&scroll_logs, Some(&Label::new(Some("System Logs"))));
@@ -153,7 +161,7 @@ fn build_ui(app: &Application) {
   let state_quit = state.clone();
   quit_action.connect_activate(move |_, _| {
     let msg = state_quit.borrow().save_config();
-    println!("{}", msg);
+    log::info!("{}", msg);
     if let Some(win) = win_weak_q.upgrade() {
       win.close();
     }
@@ -176,14 +184,13 @@ fn build_ui(app: &Application) {
     cr.paint().unwrap();
 
     // 2. Calculate Scene
-    // FIX: Pass the entire state '&st' (type &AppState), not just the style.
+    // Passes the entire state '&st'
     let (atoms, lattice_corners, bounds) =
       rendering::scene::calculate_scene(&st, w as f64, h as f64, false, None, None);
 
     // 3. Draw Structure
     rendering::painter::draw_unit_cell(cr, &lattice_corners, false);
 
-    // FIX: Pass '&st' to painter functions
     rendering::painter::draw_structure(cr, &atoms, &st, bounds.scale, false);
 
     rendering::painter::draw_miller_planes(
@@ -203,10 +210,11 @@ fn build_ui(app: &Application) {
   window.present();
 
   // --- CLI LATE LOAD ---
+  // Allows opening a file by passing it as an argument: ./cview structure.pdb
   let args: Vec<String> = std::env::args().collect();
   if args.len() > 1 {
     let path = &args[1];
-    println!("CLI: Attempting to open '{}'", path);
+    log::info!("CLI: Attempting to open '{}'", path);
 
     match io::load_structure(path) {
       Ok(structure) => {
@@ -233,7 +241,7 @@ fn build_ui(app: &Application) {
           let report = utils::report::structure_summary(s, &st.file_name);
           log_msg(&interactions_view, &report);
         }
-        drop(st); // drop borrow before passing state to panels::sidebar
+        drop(st); // Crucial: drop borrow before passing state to panels::sidebar
 
         // 4. Refresh Sidebar
         panels::sidebar::refresh_atom_list(&atom_list_box, state.clone(), &drawing_area);

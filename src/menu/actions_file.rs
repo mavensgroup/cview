@@ -25,7 +25,20 @@ fn log_msg(view: &TextView, text: &str) {
   buffer.delete_mark(&mark);
 }
 
-// 7 Arguments to match main.rs
+// Helper to append text to specific views (like Interactions)
+// Note: System logs now use the standard log::info! macro via logger.rs
+fn append_to_view(view: &TextView, text: &str) {
+  let buffer = view.buffer();
+  let mut end = buffer.end_iter();
+  buffer.insert(&mut end, &format!("{}\n", text));
+
+  // Auto-scroll
+  let mark = buffer.create_mark(None, &buffer.end_iter(), false);
+  view.scroll_to_mark(&mark, 0.0, true, 0.0, 1.0);
+  buffer.delete_mark(&mark);
+}
+
+//  Arguments to match main.rs
 pub fn setup(
   app: &Application,
   window: &ApplicationWindow,
@@ -87,9 +100,9 @@ pub fn setup(
           if let Some(path) = file.path() {
             let path_str = path.to_string_lossy().to_string();
 
-            if let Some(log_v) = sys_log_inner.upgrade() {
-              log_msg(&log_v, &format!("Loading file: {}", path_str));
-            }
+            // if let Some(log_v) = sys_log_inner.upgrade() {
+            log::info!("Loading file: {}", path_str);
+            // }
 
             if let Some(st) = state_weak_inner.upgrade() {
               match crate::io::load_structure(&path_str) {
@@ -114,9 +127,10 @@ pub fn setup(
                     }
                   }
 
-                  if let Some(log_v) = sys_log_inner.upgrade() {
-                    log_msg(&log_v, "File loaded successfully.\n");
-                  }
+                  // if let Some(log_v) = sys_log_inner.upgrade() {
+                  // log_msg(&log_v, "File loaded successfully.\n");
+                  // }
+                  log::info!("File loaded successfully.");
 
                   if let Some(da) = da_weak_inner.upgrade() {
                     if let Some(ab) = atom_box_inner.upgrade() {
@@ -125,12 +139,10 @@ pub fn setup(
                     da.queue_draw();
                   }
                 }
+
                 Err(e) => {
-                  let err = format!("Error loading file: {}", e);
-                  if let Some(log_v) = sys_log_inner.upgrade() {
-                    log_msg(&log_v, &err);
-                  }
-                  eprintln!("{}", err);
+                  // 3. Log error via global logger
+                  log::error!("Error loading file: {}", e);
                 }
               }
             }
@@ -177,7 +189,7 @@ pub fn setup(
 
     dialog.set_current_name("structure.cif");
     let state_weak_inner = state_weak_s.clone();
-    let sys_log_inner = sys_log_weak_s.clone();
+    // let sys_log_inner = sys_log_weak_s.clone();
 
     dialog.connect_response(move |d, response| {
       if response == ResponseType::Accept {
@@ -188,15 +200,18 @@ pub fn setup(
               let s = st.borrow();
               if let Some(structure) = &s.structure {
                 if let Err(e) = io::save_structure(&path_str, structure) {
-                  if let Some(log) = sys_log_inner.upgrade() {
-                    log_msg(&log, &format!("Failed to save: {}", e));
-                  }
+                  log::error!("Failed to save: {}", e);
                 } else {
-                  if let Some(log) = sys_log_inner.upgrade() {
-                    log_msg(&log, &format!("Saved to {}", path_str));
-                  }
-                  println!("Saved to {}", path_str);
-                }
+                  log::info!("Saved to {}", path_str);
+                } // if let Some(log) = sys_log_inner.upgrade() {
+                  // log_msg(&log, &format!("Failed to save: {}", e));
+                  // }
+                  // } else {
+                  // if let Some(log) = sys_log_inner.upgrade() {
+                  // log_msg(&log, &format!("Saved to {}", path_str));
+                  // }
+                  // println!("Saved to {}", path_str);
+                  // }
               }
             }
           }
@@ -265,11 +280,11 @@ pub fn setup(
               let s = st.borrow();
               // Assuming export_image returns unit
               let _ = export_image(&s, &path_str, 2000.0, 1500.0, is_pdf);
-
-              if let Some(log) = sys_log_inner.upgrade() {
-                log_msg(&log, &format!("Exported to {}", path_str));
-              }
-              println!("Exported to {}", path_str);
+              log::info!("Exported image to {}", path_str);
+              // if let Some(log) = sys_log_inner.upgrade() {
+              // log_msg(&log, &format!("Exported to {}", path_str));
+              // }
+              // println!("Exported to {}", path_str);
             }
           }
         }

@@ -63,8 +63,12 @@ impl Default for RenderStyle {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
-  pub rotation_mode: RotationCenter,
+  #[serde(default)]
   pub load_conventional: bool,
+
+  #[serde(default)]
+  pub show_full_unit_cell: bool,
+  pub rotation_mode: RotationCenter,
   pub default_export_format: ExportFormat,
 
   #[serde(default)]
@@ -76,6 +80,7 @@ impl Default for Config {
     Self {
       rotation_mode: RotationCenter::Centroid,
       load_conventional: false,
+      show_full_unit_cell: true,
       default_export_format: ExportFormat::Png,
       style: RenderStyle::default(),
     }

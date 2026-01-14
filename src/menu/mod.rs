@@ -44,7 +44,8 @@ pub fn build_menu_and_actions(
   app.set_accels_for_action("app.preferences", &["<Primary>p"]);
   app.set_accels_for_action("app.quit", &["<Primary>q"]);
   app.set_accels_for_action("app.view_reset", &["<Primary>r"]);
-  app.set_accels_for_action("app.toggle_bonds", &["<Primary>b"]);
+  app.set_accels_for_action("app.toggle_cell_view", &["<Primary>t"]);
+  app.set_accels_for_action("app.toggle_boundaries", &["<Primary>b"]);
   app.set_accels_for_action("app.supercell", &["<Primary><Shift>c"]);
   app.set_accels_for_action("app.miller_planes", &["<Primary>m"]);
 
@@ -75,14 +76,18 @@ pub fn build_menu_and_actions(
   view_along_submenu.append(Some("Along b-axis (Y)"), Some("app.view_along_b"));
   view_along_submenu.append(Some("Along c-axis (Z)"), Some("app.view_along_c"));
   view_menu.append_submenu(Some("View Along"), &view_along_submenu);
-
-  view_menu.append(Some("Toggle Bonds"), Some("app.toggle_bonds"));
+  // view_menu.append(Some("Toggle Bonds"), Some("app.toggle_bonds"));
+  view_menu.append(Some("Hide Symmetric Basis"), Some("app.toggle_boundaries"));
   root_model.append_submenu(Some("View"), &view_menu);
 
   // --- TOOLS MENU ---
   let tools_menu = gtk4::gio::Menu::new();
   tools_menu.append(Some("Supercell..."), Some("app.supercell"));
   tools_menu.append(Some("Miller Indices..."), Some("app.miller_planes"));
+  tools_menu.append(
+    Some("Toggle Primitive/Conventional"),
+    Some("app.toggle_cell_view"),
+  );
   root_model.append_submenu(Some("Tools"), &tools_menu);
 
   // --- ANALYSIS MENU ---

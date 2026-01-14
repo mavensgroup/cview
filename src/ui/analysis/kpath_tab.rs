@@ -1,248 +1,207 @@
+// src/ui/analysis/kpath_tab.rs
+
 use crate::physics::analysis::kpath;
 use crate::state::AppState;
 use gtk4::prelude::*;
 use gtk4::{
-    Align, Box, DrawingArea, Frame, GestureDrag, Label, Orientation, PolicyType, ScrolledWindow,
-    TextView,
+  Align, Box, DrawingArea, Frame, GestureDrag, Label, Orientation, ScrolledWindow, TextView,
 };
 use std::cell::RefCell;
-use std::f64::consts::PI;
 use std::rc::Rc;
 
-// Local state for the 3D Viewer inside this tab
 struct ViewerState {
-    rot_x: f64,
-    rot_y: f64,
+  rot_x: f64,
+  rot_y: f64,
 }
 
 pub fn build(state: Rc<RefCell<AppState>>) -> Box {
-    // Root Layout (Horizontal)
-    let root = Box::new(Orientation::Horizontal, 15);
-    root.set_margin_top(15);
-    root.set_margin_bottom(15);
-    root.set_margin_start(15);
-    root.set_margin_end(15);
+  let root = Box::new(Orientation::Horizontal, 15);
+  root.set_margin_top(15);
+  root.set_margin_bottom(15);
+  root.set_margin_start(15);
+  root.set_margin_end(15);
 
-    // 1. Calculate K-Path immediately
-    let st = state.borrow();
-    let k_result = if let Some(structure) = &st.structure {
-        kpath::calculate_kpath(structure)
-    } else {
-        None
-    };
+  let st = state.borrow();
+  let k_result = if let Some(structure) = &st.structure {
+    kpath::calculate_kpath(structure)
+  } else {
+    None
+  };
 
-    if let Some(res) = k_result {
-        // ================= LEFT PANE: 3D Visualization =================
-        let left_pane = Box::new(Orientation::Vertical, 5);
-        left_pane.set_hexpand(true); // Take available width
+  if let Some(res) = k_result {
+    // ================= LEFT PANE: 3D Visualization =================
+    let left_pane = Box::new(Orientation::Vertical, 5);
+    left_pane.set_hexpand(true);
+    let frame_vis = Frame::new(Some("Brillouin Zone & K-Path"));
 
-        let frame_vis = Frame::new(Some("Brillouin Zone & K-Path"));
+    let da = DrawingArea::new();
+    da.set_content_height(400);
+    da.set_content_width(400);
+    da.set_vexpand(true);
 
-        let da = DrawingArea::new();
-        da.set_content_height(400);
-        da.set_content_width(500);
-        da.set_hexpand(true);
-        da.set_vexpand(true);
+    let view_state = Rc::new(RefCell::new(ViewerState {
+      rot_x: 0.2,
+      rot_y: 0.2,
+    }));
 
-        // Create a local state for rotation
-        let view_state = Rc::new(RefCell::new(ViewerState {
-            rot_x: 0.3, // Initial tilt
-            rot_y: 0.3,
-        }));
+    // Mouse Drag
+    let gesture = GestureDrag::new();
+    let vs_clone = view_state.clone();
+    let da_clone = da.clone();
+    gesture.connect_drag_update(move |_, x, y| {
+      let mut vs = vs_clone.borrow_mut();
+      vs.rot_y += x * 0.01;
+      vs.rot_x += y * 0.01;
+      da_clone.queue_draw();
+    });
+    da.add_controller(gesture);
 
-        let res_clone = res.clone();
-        let view_state_draw = view_state.clone();
+    // Drawing
+    let res_rc = Rc::new(res.clone());
+    let res_draw = res_rc.clone();
 
-        // --- DRAWING FUNCTION (Reciprocal Space) ---
-        da.set_draw_func(move |_, cr, w, h| {
-            // A. Background (White)
-            cr.set_source_rgb(1.0, 1.0, 1.0);
-            cr.paint().unwrap();
+    da.set_draw_func(move |_, cr, w, h| {
+      // 1. White Background (Coherence with XRD tab)
+      cr.set_source_rgb(1.0, 1.0, 1.0);
+      cr.paint().unwrap();
 
-            let width = w as f64;
-            let height = h as f64;
-            let cx = width / 2.0;
-            let cy = height / 2.0;
-            let scale = f64::min(width, height) * 0.40; // Scale factor
+      let vs = view_state.borrow();
+      let center_x = w as f64 / 2.0;
+      let center_y = h as f64 / 2.0;
 
-            let vs = view_state_draw.borrow();
-            let (sin_x, cos_x) = vs.rot_x.sin_cos();
-            let (sin_y, cos_y) = vs.rot_y.sin_cos();
+      // 2. Adjusted Zoom (Reduced from 0.35 to 0.25)
+      // This prevents the BZ from clipping edges during rotation
+      let scale = (w as f64).min(h as f64) * 0.15;
 
-            // Helper: 3D Rotation -> 2D Screen Projection
-            let project = |v: [f64; 3]| -> (f64, f64) {
-                let x = v[0];
-                let y = v[1];
-                let z = v[2];
-                // Rotate around X
-                let y1 = y * cos_x - z * sin_x;
-                let z1 = y * sin_x + z * cos_x;
-                // Rotate around Y
-                let x2 = x * cos_y - z1 * sin_y;
+      // Simple 3D projection
+      let project = |p: [f64; 3]| -> (f64, f64) {
+        let x = p[0];
+        let y = p[1];
+        let z = p[2];
+        // Rotate around X
+        let y_rot = y * vs.rot_x.cos() - z * vs.rot_x.sin();
+        let z_rot = y * vs.rot_x.sin() + z * vs.rot_x.cos();
+        // Rotate around Y
+        let x_final = x * vs.rot_y.cos() + z_rot * vs.rot_y.sin();
+        let y_final = y_rot;
+        (center_x + x_final * scale, center_y - y_final * scale)
+      };
 
-                // Screen coordinates (Y flipped for GTK)
-                (cx + x2 * scale, cy - y1 * scale)
-            };
+      // 3. Draw Wireframe (BZ)
+      // Use dark grey for lines on white background
+      cr.set_source_rgba(0.2, 0.2, 0.2, 1.0);
+      cr.set_line_width(1.5);
+      for (start, end) in &res_draw.bz_lines {
+        let (x1, y1) = project(*start);
+        let (x2, y2) = project(*end);
+        cr.move_to(x1, y1);
+        cr.line_to(x2, y2);
+      }
+      cr.stroke().unwrap();
 
-            // B. Draw Reciprocal Axes (XYZ)
-            let axes = [
-                ([1.2, 0.0, 0.0], (0.8, 0.2, 0.2)), // b1 (Red)
-                ([0.0, 1.2, 0.0], (0.2, 0.6, 0.2)), // b2 (Green)
-                ([0.0, 0.0, 1.2], (0.2, 0.2, 0.8)), // b3 (Blue)
-            ];
-            cr.set_line_width(2.0);
-            for (v_end, color) in axes {
-                let (sx, sy) = project([0.0, 0.0, 0.0]);
-                let (ex, ey) = project(v_end);
-                cr.set_source_rgb(color.0, color.1, color.2);
-                cr.move_to(sx, sy);
-                cr.line_to(ex, ey);
-                cr.stroke().unwrap();
-            }
+      // 4. Draw Path Segments
+      cr.set_source_rgba(0.84, 0.0, 0.0, 1.0); // Red path
+      cr.set_line_width(2.5);
 
-            // C. Draw Brillouin Zone Wireframe (Gray)
-            cr.set_line_width(1.0);
-            cr.set_source_rgba(0.4, 0.4, 0.4, 0.6);
-
-            for (start, end) in &res_clone.bz_lines {
-                let (x1, y1) = project(*start);
-                let (x2, y2) = project(*end);
-                cr.move_to(x1, y1);
-                cr.line_to(x2, y2);
-                cr.stroke().unwrap();
-            }
-
-            // D. Draw K-Path (Thick Red Lines)
-            cr.set_line_width(2.5);
-            cr.set_source_rgb(0.9, 0.1, 0.1); // Bright Red
-
-            let kpts = &res_clone.kpoints;
-            if kpts.len() > 1 {
-                for i in 0..kpts.len() - 1 {
-                    let (x1, y1) = project(kpts[i].coords);
-                    let (x2, y2) = project(kpts[i + 1].coords);
-                    cr.move_to(x1, y1);
-                    cr.line_to(x2, y2);
-                    cr.stroke().unwrap();
-                }
-            }
-
-            // E. Draw K-Points Labels (Nodes)
-            for pt in kpts {
-                let (px, py) = project(pt.coords);
-
-                // Draw Dot
-                cr.set_source_rgb(0.0, 0.0, 0.0);
-                cr.arc(px, py, 3.5, 0.0, 2.0 * PI);
-                cr.fill().unwrap();
-
-                // Draw Label
-                cr.select_font_face(
-                    "Sans",
-                    gtk4::cairo::FontSlant::Normal,
-                    gtk4::cairo::FontWeight::Bold,
-                );
-                cr.set_font_size(13.0);
-                cr.move_to(px + 6.0, py - 6.0);
-                cr.show_text(&pt.label).unwrap();
-            }
-        });
-
-        // 2. INTERACTION (Drag to Rotate)
-        let drag = GestureDrag::new();
-        let view_state_drag = view_state.clone();
-        let da_drag = da.clone();
-
-        drag.connect_drag_update(move |_gesture, dx, dy| {
-            let mut vs = view_state_drag.borrow_mut();
-            vs.rot_y += dx * 0.01;
-            vs.rot_x += dy * 0.01;
-            da_drag.queue_draw();
-        });
-
-        da.add_controller(drag);
-
-        frame_vis.set_child(Some(&da));
-        left_pane.append(&frame_vis);
-        root.append(&left_pane);
-
-        // ================= RIGHT PANE: Output & Info =================
-        let right_pane = Box::new(Orientation::Vertical, 10);
-        right_pane.set_width_request(300); // Fixed sidebar width
-
-        // Header
-        let title = Label::new(Some("K-Path Generator"));
-        title.add_css_class("title-2");
-        title.set_halign(Align::Start);
-        right_pane.append(&title);
-
-        // let lbl_sg = Label::new(Some(&format!("Space Group: {}", res.spacegroup)));
-        // lbl_sg.set_halign(Align::Start);
-        // right_pane.append(&lbl_sg);
-        let lbl_bravais = Label::new(Some(&format!("Lattice: {}", res.bravais_type)));
-        lbl_bravais.set_halign(Align::Start);
-        lbl_bravais.add_css_class("caption"); // Make it look like subtitle
-        right_pane.append(&lbl_bravais);
-
-        let lbl_path = Label::new(Some(&format!("Path: {}", res.path_string)));
-        lbl_path.set_halign(Align::Start);
-        lbl_path.set_wrap(true);
-        lbl_path.set_margin_bottom(10);
-        right_pane.append(&lbl_path);
-
-        // VASP Output Area
-        right_pane.append(&Label::new(Some("VASP KPOINTS (Line Mode):")));
-
-        let tv = TextView::new();
-        tv.set_editable(false);
-        tv.set_monospace(true);
-
-        let mut vasp_str = String::new();
-        vasp_str.push_str("K-Path generated by CView\n");
-        vasp_str.push_str("20  ! Intersections\n");
-        vasp_str.push_str("Line_mode\n");
-        vasp_str.push_str("Reciprocal\n");
-
-        if res.kpoints.len() > 1 {
-            for i in 0..res.kpoints.len() - 1 {
-                let p1 = &res.kpoints[i];
-                let p2 = &res.kpoints[i + 1];
-                vasp_str.push_str(&format!(
-                    "{:.5} {:.5} {:.5} ! {}\n",
-                    p1.coords[0], p1.coords[1], p1.coords[2], p1.label
-                ));
-                vasp_str.push_str(&format!(
-                    "{:.5} {:.5} {:.5} ! {}\n",
-                    p2.coords[0], p2.coords[1], p2.coords[2], p2.label
-                ));
-                vasp_str.push_str("\n");
-            }
+      for segment in &res_draw.path_segments {
+        if segment.is_empty() {
+          continue;
         }
+        let (sx, sy) = project(segment[0].coords_cart);
+        cr.move_to(sx, sy);
 
-        tv.buffer().set_text(&vasp_str);
+        for pt in segment.iter().skip(1) {
+          let (px, py) = project(pt.coords_cart);
+          cr.line_to(px, py);
+        }
+      }
+      cr.stroke().unwrap();
 
-        let scroll = ScrolledWindow::new();
-        scroll.set_policy(PolicyType::Automatic, PolicyType::Automatic);
-        scroll.set_child(Some(&tv));
-        scroll.set_vexpand(true);
+      // 5. Draw Labels
+      cr.set_source_rgba(0.0, 0.84, 0.84, 1.0); // Blue dots/text
+      for pt in &res_draw.kpoints {
+        let (px, py) = project(pt.coords_cart);
+        cr.arc(px, py, 4.0, 0.0, 2.0 * std::f64::consts::PI);
+        cr.fill().unwrap();
 
-        // Add a nice frame around the text
-        let text_frame = Frame::new(None);
-        text_frame.set_child(Some(&scroll));
-        right_pane.append(&text_frame);
+        // Draw Label Text
+        cr.move_to(px + 6.0, py - 6.0);
+        cr.set_font_size(16.0);
+        cr.show_text(&pt.label).unwrap();
+      }
+    });
 
-        root.append(&right_pane);
-    } else {
-        // Fallback if no structure/path found
-        let msg = Label::new(Some(
-            "No K-Path detected.\nLoad a structure or check symmetry.",
-        ));
-        msg.set_justify(gtk4::Justification::Center);
-        msg.set_valign(gtk4::Align::Center);
-        msg.set_vexpand(true);
-        msg.set_hexpand(true);
-        root.append(&msg);
+    frame_vis.set_child(Some(&da));
+    left_pane.append(&frame_vis);
+    root.append(&left_pane);
+
+    // ================= RIGHT PANE: VASP KPOINTS =================
+    let right_pane = Box::new(Orientation::Vertical, 10);
+    right_pane.set_width_request(350);
+
+    let lbl_sg = Label::new(Some(&format!("Space Group: {}", res.spacegroup_str)));
+    lbl_sg.set_halign(Align::Start);
+
+    let lbl_bravais = Label::new(Some(&format!("Lattice: {}", res.lattice_type)));
+    lbl_bravais.set_halign(Align::Start);
+
+    // Generate Path String manually for display
+    let mut path_display = String::new();
+    for (i, segment) in res.path_segments.iter().enumerate() {
+      if i > 0 {
+        path_display.push_str(" | ");
+      }
+      let seg_str: Vec<String> = segment.iter().map(|p| p.label.clone()).collect();
+      path_display.push_str(&seg_str.join("-"));
     }
+    let lbl_path = Label::new(Some(&format!("Path: {}", path_display)));
+    lbl_path.set_halign(Align::Start);
 
-    root
+    right_pane.append(&lbl_sg);
+    right_pane.append(&lbl_bravais);
+    right_pane.append(&lbl_path);
+
+    let tv = TextView::builder()
+      .monospace(true)
+      .editable(false)
+      .vexpand(true)
+      .build();
+
+    // Generate VASP KPOINTS content
+    let mut vasp_str = String::new();
+    vasp_str.push_str("KPOINTS file for VASP\n");
+    vasp_str.push_str("20 ! intersections\n");
+    vasp_str.push_str("Line_mode\n");
+    vasp_str.push_str("Reciprocal\n");
+
+    for segment in &res.path_segments {
+      for i in 0..segment.len().saturating_sub(1) {
+        let p1 = &segment[i];
+        let p2 = &segment[i + 1];
+        vasp_str.push_str(&format!(
+          "{:.6} {:.6} {:.6} ! {}\n",
+          p1.coords_frac[0], p1.coords_frac[1], p1.coords_frac[2], p1.label
+        ));
+        vasp_str.push_str(&format!(
+          "{:.6} {:.6} {:.6} ! {}\n\n",
+          p2.coords_frac[0], p2.coords_frac[1], p2.coords_frac[2], p2.label
+        ));
+      }
+    }
+    tv.buffer().set_text(&vasp_str);
+
+    let scroll = ScrolledWindow::builder().child(&tv).build();
+    let frame_txt = Frame::new(Some("VASP KPOINTS"));
+    frame_txt.set_child(Some(&scroll));
+    frame_txt.set_vexpand(true);
+
+    right_pane.append(&frame_txt);
+    root.append(&right_pane);
+  } else {
+    root.append(&Label::new(Some(
+      "No structure loaded or symmetry analysis failed.",
+    )));
+  }
+
+  root
 }

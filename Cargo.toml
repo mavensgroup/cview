@@ -18,12 +18,13 @@ plotters-cairo = "0.6"
 nalgebra = { version = "0.34", default-features = false, features = ["macros", "std"] }
 num-complex = "0.4"
 rayon = "1.8"
-spglib = "1.15"
+# spglib = "1.15"
 calamine = "0.24"
+log = "0.4"
 
 
 [profile.release]
-opt-level = 3
+opt-level = 0
 lto = true
 codegen-units = 1
 strip = true
