@@ -1,4 +1,4 @@
-# CView: Ab-initio K-Path Visualization & Structure Analysis
+# CView: Crystal Structure Visualization & Analysis
 
 ![License](https://img.shields.io/badge/license-LGPLv3-blue.svg)
 ![Language](https://img.shields.io/badge/rust-1.70%2B-orange.svg)
