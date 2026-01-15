@@ -114,7 +114,6 @@ cargo run --release
 ---
 
 ## 📚 Citation
-
    If you use CView in your research, please cite:[CView](https://github.com/mavensgroup/cview)
    repo.
 
