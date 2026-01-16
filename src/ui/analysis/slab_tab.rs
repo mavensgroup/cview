@@ -1,15 +1,16 @@
 // src/ui/analysis/slab_tab.rs
+
 use crate::model::structure::Structure;
 use crate::physics::operations::slab;
 use crate::state::AppState;
 use gtk4::prelude::*;
 use gtk4::{Align, Box, Button, DrawingArea, Frame, Grid, Label, Orientation, SpinButton};
-use nalgebra::{Matrix3, Vector3}; // Use nalgebra for cleaner UI math
+use nalgebra::{Matrix3, Vector3};
 use std::cell::RefCell;
 use std::f64::consts::PI;
 use std::rc::Rc;
 
-// Shared state for the visualization
+// Shared state for the visualization (Local to this tab's logic)
 struct VisState {
     h: f64,
     k: f64,
@@ -129,7 +130,9 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     // ================= LOGIC =================
 
     // --- Visualization State ---
-    let current_struct = state.borrow().structure.clone();
+    // FIX: Access structure from active_tab()
+    let current_struct = state.borrow().active_tab().structure.clone();
+
     let vis_state = Rc::new(RefCell::new(VisState {
         h: 1.0,
         k: 1.0,
@@ -176,7 +179,6 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
             );
 
             // Need Inverse to get Fractional Coords
-            // Be careful: if your lattice is degenerate, this returns None
             if let Some(inv_lat) = lat_mat.try_inverse() {
                 // Since our lattice uses Row vectors, Fractional = Inv^T * Cart
                 let to_frac = inv_lat.transpose();
@@ -332,7 +334,10 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
 
     btn_gen.connect_clicked(move |_| {
         let mut st = state_gen.borrow_mut();
-        if let Some(structure) = &st.structure {
+        // FIX: Access Active Tab Mutably
+        let tab = st.active_tab_mut();
+
+        if let Some(structure) = &tab.structure {
             *undo_gen.borrow_mut() = Some(structure.clone());
 
             let h = spin_h.value() as i32;
@@ -344,7 +349,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
             // Calling the updated physics engine
             match slab::generate_slab(structure, h, k, l, thick, vac) {
                 Ok(new_struct) => {
-                    st.structure = Some(new_struct);
+                    tab.structure = Some(new_struct);
                     lbl_gen.set_markup("<span color='green'>Slab generated.</span>");
                     btn_undo_gen.set_sensitive(true);
                 }
@@ -357,7 +362,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         }
     });
 
-    // Undo Logic (Unchanged)
+    // Undo Logic
     let state_undo = state.clone();
     let undo_store_ref = undo_store.clone();
     let btn_undo_ref = btn_undo.clone();
@@ -365,8 +370,11 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
 
     btn_undo.connect_clicked(move |_| {
         let mut st = state_undo.borrow_mut();
+        // FIX: Access Active Tab Mutably
+        let tab = st.active_tab_mut();
+
         if let Some(backup) = undo_store_ref.borrow_mut().take() {
-            st.structure = Some(backup);
+            tab.structure = Some(backup);
             lbl_undo.set_text("Undone.");
             btn_undo_ref.set_sensitive(false);
         }

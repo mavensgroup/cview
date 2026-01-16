@@ -25,7 +25,6 @@ pub enum ExportFormat {
 }
 
 // --- RenderStyle ---
-// Moved here so Config can own it
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RenderStyle {
@@ -41,6 +40,16 @@ pub struct RenderStyle {
     // Helper cache (skipped in serialization)
     #[serde(skip)]
     pub atom_cache: Rc<RefCell<HashMap<String, ImageSurface>>>,
+}
+
+impl RenderStyle {
+    /// Creates a copy for a new session/tab.
+    /// It copies the values but initializes a fresh, empty atom_cache.
+    pub fn create_session_copy(&self) -> Self {
+        let mut copy = self.clone();
+        copy.atom_cache = Rc::new(RefCell::new(HashMap::new()));
+        copy
+    }
 }
 
 impl Default for RenderStyle {
@@ -71,6 +80,7 @@ pub struct Config {
     pub rotation_mode: RotationCenter,
     pub default_export_format: ExportFormat,
 
+    // This now acts as the "Default Template" for new tabs
     #[serde(default)]
     pub style: RenderStyle,
 }
@@ -88,7 +98,6 @@ impl Default for Config {
 }
 
 impl Config {
-    /// Loads config from standard OS location (e.g., ~/.config/cview/settings.json)
     pub fn load() -> (Self, String) {
         let path = Self::get_path();
         if path.exists() {
@@ -110,7 +119,6 @@ impl Config {
         }
     }
 
-    /// Saves config to standard OS location
     pub fn save(&self) -> String {
         let path = Self::get_path();
         if let Some(parent) = path.parent() {
@@ -130,7 +138,6 @@ impl Config {
     }
 
     fn get_path() -> PathBuf {
-        // "com.example.cview" should match your Application ID in main.rs
         if let Some(proj) = ProjectDirs::from("com", "example", "cview") {
             proj.config_dir().join("settings.json")
         } else {

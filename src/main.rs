@@ -3,7 +3,7 @@
 use gtk4::prelude::*;
 use gtk4::Box as GtkBox;
 use gtk4::{
-    Application, ApplicationWindow, DrawingArea, Frame, Label, Notebook, Orientation, Revealer,
+    Application, ApplicationWindow, Frame, Label, Notebook, Orientation, Revealer,
     RevealerTransitionType, ScrolledWindow, TextView,
 };
 use std::cell::RefCell;
@@ -42,8 +42,7 @@ fn main() {
 
     app.connect_activate(build_ui);
 
-    // Run with empty args to prevent GTK from swallowing the filename argument,
-    // allowing us to parse std::env::args() manually in build_ui.
+    // Run with empty args so we can handle CLI args manually in build_ui
     app.run_with_args(&Vec::<String>::new());
 }
 
@@ -69,10 +68,12 @@ fn build_ui(app: &Application) {
     let right_vbox = GtkBox::new(Orientation::Vertical, 0);
     right_vbox.set_hexpand(true);
 
-    let drawing_area = DrawingArea::new();
-    drawing_area.set_vexpand(true);
+    // --- VIEW NOTEBOOK (TABBED INTERFACE) ---
+    let view_notebook = Notebook::new();
+    view_notebook.set_vexpand(true);
+    view_notebook.set_scrollable(true);
 
-    // Console Notebook
+    // --- CONSOLE NOTEBOOK ---
     let console_notebook = Notebook::new();
     console_notebook.set_height_request(200);
 
@@ -103,12 +104,9 @@ fn build_ui(app: &Application) {
         .margin_end(10)
         .build();
 
-    // --- Hook up the Logger ---
-    // This connects the standard 'log' crate to this specific TextView.
     if let Err(e) = utils::logger::init(&system_log_view) {
         eprintln!("Failed to initialize logger: {}", e);
     }
-
     log::info!("System started ready.");
 
     let scroll_logs = ScrolledWindow::builder().child(&system_log_view).build();
@@ -117,13 +115,19 @@ fn build_ui(app: &Application) {
     let info_frame = Frame::new(None);
     info_frame.set_child(Some(&console_notebook));
 
-    right_vbox.append(&drawing_area);
+    right_vbox.append(&view_notebook);
     right_vbox.append(&info_frame);
 
-    // Left Panel (Sidebar)
+    // --- INITIAL TAB SETUP ---
+    // Create content
+    let (first_da, first_tab_box) = ui::create_tab_content(state.clone(), 0);
+
+    // NEW: Use helper to add a Closable Tab (with X button)
+    ui::add_closable_tab(&view_notebook, &first_tab_box, "Untitled", state.clone());
+
+    // --- LEFT PANEL (Sidebar) ---
     use panels::sidebar;
-    // We capture atom_list_box here so we can refresh it later
-    let (sidebar_widget, atom_list_box) = sidebar::build(state.clone(), &drawing_area);
+    let (sidebar_widget, atom_list_box) = sidebar::build(state.clone(), &view_notebook);
 
     let sidebar_revealer = Revealer::builder()
         .transition_type(RevealerTransitionType::SlideRight)
@@ -134,18 +138,21 @@ fn build_ui(app: &Application) {
     main_hbox.append(&sidebar_revealer);
     main_hbox.append(&right_vbox);
 
-    // Menu Bar
+    // --- MENU BAR ---
     let menu_bar = menu::build_menu_and_actions(
         app,
         &window,
         state.clone(),
-        &drawing_area,
+        &view_notebook,
+        &first_da,
         &system_log_view,
         &interactions_view,
         &atom_list_box,
     );
 
-    // Actions
+    // --- ACTIONS ---
+
+    // 1. Toggle Sidebar (F9)
     let toggle_action = gtk4::gio::SimpleAction::new("toggle_sidebar", None);
     let rev_weak = sidebar_revealer.downgrade();
     toggle_action.connect_activate(move |_, _| {
@@ -156,6 +163,7 @@ fn build_ui(app: &Application) {
     app.add_action(&toggle_action);
     app.set_accels_for_action("app.toggle_sidebar", &["F9"]);
 
+    // 2. Quit
     let quit_action = gtk4::gio::SimpleAction::new("quit", None);
     let win_weak_q = window.downgrade();
     let state_quit = state.clone();
@@ -168,43 +176,36 @@ fn build_ui(app: &Application) {
     });
     app.add_action(&quit_action);
 
+    // 3. Close Tab (Ctrl+W) - NEW
+    let close_tab_action = gtk4::gio::SimpleAction::new("close_tab", None);
+    let nb_close = view_notebook.downgrade();
+    let st_close = state.clone();
+
+    close_tab_action.connect_activate(move |_, _| {
+        if let Some(nb) = nb_close.upgrade() {
+            if let Some(page_idx) = nb.current_page() {
+                // Remove from State
+                st_close.borrow_mut().remove_tab(page_idx as usize);
+                // Remove from UI
+                nb.remove_page(Some(page_idx));
+            }
+        }
+    });
+    app.add_action(&close_tab_action);
+    app.set_accels_for_action("app.close_tab", &["<Control>w"]);
+
+    // --- ASSEMBLE ---
     root_vbox.append(&menu_bar);
     root_vbox.append(&main_hbox);
 
-    setup_interactions(&window, state.clone(), &drawing_area, &interactions_view);
+    // --- INTERACTIONS ---
+    setup_interactions(&window, state.clone(), &first_da, &interactions_view);
 
-    // Drawing Function
-    let s = state.clone();
-    drawing_area.set_draw_func(move |_, cr, w, h| {
-        let st = s.borrow();
-
-        // 1. Background
-        let (bg_r, bg_g, bg_b) = st.config.style.background_color;
-        cr.set_source_rgb(bg_r, bg_g, bg_b);
-        cr.paint().unwrap();
-
-        // 2. Calculate Scene
-        // Passes the entire state '&st'
-        let (atoms, lattice_corners, bounds) =
-            rendering::scene::calculate_scene(&st, w as f64, h as f64, false, None, None);
-
-        // 3. Draw Structure
-        rendering::painter::draw_unit_cell(cr, &lattice_corners, false);
-
-        rendering::painter::draw_structure(cr, &atoms, &st, bounds.scale, false);
-
-        rendering::painter::draw_miller_planes(
-            cr,
-            &st,
-            &lattice_corners,
-            bounds.scale,
-            w as f64,
-            h as f64,
-        );
-
-        rendering::painter::draw_axes(cr, &st, w as f64, h as f64);
-
-        rendering::painter::draw_selection_box(cr, &st);
+    // --- TAB SWITCHING LOGIC ---
+    let state_nb = state.clone();
+    view_notebook.connect_switch_page(move |_, _, page_num| {
+        let mut st = state_nb.borrow_mut();
+        st.active_tab_index = page_num as usize;
     });
 
     window.present();
@@ -218,36 +219,45 @@ fn build_ui(app: &Application) {
 
         match io::load_structure(path) {
             Ok(structure) => {
-                // 1. Update State
                 {
                     let mut st = state.borrow_mut();
-
-                    st.original_structure = Some(structure.clone());
-                    st.structure = Some(structure);
-
-                    st.file_name = std::path::Path::new(path)
+                    let tab = st.active_tab_mut();
+                    tab.original_structure = Some(structure.clone());
+                    tab.structure = Some(structure);
+                    tab.file_name = std::path::Path::new(path)
                         .file_name()
                         .unwrap_or_default()
                         .to_string_lossy()
                         .to_string();
+
+                    // FIX: Update Label inside the Custom Closable Tab Box
+                    if let Some(page) = view_notebook.nth_page(Some(0)) {
+                        if let Some(lbl_widget) = view_notebook.tab_label(&page) {
+                            // Since we used add_closable_tab, the label is inside a GtkBox
+                            if let Some(bx) = lbl_widget.downcast_ref::<GtkBox>() {
+                                // Assume first child is the Label
+                                if let Some(first_child) = bx.first_child() {
+                                    if let Some(l) = first_child.downcast_ref::<Label>() {
+                                        l.set_text(&tab.file_name);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
-                // 2. Log Success
                 log_msg(&system_log_view, &format!("File loaded via CLI: {}", path));
 
-                // 3. New Report Logic (Accessing state via borrow)
                 let st = state.borrow();
-                if let Some(s) = &st.structure {
-                    let report = utils::report::structure_summary(s, &st.file_name);
+                let tab = st.active_tab();
+                if let Some(s) = &tab.structure {
+                    let report = utils::report::structure_summary(s, &tab.file_name);
                     log_msg(&interactions_view, &report);
                 }
-                drop(st); // Crucial: drop borrow before passing state to panels::sidebar
+                drop(st);
 
-                // 4. Refresh Sidebar
-                panels::sidebar::refresh_atom_list(&atom_list_box, state.clone(), &drawing_area);
-
-                // 5. Trigger Draw
-                drawing_area.queue_draw();
+                panels::sidebar::refresh_atom_list(&atom_list_box, state.clone(), &view_notebook);
+                first_da.queue_draw();
             }
             Err(e) => {
                 log_msg(&system_log_view, &format!("Error loading CLI file: {}", e));

@@ -3,16 +3,12 @@
 use crate::physics::operations::supercell;
 use crate::state::AppState;
 use gtk4::prelude::*;
-use gtk4::{Align, Dialog, DrawingArea, Grid, Label, ResponseType, SpinButton, Window};
+use gtk4::{Align, Dialog, Grid, Label, Notebook, ResponseType, SpinButton, Window};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Shows the Supercell Generation Dialog
-///
-/// parent: The window that owns this dialog (usually the main ApplicationWindow)
-/// state: Shared application state
-/// drawing_area: The main 3D canvas (needed to trigger a redraw after update)
-pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, drawing_area: &DrawingArea) {
+// CHANGE: Now accepts 'notebook' instead of 'drawing_area'
+pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &Notebook) {
   let dialog = Dialog::builder()
     .title("Supercell Generator")
     .transient_for(parent)
@@ -48,60 +44,57 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, drawing_are
   content.append(&grid);
 
   // --- Buttons ---
-  dialog.add_button("Reset to Original", ResponseType::Reject); // Maps to 'Reset'
+  dialog.add_button("Reset to Original", ResponseType::Reject);
   dialog.add_button("Cancel", ResponseType::Cancel);
   dialog.add_button("Generate", ResponseType::Ok);
 
   // --- Signal Handling ---
   let state_weak = Rc::downgrade(&state);
-
-  // We need a weak reference to the drawing area to trigger the redraw inside the closure
-  let da_weak = drawing_area.downgrade();
+  let notebook_weak = notebook.downgrade(); // Capture the notebook
 
   dialog.connect_response(move |d, resp| {
-    // Upgrade state reference
     if let Some(st) = state_weak.upgrade() {
       let mut s = st.borrow_mut();
+      let tab = s.active_tab_mut(); // Modify active tab data
 
       match resp {
         ResponseType::Ok => {
-          // GENERATE SUPERCELL
-          // We always generate from the 'original_structure' to avoid
-          // exponential growth (applying 2x2 to an already 2x2 structure)
-          if let Some(orig) = &s.original_structure {
+          // GENERATE
+          if let Some(orig) = &tab.original_structure {
             let nx = sx.value() as u32;
             let ny = sy.value() as u32;
             let nz = sz.value() as u32;
 
             let new_s = supercell::generate(orig, nx, ny, nz);
-
-            s.structure = Some(new_s);
-            s.interaction.selected_indices.clear(); // Clear selection as indices changed
+            tab.structure = Some(new_s);
+            tab.interaction.selected_indices.clear();
 
             println!("Supercell generated: {}x{}x{}", nx, ny, nz);
 
-            // FIX: Trigger immediate redraw
-            if let Some(da) = da_weak.upgrade() {
-              da.queue_draw();
+            // FIX: Use helper to find and update the ACTIVE drawing area
+            if let Some(nb) = notebook_weak.upgrade() {
+              if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
+                da.queue_draw();
+              }
             }
-          } else {
-            eprintln!("Error: No original structure found to generate supercell from.");
           }
         }
         ResponseType::Reject => {
           // RESET
-          if let Some(orig) = &s.original_structure {
-            s.structure = Some(orig.clone());
-            s.interaction.selected_indices.clear();
+          if let Some(orig) = &tab.original_structure {
+            tab.structure = Some(orig.clone());
+            tab.interaction.selected_indices.clear();
             println!("Structure reset to original.");
 
-            // Trigger redraw
-            if let Some(da) = da_weak.upgrade() {
-              da.queue_draw();
+            // FIX: Refresh ACTIVE drawing area
+            if let Some(nb) = notebook_weak.upgrade() {
+              if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
+                da.queue_draw();
+              }
             }
           }
         }
-        _ => {} // Cancel or Close
+        _ => {}
       }
     }
     d.close();

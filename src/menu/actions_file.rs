@@ -1,328 +1,329 @@
 // src/menu/actions_file.rs
 
-use crate::config::ExportFormat;
+// use crate::config::ExportFormat;
 use crate::io;
-use crate::rendering::export_image;
+use crate::rendering::export::{export_pdf, export_png};
 use crate::state::AppState;
+use crate::ui::create_tab_content;
 use crate::ui::preferences::show_preferences_window;
 use gtk4::prelude::*;
 use gtk4::{
-  Application, ApplicationWindow, DrawingArea, FileChooserAction, FileChooserNative, FileFilter,
-  ResponseType, TextView,
+    Application, ApplicationWindow, DrawingArea, FileChooserAction, FileChooserNative, FileFilter,
+    Label, Notebook, ResponseType, TextView,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
 
-// Local helper to append text to a TextView
+// Helper log function
 fn log_msg(view: &TextView, text: &str) {
-  let buffer = view.buffer();
-  let mut end = buffer.end_iter();
-  buffer.insert(&mut end, &format!("{}\n", text));
-
-  // Auto-scroll
-  let mark = buffer.create_mark(None, &buffer.end_iter(), false);
-  view.scroll_to_mark(&mark, 0.0, true, 0.0, 1.0);
-  buffer.delete_mark(&mark);
+    let buffer = view.buffer();
+    let mut end = buffer.end_iter();
+    buffer.insert(&mut end, &format!("{}\n", text));
+    let mark = buffer.create_mark(None, &buffer.end_iter(), false);
+    view.scroll_to_mark(&mark, 0.0, true, 0.0, 1.0);
+    buffer.delete_mark(&mark);
 }
 
-// Helper to append text to specific views (like Interactions)
-// Note: System logs now use the standard log::info! macro via logger.rs
-fn append_to_view(view: &TextView, text: &str) {
-  let buffer = view.buffer();
-  let mut end = buffer.end_iter();
-  buffer.insert(&mut end, &format!("{}\n", text));
-
-  // Auto-scroll
-  let mark = buffer.create_mark(None, &buffer.end_iter(), false);
-  view.scroll_to_mark(&mark, 0.0, true, 0.0, 1.0);
-  buffer.delete_mark(&mark);
-}
-
-//  Arguments to match main.rs
 pub fn setup(
-  app: &Application,
-  window: &ApplicationWindow,
-  state: Rc<RefCell<AppState>>,
-  drawing_area: &DrawingArea,
-  system_log_view: &TextView,   // Arg 5
-  interactions_view: &TextView, // Arg 6
-  atom_list_box: &gtk4::Box,    // Arg 7
+    app: &Application,
+    window: &ApplicationWindow,
+    state: Rc<RefCell<AppState>>,
+    notebook: &Notebook,
+    drawing_area: &DrawingArea,
+    system_log_view: &TextView,
+    interactions_view: &TextView,
+    atom_list_box: &gtk4::Box,
 ) {
-  // --- OPEN ACTION ---
-  let open_action = gtk4::gio::SimpleAction::new("open", None);
-  let win_weak = window.downgrade();
-  let state_weak = Rc::downgrade(&state);
-  let da_weak = drawing_area.downgrade();
+    // --- OPEN ACTION ---
+    let open_action = gtk4::gio::SimpleAction::new("open", None);
 
-  let sys_log_weak = system_log_view.downgrade();
-  let interact_weak = interactions_view.downgrade();
-  let atom_box_weak = atom_list_box.downgrade();
+    // Weak references
+    let win_weak = window.downgrade();
+    let state_weak = Rc::downgrade(&state);
+    let da_weak = drawing_area.downgrade();
+    let notebook_weak = notebook.downgrade();
+    let sys_log_weak = system_log_view.downgrade();
+    let interact_weak = interactions_view.downgrade();
+    let atom_box_weak = atom_list_box.downgrade();
 
-  open_action.connect_activate(move |_, _| {
-    let win = match win_weak.upgrade() {
-      Some(w) => w,
-      None => return,
-    };
+    open_action.connect_activate(move |_, _| {
+        let win = match win_weak.upgrade() {
+            Some(w) => w,
+            None => return,
+        };
 
-    let dialog = FileChooserNative::new(
-      Some("Open Structure File"),
-      Some(&win),
-      FileChooserAction::Open,
-      Some("Open"),
-      Some("Cancel"),
-    );
+        let dialog = FileChooserNative::new(
+            Some("Open Structure File"),
+            Some(&win),
+            FileChooserAction::Open,
+            Some("Open"),
+            Some("Cancel"),
+        );
 
-    let filter_any = FileFilter::new();
-    filter_any.set_name(Some("All Supported Files"));
-    filter_any.add_pattern("*.cif");
-    filter_any.add_pattern("POSCAR*");
-    filter_any.add_pattern("CONTCAR*");
-    filter_any.add_pattern("*.vasp");
-    filter_any.add_pattern("*.pot");
-    filter_any.add_pattern("*.sys");
-    filter_any.add_pattern("*.out");
-    filter_any.add_pattern("*.in");
-    filter_any.add_pattern("*.pwi");
-    filter_any.add_pattern("*.pwo");
-    filter_any.add_pattern("*.qe");
-    filter_any.add_pattern("*.xyz");
-    dialog.add_filter(&filter_any);
+        // --- FILTERS ---
+        let filter_struct = FileFilter::new();
+        filter_struct.set_name(Some("Structure Files"));
 
-    let state_weak_inner = state_weak.clone();
-    let da_weak_inner = da_weak.clone();
-    let sys_log_inner = sys_log_weak.clone();
-    let interact_inner = interact_weak.clone();
-    let atom_box_inner = atom_box_weak.clone();
+        filter_struct.add_pattern("*.cif");
+        filter_struct.add_pattern("POSCAR*");
+        filter_struct.add_pattern("CONTCAR*");
+        filter_struct.add_pattern("*.vasp");
+        filter_struct.add_pattern("*.pot");
+        filter_struct.add_pattern("*.sys");
+        filter_struct.add_pattern("*.out");
+        filter_struct.add_pattern("*.in");
+        filter_struct.add_pattern("*.pwi");
+        filter_struct.add_pattern("*.pwo");
+        filter_struct.add_pattern("*.qe");
+        filter_struct.add_pattern("*.xyz");
 
-    dialog.connect_response(move |d, response| {
-      if response == ResponseType::Accept {
-        if let Some(file) = d.file() {
-          if let Some(path) = file.path() {
-            let path_str = path.to_string_lossy().to_string();
+        dialog.add_filter(&filter_struct);
 
-            // if let Some(log_v) = sys_log_inner.upgrade() {
-            log::info!("Loading file: {}", path_str);
-            // }
+        let filter_any = FileFilter::new();
+        filter_any.set_name(Some("All Files"));
+        filter_any.add_pattern("*");
+        dialog.add_filter(&filter_any);
 
-            if let Some(st) = state_weak_inner.upgrade() {
-              match crate::io::load_structure(&path_str) {
-                Ok(structure) => {
-                  {
-                    let mut s = st.borrow_mut();
-                    s.original_structure = Some(structure.clone());
-                    s.structure = Some(structure);
-                    s.file_name = path
-                      .file_name()
-                      .unwrap_or_default()
-                      .to_string_lossy()
-                      .to_string();
-                    s.interaction.selected_indices.clear();
+        // Inner clones
+        let state_inner = state_weak.clone();
+        let da_inner = da_weak.clone();
+        let nb_inner = notebook_weak.clone();
+        let sys_log_inner = sys_log_weak.clone();
+        let interact_inner = interact_weak.clone();
+        let atom_box_inner = atom_box_weak.clone();
+        let win_weak_inner = win.downgrade();
 
-                    if let Some(interact_v) = interact_inner.upgrade() {
-                      let report = crate::utils::report::structure_summary(
-                        s.structure.as_ref().unwrap(),
-                        &s.file_name,
-                      );
-                      log_msg(&interact_v, &report);
+        dialog.connect_response(move |d, response| {
+            if response == ResponseType::Accept {
+                if let Some(file) = d.file() {
+                    if let Some(path) = file.path() {
+                        let path_str = path.to_string_lossy().to_string();
+                        let filename = path
+                            .file_name()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                            .to_string();
+
+                        if let Some(st_rc) = state_inner.upgrade() {
+                            match io::load_structure(&path_str) {
+                                Ok(structure) => {
+                                    let mut new_tab_index: Option<usize> = None;
+                                    let mut replace_current_tab = false;
+
+                                    // --- 1. STATE MUTATION BLOCK ---
+                                    {
+                                        let mut s = st_rc.borrow_mut();
+
+                                        let is_replace_mode = {
+                                            let t = s.active_tab();
+                                            t.structure.is_none() && t.file_name == "Untitled"
+                                        };
+
+                                        if is_replace_mode {
+                                            // REPLACE MODE
+                                            let tab = s.active_tab_mut();
+                                            tab.original_structure = Some(structure.clone());
+                                            tab.structure = Some(structure);
+                                            tab.file_name = filename.clone();
+                                            replace_current_tab = true;
+                                        } else {
+                                            // NEW TAB MODE
+                                            s.add_tab(structure, filename.clone());
+                                            new_tab_index = Some(s.tabs.len() - 1);
+                                        }
+                                    }
+                                    // --- STATE LOCK DROPPED HERE ---
+
+                                    // --- 2. UI UPDATE BLOCK ---
+                                    if let Some(nb) = nb_inner.upgrade() {
+                                        if replace_current_tab {
+                                            if let Some(page) = nb.nth_page(nb.current_page()) {
+                                                if let Some(lbl_box) = nb.tab_label(&page) {
+                                                    // We need to find the Label inside the Box we created
+                                                    if let Some(bx) =
+                                                        lbl_box.downcast_ref::<gtk4::Box>()
+                                                    {
+                                                        if let Some(first_child) = bx.first_child()
+                                                        {
+                                                            if let Some(l) =
+                                                                first_child.downcast_ref::<Label>()
+                                                            {
+                                                                l.set_text(&filename);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            if let Some(da) = da_inner.upgrade() {
+                                                da.queue_draw();
+                                            }
+                                        } else if let Some(idx) = new_tab_index {
+                                            // Create new tab UI
+                                            let (new_da, container) =
+                                                create_tab_content(st_rc.clone(), idx);
+
+                                            // USE HELPER HERE:
+                                            crate::ui::add_closable_tab(
+                                                &nb,
+                                                &container,
+                                                &filename,
+                                                st_rc.clone(),
+                                            );
+
+                                            container.show();
+
+                                            if let (Some(w), Some(iv)) =
+                                                (win_weak_inner.upgrade(), interact_inner.upgrade())
+                                            {
+                                                crate::ui::setup_interactions(
+                                                    &w,
+                                                    st_rc.clone(),
+                                                    &new_da,
+                                                    &iv,
+                                                );
+                                            }
+
+                                            nb.set_current_page(Some(idx as u32));
+                                        }
+                                    }
+                                    // --- 3. REFRESH SIDEBAR & LOGS ---
+                                    if let (Some(nb), Some(ab)) =
+                                        (nb_inner.upgrade(), atom_box_inner.upgrade())
+                                    {
+                                        // FIX: Use 'nb' (notebook) instead of 'da'
+                                        crate::panels::sidebar::refresh_atom_list(
+                                            &ab,
+                                            st_rc.clone(),
+                                            &nb,
+                                        );
+                                    }
+
+                                    if let Some(iv) = interact_inner.upgrade() {
+                                        log_msg(&iv, &format!("Loaded: {}", filename));
+                                    }
+                                }
+                                Err(e) => {
+                                    if let Some(lv) = sys_log_inner.upgrade() {
+                                        log_msg(&lv, &format!("Error loading file: {}", e));
+                                    }
+                                }
+                            }
+                        }
                     }
-                  }
+                }
+            }
+            d.destroy();
+        });
+        dialog.show();
+    });
+    app.add_action(&open_action);
 
-                  // if let Some(log_v) = sys_log_inner.upgrade() {
-                  // log_msg(&log_v, "File loaded successfully.\n");
-                  // }
-                  log::info!("File loaded successfully.");
+    // --- SAVE AS ---
+    let act_save = gtk4::gio::SimpleAction::new("save_as", None);
+    let win_weak_s = window.downgrade();
+    let state_weak_s = Rc::downgrade(&state);
 
-                  if let Some(da) = da_weak_inner.upgrade() {
-                    if let Some(ab) = atom_box_inner.upgrade() {
-                      crate::panels::sidebar::refresh_atom_list(&ab, st.clone(), &da);
+    act_save.connect_activate(move |_, _| {
+        let win = match win_weak_s.upgrade() {
+            Some(w) => w,
+            None => return,
+        };
+        let dialog = FileChooserNative::new(
+            Some("Save As"),
+            Some(&win),
+            FileChooserAction::Save,
+            Some("Save"),
+            Some("Cancel"),
+        );
+        let filter = FileFilter::new();
+        filter.add_pattern("*.cif");
+        dialog.add_filter(&filter);
+        dialog.set_current_name("structure.cif");
+
+        let state_inner = state_weak_s.clone();
+        dialog.connect_response(move |d, r| {
+            if r == ResponseType::Accept {
+                if let Some(f) = d.file() {
+                    if let Some(p) = f.path() {
+                        if let Some(st) = state_inner.upgrade() {
+                            let s = st.borrow();
+                            if let Some(strc) = &s.active_tab().structure {
+                                let _ = io::save_structure(&p.to_string_lossy(), strc);
+                            }
+                        }
                     }
-                    da.queue_draw();
-                  }
                 }
+            }
+            d.destroy();
+        });
+        dialog.show();
+    });
+    app.add_action(&act_save);
 
-                Err(e) => {
-                  // 3. Log error via global logger
-                  log::error!("Error loading file: {}", e);
+    // --- EXPORT ---
+    let act_export = gtk4::gio::SimpleAction::new("export", None);
+    let win_weak_e = window.downgrade();
+    let state_weak_e = Rc::downgrade(&state);
+
+    act_export.connect_activate(move |_, _| {
+        let win = match win_weak_e.upgrade() {
+            Some(w) => w,
+            None => return,
+        };
+        let dialog = FileChooserNative::new(
+            Some("Export"),
+            Some(&win),
+            FileChooserAction::Save,
+            Some("Export"),
+            Some("Cancel"),
+        );
+        let state_inner = state_weak_e.clone();
+
+        dialog.connect_response(move |d, r| {
+            if r == ResponseType::Accept {
+                if let Some(f) = d.file() {
+                    if let Some(p) = f.path() {
+                        let path = p.to_string_lossy().to_string();
+                        if let Some(st) = state_inner.upgrade() {
+                            if path.to_lowercase().ends_with(".pdf") {
+                                let _ = export_pdf(st, &path);
+                            } else {
+                                let _ = export_png(st, 2000.0, 1500.0, &path);
+                            }
+                        }
+                    }
                 }
-              }
             }
-          }
-        }
-      }
-      d.destroy();
+            d.destroy();
+        });
+        dialog.show();
     });
-    dialog.show();
-  });
-  app.add_action(&open_action);
+    app.add_action(&act_export);
 
-  // --- SAVE AS ACTION ---
-  let save_action = gtk4::gio::SimpleAction::new("save_as", None);
-  let win_weak_s = window.downgrade();
-  let state_weak_s = Rc::downgrade(&state);
-  let sys_log_weak_s = system_log_view.downgrade();
+    // --- PREFS ---
+    let act_pref = gtk4::gio::SimpleAction::new("preferences", None);
+    let win_weak_p = window.downgrade();
+    let state_weak_p = Rc::downgrade(&state);
+    let da_weak_p = drawing_area.downgrade();
 
-  save_action.connect_activate(move |_, _| {
-    let win = match win_weak_s.upgrade() {
-      Some(w) => w,
-      None => return,
-    };
-    let dialog = FileChooserNative::new(
-      Some("Save Structure As"),
-      Some(&win),
-      FileChooserAction::Save,
-      Some("Save"),
-      Some("Cancel"),
-    );
-
-    let filter_cif = FileFilter::new();
-    filter_cif.set_name(Some("CIF File (*.cif)"));
-    filter_cif.add_pattern("*.cif");
-    dialog.add_filter(&filter_cif);
-    let filter_vasp = FileFilter::new();
-    filter_vasp.set_name(Some("VASP POSCAR"));
-    filter_vasp.add_pattern("POSCAR");
-    dialog.add_filter(&filter_vasp);
-    let filter_pot = FileFilter::new();
-    filter_pot.set_name(Some("SPRKKR Potential (*.pot)"));
-    filter_pot.add_pattern("*.pot");
-    dialog.add_filter(&filter_pot);
-
-    dialog.set_current_name("structure.cif");
-    let state_weak_inner = state_weak_s.clone();
-    // let sys_log_inner = sys_log_weak_s.clone();
-
-    dialog.connect_response(move |d, response| {
-      if response == ResponseType::Accept {
-        if let Some(file) = d.file() {
-          if let Some(path) = file.path() {
-            let path_str = path.to_string_lossy().to_string();
-            if let Some(st) = state_weak_inner.upgrade() {
-              let s = st.borrow();
-              if let Some(structure) = &s.structure {
-                if let Err(e) = io::save_structure(&path_str, structure) {
-                  log::error!("Failed to save: {}", e);
-                } else {
-                  log::info!("Saved to {}", path_str);
-                } // if let Some(log) = sys_log_inner.upgrade() {
-                  // log_msg(&log, &format!("Failed to save: {}", e));
-                  // }
-                  // } else {
-                  // if let Some(log) = sys_log_inner.upgrade() {
-                  // log_msg(&log, &format!("Saved to {}", path_str));
-                  // }
-                  // println!("Saved to {}", path_str);
-                  // }
-              }
-            }
-          }
+    act_pref.connect_activate(move |_, _| {
+        if let (Some(w), Some(s), Some(d)) = (
+            win_weak_p.upgrade(),
+            state_weak_p.upgrade(),
+            da_weak_p.upgrade(),
+        ) {
+            show_preferences_window(&w, s, d);
         }
-      }
-      d.destroy();
     });
-    dialog.show();
-  });
-  app.add_action(&save_action);
+    app.add_action(&act_pref);
 
-  // --- EXPORT IMAGE ACTION ---
-  let export_action = gtk4::gio::SimpleAction::new("export", None);
-  let win_weak_e = window.downgrade();
-  let state_weak_e = Rc::downgrade(&state);
-  let sys_log_weak_e = system_log_view.downgrade();
-
-  export_action.connect_activate(move |_, _| {
-    let win = match win_weak_e.upgrade() {
-      Some(w) => w,
-      None => return,
-    };
-    let st_rc = match state_weak_e.upgrade() {
-      Some(s) => s,
-      None => return,
-    };
-    let state_weak_inner = state_weak_e.clone();
-    let sys_log_inner = sys_log_weak_e.clone();
-
-    let dialog = FileChooserNative::new(
-      Some("Export Image"),
-      Some(&win),
-      FileChooserAction::Save,
-      Some("Export"),
-      Some("Cancel"),
-    );
-
-    let filter_png = FileFilter::new();
-    filter_png.set_name(Some("PNG Image (*.png)"));
-    filter_png.add_pattern("*.png");
-    dialog.add_filter(&filter_png);
-    let filter_pdf = FileFilter::new();
-    filter_pdf.set_name(Some("PDF Document (*.pdf)"));
-    filter_pdf.add_pattern("*.pdf");
-    dialog.add_filter(&filter_pdf);
-
-    let format = st_rc.borrow().config.default_export_format;
-    match format {
-      ExportFormat::Png => {
-        dialog.set_filter(&filter_png);
-        dialog.set_current_name("snapshot.png");
-      }
-      ExportFormat::Pdf => {
-        dialog.set_filter(&filter_pdf);
-        dialog.set_current_name("snapshot.pdf");
-      }
-    }
-
-    dialog.connect_response(move |d, response| {
-      if response == ResponseType::Accept {
-        if let Some(file) = d.file() {
-          if let Some(path) = file.path() {
-            let path_str = path.to_string_lossy().to_string();
-            let is_pdf = path_str.to_lowercase().ends_with(".pdf");
-            if let Some(st) = state_weak_inner.upgrade() {
-              let s = st.borrow();
-              // Assuming export_image returns unit
-              let _ = export_image(&s, &path_str, 2000.0, 1500.0, is_pdf);
-              log::info!("Exported image to {}", path_str);
-              // if let Some(log) = sys_log_inner.upgrade() {
-              // log_msg(&log, &format!("Exported to {}", path_str));
-              // }
-              // println!("Exported to {}", path_str);
-            }
-          }
+    // --- QUIT ---
+    let act_quit = gtk4::gio::SimpleAction::new("quit", None);
+    let win_weak_q = window.downgrade();
+    act_quit.connect_activate(move |_, _| {
+        if let Some(w) = win_weak_q.upgrade() {
+            w.close();
         }
-      }
-      d.destroy();
     });
-    dialog.show();
-  });
-  app.add_action(&export_action);
-
-  // --- PREFERENCES ACTION ---
-  let pref_action = gtk4::gio::SimpleAction::new("preferences", None);
-  let win_weak_p = window.downgrade();
-  let state_weak_p = Rc::downgrade(&state);
-
-  // CAPTURE DRAWING AREA FOR PREFERENCES
-  let da_weak_p = drawing_area.downgrade();
-
-  pref_action.connect_activate(move |_, _| {
-    if let Some(win) = win_weak_p.upgrade() {
-      if let Some(st) = state_weak_p.upgrade() {
-        if let Some(da) = da_weak_p.upgrade() {
-          // PASS 3 ARGS (window, state, drawing_area)
-          show_preferences_window(&win, st, da.clone());
-        }
-      }
-    }
-  });
-  app.add_action(&pref_action);
-
-  // --- QUIT ACTION ---
-  let quit_action = gtk4::gio::SimpleAction::new("quit", None);
-  let win_weak_q = window.downgrade();
-
-  quit_action.connect_activate(move |_, _| {
-    if let Some(win) = win_weak_q.upgrade() {
-      win.close();
-    }
-  });
-  app.add_action(&quit_action);
+    app.add_action(&act_quit);
 }

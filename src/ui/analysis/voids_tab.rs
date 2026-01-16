@@ -155,7 +155,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
 
     // --- INTERACTION LOGIC ---
     let vis_state = Rc::new(RefCell::new(VoidsVisState {
-        structure: state.borrow().structure.clone(),
+        structure: state.borrow().active_tab().structure.clone(),
         result: None,
     }));
     let state_c = state.clone();
@@ -164,7 +164,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
 
     btn_calc.connect_clicked(move |_| {
         let st = state_c.borrow();
-        if let Some(structure) = &st.structure {
+        if let Some(structure) = &st.active_tab().structure {
             // Map Index -> Enum
             let idx = drop_type.selected();
             let r_type = match idx {
