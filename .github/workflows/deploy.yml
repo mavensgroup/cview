@@ -24,27 +24,33 @@ jobs:
       - name: Install mdbook-admonish
         run: cargo install mdbook-admonish
 
-      # Debug: Check directory structure
-      - name: Check docs structure
+      # Check initial state
+      - name: Check initial structure
         run: |
+          echo "=== docs/ directory ==="
           ls -la docs/
+          echo "=== docs/src/ directory ==="
           ls -la docs/src/
+          echo "=== book.toml content ==="
+          cat docs/book.toml
 
-      # Setup mdbook-admonish - this creates mdbook-admonish.css
+      # Setup mdbook-admonish
       - name: Setup mdbook-admonish
         working-directory: docs
         run: mdbook-admonish install .
 
-      # Debug: Check if CSS was created
+      # Check after install
       - name: Check after admonish install
         run: |
+          echo "=== docs/ after install ==="
           ls -la docs/
-          ls -la docs/src/
+          echo "=== Looking for CSS files ==="
+          find docs/ -name "*.css"
 
-      # Build the book
+      # Build the book with verbose output
       - name: Build Book
         working-directory: docs
-        run: mdbook build .
+        run: RUST_LOG=debug mdbook build .
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
