@@ -1,16 +1,12 @@
-
 name: Deploy Documentation
-
 on:
   push:
     branches: [main]
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -31,17 +27,17 @@ jobs:
       - name: Install mdbook-admonish
         run: cargo install mdbook-admonish
 
-      # Ensure admonish is installed properly
+      # Ensure admonish is installed properly (run from docs directory)
       - name: Setup mdbook-admonish
-        run: mdbook-admonish install .
+        run: mdbook-admonish install docs
 
-      # Build the book
+      # Build the book (from docs directory)
       - name: Build Book
-        run: mdbook build .
+        run: mdbook build docs
 
       # Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./book
+          publish_dir: ./docs/book
