@@ -9,8 +9,8 @@ command = "mdbook-admonish"
 assets_version = "3.1.0"
 
 [output.html]
-additional-css = ["mdbook-admonish.css", "custom.css"]
-additional-js  = ["custom.js"]
+additional-css = ["src/mdbook-admonish.css", "src/custom.css"]
+additional-js  = ["src/custom.js"]
 git-repository-url = "https://github.com/mavensgroup/cview"
 site-url = "/cview/"
 theme = "src/theme"
