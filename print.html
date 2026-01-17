@@ -1,0 +1,523 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>CView</title>
+        <meta name="robots" content="noindex">
+
+
+        <!-- Custom HTML head -->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+        
+        <script>
+          MathJax = {
+            tex: {
+              inlineMath: [['$', '$'], ['\\(', '\\)']],
+              displayMath: [['$$', '$$'], ['\\[', '\\]']],
+              processEscapes: true,
+              processEnvironments: true,
+            },
+            options: {
+              skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre'],
+            },
+          };
+        </script>
+        <script
+          id="MathJax-script"
+          async
+          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"
+        ></script>
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="highlight-css" href="highlight.css">
+        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
+        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="src/mdbook-admonish.css">
+        <link rel="stylesheet" href="src/custom.css">
+        <link rel="stylesheet" href="./mdbook-admonish.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "searchindex.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="toc.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+            </noscript>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">CView</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/mavensgroup/cview" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <i class="fa fa-spinner fa-spin"></i>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <div id="cover-page">
+<img src="images/cview.svg" class="cover-logo" alt="CView Logo">
+<h1 id="cview" class="cover-title"><a class="header" href="#cview">CView</a></h1>
+<p class="cover-subtitle">Structure Visualization & Analysis Tool</p>
+<div class="cover-divider"></div>
+<div class="cover-meta">
+<p><a href="https://mavens-group.github.io/author/rudra-banerjee/"><strong>Rudra Banerjee</strong></a></p>
+<p><a href="https://mavens-group.github.io/">The Mavens Group</a></p>
+<p class="version">v0.1.0 (2026)</p>
+</div>
+<a href="introduction.html" class="cover-button">Get Started</a>
+</div>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="cview-crystal-structure-visualization--analysis"><a class="header" href="#cview-crystal-structure-visualization--analysis">CView: Crystal Structure Visualization &amp; Analysis</a></h1>
+<p><img src="https://img.shields.io/badge/license-LGPLv3-blue.svg" alt="License" />
+<img src="https://img.shields.io/badge/rust-1.70%2B-orange.svg" alt="Language" />
+<img src="https://img.shields.io/badge/Toolkit-GTK4-46a946?logo=gtk&amp;logoColor=white" alt="GTK4" />
+<img src="https://img.shields.io/badge/Linux-FCC624?logo=linux&amp;logoColor=black" alt="Linux" />
+<img src="https://img.shields.io/badge/Windows-fcc624?logo=microsoft&amp;logoColor=white" alt="Windows" />
+<img src="https://img.shields.io/badge/macOS-fcc624?logo=apple&amp;logoColor=black" alt="macOS" /></p>
+<p><strong>CView</strong> is a high-performance crystallographic tool written in <strong>Rust</strong> and <strong>GTK4</strong>. It bridges the gap between structure visualization and <em>ab-initio</em> calculation setup (VASP, QE, SPRKKR).</p>
+<div id="admonition-philosophy" class="admonition admonish-note" role="note" aria-labelledby="admonition-philosophy-title">
+<div class="admonition-title">
+<div id="admonition-philosophy-title">
+<p>Philosophy</p>
+</div>
+<a class="admonition-anchor-link" href="introduction.html#admonition-philosophy"></a>
+</div>
+<div>
+<p>CView is not just a viewer; it is a <strong>pre-calculation validator</strong>. It focuses on Reciprocal Space and Geometric consistency to prevent wasted CPU hours on incorrect VASP/QE inputs.</p>
+</div>
+</div>
+<p><img src="images/screenshot_main.png" alt="Screenshot of CView" /></p>
+<hr />
+<h2 id="-why-cview"><a class="header" href="#-why-cview">⚡ Why CView?</a></h2>
+<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Feature</th><th style="text-align: left">Description</th></tr></thead><tbody>
+<tr><td style="text-align: left"><strong>🚀 Fast &amp; Lightweight</strong></td><td style="text-align: left">Built on Rust/GTK4. No GPU drivers required. Runs on any laptop.</td></tr>
+<tr><td style="text-align: left"><strong>⚛️ Analysis First</strong></td><td style="text-align: left">Dedicated tools for <a href="guide/kpath.html">K-Paths</a>, <a href="guide/slabs.html">Slabs</a>, and <a href="guide/voids.html">Void Analysis</a>.</td></tr>
+<tr><td style="text-align: left"><strong>🛠️ DFT Ready</strong></td><td style="text-align: left">Native support for VASP, Quantum Espresso, and SPRKKR formats.</td></tr>
+<tr><td style="text-align: left"><strong>📸 Publication Quality</strong></td><td style="text-align: left">Export high-resolution, transparent PNGs and PDFs using PBR rendering.</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="-documentation-overview"><a class="header" href="#-documentation-overview">📚 Documentation Overview</a></h2>
+<p>This manual is divided into three parts:</p>
+<ol>
+<li><strong><a href="installation.html">Installation</a></strong>: Get CView running on Linux, Windows, or macOS.</li>
+<li><strong><a href="guide/analysis.html">User Guide</a></strong>: Deep dive into the scientific methodology.
+<ul>
+<li><strong><a href="guide/kpath.html">K-Path Visualization</a></strong>: Brillouin zone construction and HSP selection.</li>
+<li><strong><a href="guide/xrd.html">XRD Simulation</a></strong>: Structure factors and powder diffraction patterns.</li>
+<li><strong><a href="guide/slabs.html">Surface Slabs</a></strong>: Creating vacuum-padded slabs for surface science.</li>
+</ul>
+</li>
+<li><strong><a href="tutorials/bi2se3.html">Tutorials</a></strong>: Step-by-step walkthroughs for real materials (e.g., Bi₂Se₃).</li>
+</ol>
+<hr />
+<h2 id="-quick-start"><a class="header" href="#-quick-start">🚀 Quick Start</a></h2>
+<p>Get up and running in seconds.</p>
+<div id="admonition-installation" class="admonition admonish-success" role="note" aria-labelledby="admonition-installation-title">
+<div class="admonition-title">
+<div id="admonition-installation-title">
+<p>Installation</p>
+</div>
+<a class="admonition-anchor-link" href="introduction.html#admonition-installation"></a>
+</div>
+<div>
+<pre><code># Clone and Run
+git clone https://github.com/mavensgroup/cview.git
+cd cview
+cargo run --release
+</code></pre>
+</div>
+</div>
+<p>See the <a href="installation.html">Installation Page</a> for detailed OS-specific instructions.</p>
+<hr />
+<h2 id="-supported-formats"><a class="header" href="#-supported-formats">📂 Supported Formats</a></h2>
+<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Format</th><th style="text-align: center">VASP</th><th style="text-align: center">Quantum Espresso</th><th style="text-align: center">SPRKKR</th><th style="text-align: center">CIF / XYZ</th></tr></thead><tbody>
+<tr><td style="text-align: left"><strong>Read</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td></tr>
+<tr><td style="text-align: left"><strong>Write</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟠</td><td style="text-align: center">🟠</td><td style="text-align: center">🟢</td></tr>
+<tr><td style="text-align: left"><strong>Relaxation</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🔴</td><td style="text-align: center">🔴</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="-license--citation"><a class="header" href="#-license--citation">📜 License &amp; Citation</a></h2>
+<p><strong>CView</strong> is open-source software licensed under the <strong>LGPLv3</strong>.</p>
+<p>If you use CView in your research, please cite the <a href="https://github.com/mavensgroup/cview">repository</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
+<p>CView is a cross-platform application built on <strong>Rust</strong> and <strong>GTK4</strong>. Because it uses the native GTK4 libraries for rendering, the installation process involves two steps:</p>
+<ol>
+<li>Installing the system dependencies (GTK4).</li>
+<li>Compiling the application using Cargo.</li>
+</ol>
+<hr />
+<h2 id="1-install-dependencies"><a class="header" href="#1-install-dependencies">1. Install Dependencies</a></h2>
+<p>Select your operating system below to set up the required libraries.</p>
+<h3 id="linux"><a class="header" href="#linux"><i class="fab fa-linux"></i> Linux</a></h3>
+<p>You need the GTK4 development headers and the standard build tools (gcc/clang).</p>
+<p><strong>Fedora / RHEL</strong></p>
+<pre><code class="language-bash">sudo dnf install gcc gtk4-devel libadwaita-devel
+
+</code></pre>
+<p><strong>Ubuntu / Debian / Mint</strong></p>
+<pre><code class="language-bash">sudo apt update
+sudo apt install build-essential libgtk-4-dev libadwaita-1-dev
+
+</code></pre>
+<p><strong>Arch Linux / Manjaro</strong></p>
+<pre><code class="language-bash">sudo pacman -S base-devel gtk4 libadwaita
+
+</code></pre>
+<h3 id="macos"><a class="header" href="#macos"><i class="fab fa-apple"></i> macOS</a></h3>
+<p>The easiest way to install GTK4 on macOS is via <strong>Homebrew</strong>.</p>
+<pre><code class="language-bash"># 1. Install Homebrew if you haven't already
+/bin/bash -c "$(curl -fsSL [https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh](https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh))"
+
+# 2. Install Rust and GTK4
+brew install rust gtk4 libadwaita adwaita-icon-theme
+
+</code></pre>
+<h3 id="windows"><a class="header" href="#windows"><i class="fab fa-windows"></i> Windows</a></h3>
+<p>For Windows, we recommend using the <strong>MSYS2</strong> environment to manage the native GTK4 libraries.</p>
+<ol>
+<li><strong>Install MSYS2:</strong> Download the installer from <a href="https://www.msys2.org/">msys2.org</a>.</li>
+<li><strong>Open the Terminal:</strong> Launch <code>MSYS2 MinGW 64-bit</code>.</li>
+<li><strong>Install Toolchain:</strong>
+Run this command <em>inside the MSYS2 terminal</em>:
+<pre><code class="language-bash">pacman -S mingw-w64-x86_64-gtk4 mingw-w64-x86_64-rust mingw-w64-x86_64-gcc
+</code></pre>
+</li>
+<li><strong>Add to Path:</strong> Add <code>C:\msys64\mingw64\bin</code> to your Windows System PATH environment variable.
+<ul>
+<li><em>Why?</em> This allows you to run <code>cargo run</code> from VS Code or PowerShell later.</li>
+</ul>
+</li>
+</ol>
+<div id="admonition-do-not-use-powershell-yet" class="admonition admonish-warning" role="note" aria-labelledby="admonition-do-not-use-powershell-yet-title">
+<div class="admonition-title">
+<div id="admonition-do-not-use-powershell-yet-title">
+<p>Do not use PowerShell yet</p>
+</div>
+<a class="admonition-anchor-link" href="installation.html#admonition-do-not-use-powershell-yet"></a>
+</div>
+<div>
+<p>The <code>pacman</code> command above works <strong>only</strong> inside the MSYS2 terminal. It will fail if you try to run it in PowerShell or Command Prompt.</p>
+</div>
+</div>
+<hr />
+<h2 id="2-install-rust"><a class="header" href="#2-install-rust">2. Install Rust</a></h2>
+<p>If you do not have the Rust compiler installed, the recommended way is via <code>rustup</code>.</p>
+<div id="admonition-check-your-version" class="admonition admonish-note" role="note" aria-labelledby="admonition-check-your-version-title">
+<div class="admonition-title">
+<div id="admonition-check-your-version-title">
+<p>Check your version</p>
+</div>
+<a class="admonition-anchor-link" href="installation.html#admonition-check-your-version"></a>
+</div>
+<div>
+<p>CView requires <strong>Rust 1.70</strong> or higher.
+Check your version with: <code>cargo --version</code></p>
+</div>
+</div>
+<p><strong>Command (Linux / macOS / Windows PowerShell):</strong></p>
+<pre><code class="language-bash">curl --proto '=https' --tlsv1.2 -sSf [https://sh.rustup.rs](https://sh.rustup.rs) | sh
+
+</code></pre>
+<hr />
+<h2 id="3-build-from-source"><a class="header" href="#3-build-from-source">3. Build from Source</a></h2>
+<p>Once the dependencies are ready, you can compile CView directly from the repository.</p>
+<pre><code class="language-bash"># 1. Clone the repository
+git clone [https://github.com/mavensgroup/cview.git](https://github.com/mavensgroup/cview.git)
+cd cview
+
+# 2. Build and Run (Release mode recommended for performance)
+cargo run --release
+
+</code></pre>
+<p>The first compilation may take a few minutes as it compiles the dependencies. Subsequent runs will be instant.</p>
+<hr />
+<h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
+<div id="admonition-error-pkg-config-not-found" class="admonition admonish-failure" role="note" aria-labelledby="admonition-error-pkg-config-not-found-title">
+<div class="admonition-title">
+<div id="admonition-error-pkg-config-not-found-title">
+<p>Error: pkg-config not found</p>
+</div>
+<a class="admonition-anchor-link" href="installation.html#admonition-error-pkg-config-not-found"></a>
+</div>
+<div>
+<p>If the build fails claiming it cannot find <code>gtk4</code> or <code>pkg-config</code>, it means the development headers are missing.</p>
+<ul>
+<li><strong>Linux:</strong> Ensure you installed the <code>-dev</code> or <code>-devel</code> packages (e.g., <code>libgtk-4-dev</code>), not just the runtime library.</li>
+<li><strong>macOS:</strong> Try running <code>brew link gtk4</code>.</li>
+</ul>
+</div>
+</div>
+<div id="admonition-error-linker-failed" class="admonition admonish-failure" role="note" aria-labelledby="admonition-error-linker-failed-title">
+<div class="admonition-title">
+<div id="admonition-error-linker-failed-title">
+<p>Error: Linker failed</p>
+</div>
+<a class="admonition-anchor-link" href="installation.html#admonition-error-linker-failed"></a>
+</div>
+<div>
+<p>If you see errors related to <code>cc</code> or <code>ld</code>:</p>
+<ul>
+<li>Ensure you have <code>build-essential</code> (Linux) or Xcode Command Line Tools (macOS) installed.</li>
+</ul>
+</div>
+</div>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="loading--visualization"><a class="header" href="#loading--visualization">Loading &amp; Visualization</a></h1>
+<p>This section outlines the core workflows for importing structure files, managing the workspace, and controlling the visual representation of crystal structures.</p>
+<hr />
+<h2 id="file-operations"><a class="header" href="#file-operations">File Operations</a></h2>
+<h3 id="opening-files"><a class="header" href="#opening-files">Opening Files</a></h3>
+<p>To load a structure, navigate to <strong>File → Open</strong> in the application menu. CView utilizes the native file chooser of your operating system to ensure a familiar experience.</p>
+<p><strong>Supported Formats:</strong>
+CView automatically detects the file type based on extension and content. You can open the following formats:</p>
+<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Format</th><th style="text-align: left">Extensions</th><th style="text-align: left">Description</th></tr></thead><tbody>
+<tr><td style="text-align: left"><strong>CIF</strong></td><td style="text-align: left"><code>.cif</code></td><td style="text-align: left">Standard Crystallographic Information Files.</td></tr>
+<tr><td style="text-align: left"><strong>VASP</strong></td><td style="text-align: left"><code>POSCAR</code>, <code>CONTCAR</code>, <code>.vasp</code></td><td style="text-align: left">Standard VASP structure inputs and outputs.</td></tr>
+<tr><td style="text-align: left"><strong>Quantum Espresso</strong></td><td style="text-align: left"><code>.in</code>, <code>.out</code>, <code>.pwi</code>, <code>.qe</code></td><td style="text-align: left">Reads atomic positions and cell parameters from input/output logs.</td></tr>
+<tr><td style="text-align: left"><strong>SPR-KKR</strong></td><td style="text-align: left"><code>.pot</code>, <code>.sys</code></td><td style="text-align: left">Munich SPR-KKR potential and system files.</td></tr>
+<tr><td style="text-align: left"><strong>XYZ</strong></td><td style="text-align: left"><code>.xyz</code></td><td style="text-align: left">Cartesian coordinates (Standard and Extended XYZ).</td></tr>
+</tbody></table>
+</div>
+<h3 id="tab-management"><a class="header" href="#tab-management">Tab Management</a></h3>
+<p>CView uses a tabbed interface to handle multiple structures simultaneously. The application employs a <strong>smart loading strategy</strong> to keep the workspace clean:</p>
+<ul>
+<li><strong>Replacement Mode:</strong> If the current active tab is empty (labeled "Untitled" with no structure), opening a file will replace this tab.</li>
+<li><strong>New Tab Mode:</strong> If a structure is already loaded, the new file will open in a separate, closable tab.</li>
+</ul>
+<div id="admonition-workspace-feedback" class="admonition admonish-note" role="note" aria-labelledby="admonition-workspace-feedback-title">
+<div class="admonition-title">
+<div id="admonition-workspace-feedback-title">
+<p>Workspace Feedback</p>
+</div>
+<a class="admonition-anchor-link" href="guide/visualization.html#admonition-workspace-feedback"></a>
+</div>
+<div>
+<p>Upon successfully loading a file, the application logs the event in the <strong>Interaction Log</strong> and automatically refreshes the <strong>Sidebar</strong> to display the atom list for the new structure.</p>
+</div>
+</div>
+<h3 id="saving--exporting"><a class="header" href="#saving--exporting">Saving &amp; Exporting</a></h3>
+<h4 id="saving-data"><a class="header" href="#saving-data">Saving Data</a></h4>
+<p>To convert a loaded structure into a different format, use File → Save As. The output format is determined by the selected file filter in the dialog.</p>
+<h5 id="available-output-formats"><a class="header" href="#available-output-formats">Available Output Formats:</a></h5>
+<ul>
+<li>CIF (*.cif)</li>
+<li>VASP POSCAR (POSCAR, *.vasp)</li>
+<li>SPR-KKR Potential (*.pot)</li>
+<li>Quantum Espresso Input (*.in)</li>
+<li>XYZ (*.xyz)</li>
+</ul>
+<h3 id="exporting-visuals"><a class="header" href="#exporting-visuals">Exporting Visuals</a></h3>
+<p>For publications and presentations, CView offers high-fidelity export options via the File → Export menu.</p>
+<p>PNG Image: Renders a high-resolution raster image (default resolution: 2000x1500 pixels). Ideal for slides and quick sharing.</p>
+<p>PDF Document: Exports the scene as a vector graphic. This is recommended for academic papers, as it allows for infinite scaling without loss of quality.</p>
+<h4 id="visualization-controls"><a class="header" href="#visualization-controls">Visualization Controls</a></h4>
+<p>Once a structure is loaded, the View menu provides tools to orient and inspect the crystal lattice.</p>
+<h5 id="standard-views"><a class="header" href="#standard-views">Standard Views</a></h5>
+<p>Quickly align the camera to specific crystallographic axes to inspect symmetry or stacking sequences.</p>
+<ul>
+<li>View Along A: Aligns camera with the a-axis (y=−90°).</li>
+<li>View Along B: Aligns camera with the b-axis (x=90°).</li>
+<li>View Along C: Aligns camera with the c-axis (Standard Plan View).</li>
+<li>Reset View: Restores the default zoom (1.0) and rotation (0,0).</li>
+</ul>
+<h4 id="rotation-modes"><a class="header" href="#rotation-modes">Rotation Modes</a></h4>
+<p>You can customize the pivot point around which the camera rotates, depending on whether you are inspecting the atomic cluster or the lattice boundaries.</p>
+<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Mode</th><th style="text-align: left">Description</th></tr></thead><tbody>
+<tr><td style="text-align: left">Centroid</td><td style="text-align: left">Rotates around the geometric center of the atoms. Best for inspecting molecules or specific bonding environments.</td></tr>
+<tr><td style="text-align: left">Unit Cell</td><td style="text-align: left">Rotates around the center of the unit cell box. Best for understanding the lattice boundaries relative to the origin.</td></tr>
+</tbody></table>
+</div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div>
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="src/custom.js"></script>
+
+        <script>
+        window.addEventListener('load', function() {
+            window.setTimeout(window.print, 100);
+        });
+        </script>
+
+
+    </div>
+    </body>
+</html>
