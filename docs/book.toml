@@ -4,13 +4,16 @@ authors = ["Rudra Banerjee"]
 language = "en"
 src = "src"
 
-# 1. Enable Admonishments
+# 1. Enable Admonishments (Fixed)
 [preprocessor.admonish]
 command = "mdbook-admonish"
+assets_version = "1.20.0" # REQUIRED: Matches the version in GitHub Actions
 
-# 2. Point to our custom theme folder
+# 2. Output Configuration
 [output.html]
 theme = "theme"
-additional-css = ["src/mdbook-admonish.css", "src/custom.css"]
-additional-js  = ["src/custom.js"]
+# Note: Just use filenames here, mdBook looks inside the 'src' folder automatically
+additional-css = ["mdbook-admonish.css", "custom.css"]
+additional-js  = ["custom.js"]
 git-repository-url = "https://github.com/mavensgroup/cview"
+site-url = "/cview/"

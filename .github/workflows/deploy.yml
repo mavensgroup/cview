@@ -15,25 +15,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. Install mdBook (Pre-built binary)
+      # 1. Install mdBook
       - name: Install mdBook
         uses: peaceiris/actions-mdbook@v2
         with:
           mdbook-version: 'latest'
 
-      # 2. Install Admonish (Pre-built binary - FAST)
-      # This skips the 5-minute "cargo install" compile time
+      # 2. Install Admonish (v1.20.0)
       - name: Install mdbook-admonish
         uses: extractions/setup-crate@v1
         with:
           owner: tommilligan
           name: mdbook-admonish
+          version: v1.20.0 # Pinning the version to match book.toml
 
-      # 3. Build the Site
+      # 3. Generate correct CSS (Crucial Fix)
+      # This ensures the css file exists and matches the binary version
+      - name: Setup Admonish Assets
+        run: mdbook-admonish install docs
+
+      # 4. Build the Site
       - name: Build Book
         run: mdbook build docs
 
-      # 4. Publish to GitHub Pages
+      # 5. Publish
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
