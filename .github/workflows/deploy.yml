@@ -21,20 +21,17 @@ jobs:
         with:
           mdbook-version: 'latest'
 
-      # 2. Install Admonish (v1.20.0)
+      # 2. Install Admonish (The Reliable Way)
+      # We use cargo install to prevent binary mismatches
       - name: Install mdbook-admonish
-        uses: extractions/setup-crate@v1
-        with:
-          owner: tommilligan
-          name: mdbook-admonish
-          version: v1.20.0 # Pinning the version to match book.toml
+        run: cargo install mdbook-admonish
 
-      # 3. Generate correct CSS (Crucial Fix)
-      # This ensures the css file exists and matches the binary version
+      # 3. Generate the CSS
+      # We target 'docs' so it finds book.toml, but the css lands in 'src' because of your config
       - name: Setup Admonish Assets
         run: mdbook-admonish install docs
 
-      # 4. Build the Site
+      # 4. Build
       - name: Build Book
         run: mdbook build docs
 
