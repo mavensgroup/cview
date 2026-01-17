@@ -11,7 +11,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Install Rust and cargo (needed for mdbook & preprocessor)
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
@@ -19,23 +18,20 @@ jobs:
           profile: minimal
           override: true
 
-      # Install mdBook 0.4.52 to match your local version
       - name: Install mdBook
         run: cargo install mdbook --version 0.4.52
 
-      # Install mdbook-admonish
       - name: Install mdbook-admonish
         run: cargo install mdbook-admonish
 
-      # Ensure admonish is installed properly (run from docs directory)
       - name: Setup mdbook-admonish
-        run: mdbook-admonish install docs
+        working-directory: docs
+        run: mdbook-admonish install .
 
-      # Build the book (from docs directory)
       - name: Build Book
-        run: mdbook build docs
+        working-directory: docs
+        run: mdbook build .
 
-      # Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
