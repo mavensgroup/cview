@@ -11,6 +11,10 @@
 
 Unlike standard viewers, CView focuses on **Reciprocal Space Analysis** and **Geometric Manipulation** (Slabs, Supercells, Voids), providing immediate visual validation for inputs before running expensive DFT calculations.
 
+>[!WARNING]
+>This is an α version. There are creases here and there. Developers welcome
+>
+
 ![Screenshot of CView](docs/src/images/screenshot_main.png)
 
 ---
