@@ -12,34 +12,36 @@ jobs:
       contents: write
 
     steps:
-      # 1️⃣ Checkout repository
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # 2️⃣ Install Rust (required for mdbook & admonish)
-      - uses: actions-rs/toolchain@v1
+      # Install Rust and cargo (needed for mdbook & preprocessor)
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          profile: minimal
           override: true
 
-      # 3️⃣ Install mdbook (v0.4.52, same as your working local version)
+      # Install mdBook 0.4.52 to match your local version
       - name: Install mdBook
         run: cargo install mdbook --version 0.4.52
 
-      # 4️⃣ Install mdbook-admonish
+      # Install mdbook-admonish
       - name: Install mdbook-admonish
         run: cargo install mdbook-admonish
 
-      # 5️⃣ Optional: Ensure admonish assets are installed (copies CSS, sets assets_version)
+      # Ensure admonish is installed properly
       - name: Setup mdbook-admonish
-        run: mdbook-admonish install docs
+        run: mdbook-admonish install .
 
-      # 6️⃣ Build the book
+      # Build the book
       - name: Build Book
-        run: mdbook build docs
+        run: mdbook build .
 
-      # 7️⃣ Deploy to GitHub Pages
+      # Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs/book
+          publish_dir: ./book
