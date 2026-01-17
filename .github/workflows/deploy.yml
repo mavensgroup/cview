@@ -12,25 +12,32 @@ jobs:
       contents: write
 
     steps:
+      # 1️⃣ Checkout repository
       - uses: actions/checkout@v4
 
-      # 1️⃣ Install mdBook (PINNED VERSION)
-      - name: Install mdBook 0.4.52
-        run: |
-          curl -L https://github.com/rust-lang/mdBook/releases/download/v0.4.52/mdbook-v0.4.52-x86_64-unknown-linux-gnu.tar.gz \
-            | tar xz
-          sudo mv mdbook /usr/local/bin/
-          mdbook --version
+      # 2️⃣ Install Rust (required for mdbook & admonish)
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
 
-      # 2️⃣ Install admonish (preprocessor)
+      # 3️⃣ Install mdbook (v0.4.52, same as your working local version)
+      - name: Install mdBook
+        run: cargo install mdbook --version 0.4.52
+
+      # 4️⃣ Install mdbook-admonish
       - name: Install mdbook-admonish
         run: cargo install mdbook-admonish
 
-      # 3️⃣ Build
+      # 5️⃣ Optional: Ensure admonish assets are installed (copies CSS, sets assets_version)
+      - name: Setup mdbook-admonish
+        run: mdbook-admonish install docs
+
+      # 6️⃣ Build the book
       - name: Build Book
         run: mdbook build docs
 
-      # 4️⃣ Deploy
+      # 7️⃣ Deploy to GitHub Pages
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
