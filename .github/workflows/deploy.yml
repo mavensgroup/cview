@@ -9,24 +9,25 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Essential for pushing to gh-pages branch
+      contents: write
     concurrency:
       group: ${{ github.workflow }}-${{ github.ref }}
     steps:
       - uses: actions/checkout@v4
 
-      # 1. Install mdBook
+      # 1. Install mdBook (Pre-built binary)
       - name: Install mdBook
         uses: peaceiris/actions-mdbook@v2
         with:
           mdbook-version: 'latest'
 
-      # 2. Install Admonish (Since I saw the css file in your tree)
+      # 2. Install Admonish (Pre-built binary - FAST)
+      # This skips the 5-minute "cargo install" compile time
       - name: Install mdbook-admonish
-        run: |
-          cargo install mdbook-admonish
-          # Ensure the css is generated/ready if strictly needed by the build
-          # If you committed the css, this step is mostly for the preprocessor
+        uses: extractions/setup-crate@v1
+        with:
+          owner: tommilligan
+          name: mdbook-admonish
 
       # 3. Build the Site
       - name: Build Book
@@ -37,4 +38,4 @@ jobs:
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs/book  # mdBook outputs here by default
+          publish_dir: ./docs/book
