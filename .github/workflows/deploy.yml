@@ -15,27 +15,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. Install mdBook
       - name: Install mdBook
         uses: peaceiris/actions-mdbook@v2
         with:
           mdbook-version: 'latest'
 
-      # 2. Install Admonish (The Reliable Way)
-      # We use cargo install to prevent binary mismatches
+      # 1. Install the tool (Using cargo is safer for compatibility)
       - name: Install mdbook-admonish
         run: cargo install mdbook-admonish
 
-      # 3. Generate the CSS
-      # We target 'docs' so it finds book.toml, but the css lands in 'src' because of your config
-      - name: Setup Admonish Assets
+      # 2. RUN INSTALL (Crucial Step)
+      # This command generates the CSS file AND fixes book.toml versioning
+      - name: Setup Admonish
         run: mdbook-admonish install docs
 
-      # 4. Build
+      # 3. Build (Now that everything is synced)
       - name: Build Book
         run: mdbook build docs
 
-      # 5. Publish
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:

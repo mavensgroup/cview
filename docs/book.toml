@@ -5,11 +5,12 @@ language = "en"
 src = "src"
 
 [preprocessor.admonish]
+command = "mdbook-admonish"
 
 # 2. Output Configuration
 [output.html]
 theme = "theme"
-additional-css = ["src/mdbook-admonish.css", "src/custom.css", ]
-additional-js  = ["src/custom.js"]
+additional-css = ["mdbook-admonish.css", "custom.css"]
+additional-js  = ["custom.js"]
 git-repository-url = "https://github.com/mavensgroup/cview"
 site-url = "/cview/"
