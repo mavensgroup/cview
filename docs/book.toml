@@ -1,0 +1,17 @@
+[book]
+title = "CView"
+authors = ["Rudra Banerjee"]
+language = "en"
+src = "src"
+
+# 1. Enable Admonishments
+[preprocessor.admonish]
+command = "mdbook-admonish"
+assets_version = "3.1.0" # do not edit: managed by `mdbook-admonish install`
+
+# 2. Point to our custom theme folder
+[output.html]
+theme = "theme"
+additional-css = ["src/mdbook-admonish.css", "src/custom.css"]
+additional-js  = ["src/custom.js"]
+git-repository-url = "https://github.com/mavensgroup/cview"

@@ -2,9 +2,10 @@
 
 ![License](https://img.shields.io/badge/license-LGPLv3-blue.svg)
 ![Language](https://img.shields.io/badge/rust-1.70%2B-orange.svg)
+![GTK4](https://img.shields.io/badge/Toolkit-GTK4-46a946?logo=gtk&logoColor=white)
 ![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)
-![Windows](https://img.shields.io/badge/Windows-0078D6?logo=microsoft&logoColor=white)
-![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)
+![Windows](https://img.shields.io/badge/Windows-fcc624?logo=microsoft&logoColor=white)
+![macOS](https://img.shields.io/badge/macOS-fcc624?logo=apple&logoColor=black)
 
 **CView** is a high-performance, **open-source** crystallographic tool written in Rust and GTK4. It is designed to bridge the gap between structure visualization and *ab-initio* calculation setup (VASP, QE, SPRKKR).
 
