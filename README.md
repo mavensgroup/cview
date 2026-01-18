@@ -1,4 +1,7 @@
-# CView: Crystal Structure Visualization & Analysis
+<div align="center">
+  <img src="docs/src/images/cview.svg" width="100" />
+  <h1>CView: Crystal Structure Visualization & Analysis</h1>
+</div>
 
 ![License](https://img.shields.io/badge/license-LGPLv3-blue.svg)
 ![Language](https://img.shields.io/badge/rust-1.70%2B-orange.svg)
