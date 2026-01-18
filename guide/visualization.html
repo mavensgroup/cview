@@ -206,7 +206,7 @@
 <hr />
 <h2 id="file-operations"><a class="header" href="#file-operations">File Operations</a></h2>
 <h3 id="opening-files"><a class="header" href="#opening-files">Opening Files</a></h3>
-<p>To load a structure, navigate to <strong>File → Open</strong> in the application menu. CView utilizes the native file chooser of your operating system to ensure a familiar experience.</p>
+<p>To load a structure, navigate to <code>File → Open (Ctrl + O)</code> in the application menu. CView utilizes the native file chooser of your operating system to ensure a familiar experience.</p>
 <p><strong>Supported Formats:</strong>
 CView automatically detects the file type based on extension and content. You can open the following formats:</p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Format</th><th style="text-align: left">Extensions</th><th style="text-align: left">Description</th></tr></thead><tbody>
@@ -220,7 +220,7 @@ CView automatically detects the file type based on extension and content. You ca
 <h3 id="tab-management"><a class="header" href="#tab-management">Tab Management</a></h3>
 <p>CView uses a tabbed interface to handle multiple structures simultaneously. The application employs a <strong>smart loading strategy</strong> to keep the workspace clean:</p>
 <ul>
-<li><strong>Replacement Mode:</strong> If the current active tab is empty (labeled "Untitled" with no structure), opening a file will replace this tab.</li>
+<li><strong>Replacement Mode:</strong> If the current active tab is empty (labelled "Untitled" with no structure), opening a file will replace this tab.</li>
 <li><strong>New Tab Mode:</strong> If a structure is already loaded, the new file will open in a separate, closable tab.</li>
 </ul>
 <div id="admonition-workspace-feedback" class="admonition admonish-note" role="note" aria-labelledby="admonition-workspace-feedback-title">
@@ -236,7 +236,7 @@ CView automatically detects the file type based on extension and content. You ca
 </div>
 <h3 id="saving--exporting"><a class="header" href="#saving--exporting">Saving &amp; Exporting</a></h3>
 <h4 id="saving-data"><a class="header" href="#saving-data">Saving Data</a></h4>
-<p>To convert a loaded structure into a different format, use File → Save As. The output format is determined by the selected file filter in the dialog.</p>
+<p>To convert a loaded structure into a different format, use <code>File → Save As (Shift+ Ctrl+ S)</code>. The output format is determined by the selected file filter in the dialog.</p>
 <h5 id="available-output-formats"><a class="header" href="#available-output-formats">Available Output Formats:</a></h5>
 <ul>
 <li>CIF (*.cif)</li>
@@ -245,13 +245,9 @@ CView automatically detects the file type based on extension and content. You ca
 <li>Quantum Espresso Input (*.in)</li>
 <li>XYZ (*.xyz)</li>
 </ul>
-<h3 id="exporting-visuals"><a class="header" href="#exporting-visuals">Exporting Visuals</a></h3>
-<p>For publications and presentations, CView offers high-fidelity export options via the File → Export menu.</p>
-<p>PNG Image: Renders a high-resolution raster image (default resolution: 2000x1500 pixels). Ideal for slides and quick sharing.</p>
-<p>PDF Document: Exports the scene as a vector graphic. This is recommended for academic papers, as it allows for infinite scaling without loss of quality.</p>
-<h4 id="visualization-controls"><a class="header" href="#visualization-controls">Visualization Controls</a></h4>
+<h2 id="visualization-controls"><a class="header" href="#visualization-controls">Visualization Controls</a></h2>
 <p>Once a structure is loaded, the View menu provides tools to orient and inspect the crystal lattice.</p>
-<h5 id="standard-views"><a class="header" href="#standard-views">Standard Views</a></h5>
+<h3 id="standard-views"><a class="header" href="#standard-views">Standard Views</a></h3>
 <p>Quickly align the camera to specific crystallographic axes to inspect symmetry or stacking sequences.</p>
 <ul>
 <li>View Along A: Aligns camera with the a-axis (y=−90°).</li>
@@ -259,13 +255,18 @@ CView automatically detects the file type based on extension and content. You ca
 <li>View Along C: Aligns camera with the c-axis (Standard Plan View).</li>
 <li>Reset View: Restores the default zoom (1.0) and rotation (0,0).</li>
 </ul>
-<h4 id="rotation-modes"><a class="header" href="#rotation-modes">Rotation Modes</a></h4>
+<h3 id="rotation-modes"><a class="header" href="#rotation-modes">Rotation Modes</a></h3>
 <p>You can customize the pivot point around which the camera rotates, depending on whether you are inspecting the atomic cluster or the lattice boundaries.</p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Mode</th><th style="text-align: left">Description</th></tr></thead><tbody>
-<tr><td style="text-align: left">Centroid</td><td style="text-align: left">Rotates around the geometric center of the atoms. Best for inspecting molecules or specific bonding environments.</td></tr>
-<tr><td style="text-align: left">Unit Cell</td><td style="text-align: left">Rotates around the center of the unit cell box. Best for understanding the lattice boundaries relative to the origin.</td></tr>
+<tr><td style="text-align: left">Centroid</td><td style="text-align: left">Rotates around the geometric centre of the atoms. Best for inspecting molecules or specific bonding environments.</td></tr>
+<tr><td style="text-align: left">Unit Cell</td><td style="text-align: left">Rotates around the centre of the unit cell box. Best for understanding the lattice boundaries relative to the origin.</td></tr>
 </tbody></table>
 </div>
+<h3 id="exporting-visuals"><a class="header" href="#exporting-visuals">Exporting Visuals</a></h3>
+<p>For publications and presentations, <code>CView</code> offers high-fidelity export options via the <code>File → Export (Ctrl + E)</code> menu.</p>
+<p>PNG Image: Renders a high-resolution raster image (default resolution: $2000\times 1500$ pixels). Ideal for slides and quick sharing.</p>
+<p>PDF Document: Exports the scene as a vector graphic. This is recommended for academic papers, as it allows for infinite scaling without loss of quality.</p>
+
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">

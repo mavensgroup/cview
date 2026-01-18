@@ -237,14 +237,14 @@
 <hr />
 <h2 id="-why-cview"><a class="header" href="#-why-cview">⚡ Why CView?</a></h2>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Feature</th><th style="text-align: left">Description</th></tr></thead><tbody>
-<tr><td style="text-align: left"><strong>🚀 Fast &amp; Lightweight</strong></td><td style="text-align: left">Built on Rust/GTK4. No GPU drivers required. Runs on any laptop.</td></tr>
-<tr><td style="text-align: left"><strong>⚛️ Analysis First</strong></td><td style="text-align: left">Dedicated tools for <a href="guide/kpath.html">K-Paths</a>, <a href="guide/slabs.html">Slabs</a>, and <a href="guide/voids.html">Void Analysis</a>.</td></tr>
-<tr><td style="text-align: left"><strong>🛠️ DFT Ready</strong></td><td style="text-align: left">Native support for VASP, Quantum Espresso, and SPRKKR formats.</td></tr>
-<tr><td style="text-align: left"><strong>📸 Publication Quality</strong></td><td style="text-align: left">Export high-resolution, transparent PNGs and PDFs using PBR rendering.</td></tr>
+<tr><td style="text-align: left">** Fast &amp; Lightweight**</td><td style="text-align: left">Built on Rust/GTK4. No GPU drivers required. Runs on any laptop.</td></tr>
+<tr><td style="text-align: left">** Analysis First**</td><td style="text-align: left">Dedicated tools for <a href="guide/kpath.html">K-Paths</a>, <a href="guide/slabs.html">Slabs</a>, and <a href="guide/voids.html">Void Analysis</a>.</td></tr>
+<tr><td style="text-align: left">** DFT Ready**</td><td style="text-align: left">Native support for VASP, Quantum Espresso, and SPRKKR formats.</td></tr>
+<tr><td style="text-align: left">** Publication Quality**</td><td style="text-align: left">Export high-resolution, transparent PNGs and PDFs using PBR rendering.</td></tr>
 </tbody></table>
 </div>
 <hr />
-<h2 id="-documentation-overview"><a class="header" href="#-documentation-overview">📚 Documentation Overview</a></h2>
+<h2 id="documentation-overview"><a class="header" href="#documentation-overview">Documentation Overview</a></h2>
 <p>This manual is divided into three parts:</p>
 <ol>
 <li><strong><a href="installation.html">Installation</a></strong>: Get CView running on Linux, Windows, or macOS.</li>
@@ -258,7 +258,7 @@
 <li><strong><a href="tutorials/bi2se3.html">Tutorials</a></strong>: Step-by-step walkthroughs for real materials (e.g., Bi₂Se₃).</li>
 </ol>
 <hr />
-<h2 id="-quick-start"><a class="header" href="#-quick-start">🚀 Quick Start</a></h2>
+<h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
 <p>Get up and running in seconds.</p>
 <div id="admonition-installation" class="admonition admonish-success" role="note" aria-labelledby="admonition-installation-title">
 <div class="admonition-title">
@@ -277,7 +277,7 @@ cargo run --release
 </div>
 <p>See the <a href="installation.html">Installation Page</a> for detailed OS-specific instructions.</p>
 <hr />
-<h2 id="-supported-formats"><a class="header" href="#-supported-formats">📂 Supported Formats</a></h2>
+<h2 id="supported-formats"><a class="header" href="#supported-formats">Supported Formats</a></h2>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Format</th><th style="text-align: center">VASP</th><th style="text-align: center">Quantum Espresso</th><th style="text-align: center">SPRKKR</th><th style="text-align: center">CIF / XYZ</th></tr></thead><tbody>
 <tr><td style="text-align: left"><strong>Read</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td></tr>
 <tr><td style="text-align: left"><strong>Write</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟠</td><td style="text-align: center">🟠</td><td style="text-align: center">🟢</td></tr>
@@ -285,10 +285,41 @@ cargo run --release
 </tbody></table>
 </div>
 <hr />
+<h2 id="links"><a class="header" href="#links">Links</a></h2>
+<div id="admonition-contribute" class="admonition admonish-tip" role="note" aria-labelledby="admonition-contribute-title">
+<div class="admonition-title">
+<div id="admonition-contribute-title">
+<p>Contribute</p>
+</div>
+<a class="admonition-anchor-link" href="introduction.html#admonition-contribute"></a>
+</div>
+<div>
+<p>This is an α (alpha) release. While the core functionality is operational, the software may contain
+incomplete features, bugs, or unstable behaviour.</p>
+<p>Contributions from testers and developers are welcome.</p>
+<ul>
+<li><a href="https://github.com/mavensgroup/cview">Source Code</a></li>
+<li><a href="https://github.com/mavensgroup/cview/issues">Bug Report</a></li>
+<li><a href="https://github.com/mavensgroup/cview/pulls">PR</a></li>
+</ul>
+</div>
+</div>
+<hr />
 <h2 id="-license--citation"><a class="header" href="#-license--citation">📜 License &amp; Citation</a></h2>
 <p><strong>CView</strong> is open-source software licensed under the <strong>LGPLv3</strong>.</p>
 <p>If you use CView in your research, please cite the <a href="https://github.com/mavensgroup/cview">repository</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
+<div id="admonition-quick-install" class="admonition admonish-tip" role="note" aria-labelledby="admonition-quick-install-title">
+<div class="admonition-title">
+<div id="admonition-quick-install-title">
+<p>Quick Install</p>
+</div>
+<a class="admonition-anchor-link" href="installation.html#admonition-quick-install"></a>
+</div>
+<div>
+<p>If you have <code>cargo</code> installed, then jump to <a href="installation.html#3-build-from-source">Build from source</a>.</p>
+</div>
+</div>
 <p>CView is a cross-platform application built on <strong>Rust</strong> and <strong>GTK4</strong>. Because it uses the native GTK4 libraries for rendering, the installation process involves two steps:</p>
 <ol>
 <li>Installing the system dependencies (GTK4).</li>
@@ -378,6 +409,7 @@ cd cview
 cargo run --release
 
 </code></pre>
+<p>This will install <code>cview</code> in <code>~/bin</code> by default. For the subsequent run, just type <code>cview</code></p>
 <p>The first compilation may take a few minutes as it compiles the dependencies. Subsequent runs will be instant.</p>
 <hr />
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
@@ -415,7 +447,7 @@ cargo run --release
 <hr />
 <h2 id="file-operations"><a class="header" href="#file-operations">File Operations</a></h2>
 <h3 id="opening-files"><a class="header" href="#opening-files">Opening Files</a></h3>
-<p>To load a structure, navigate to <strong>File → Open</strong> in the application menu. CView utilizes the native file chooser of your operating system to ensure a familiar experience.</p>
+<p>To load a structure, navigate to <code>File → Open (Ctrl + O)</code> in the application menu. CView utilizes the native file chooser of your operating system to ensure a familiar experience.</p>
 <p><strong>Supported Formats:</strong>
 CView automatically detects the file type based on extension and content. You can open the following formats:</p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Format</th><th style="text-align: left">Extensions</th><th style="text-align: left">Description</th></tr></thead><tbody>
@@ -429,7 +461,7 @@ CView automatically detects the file type based on extension and content. You ca
 <h3 id="tab-management"><a class="header" href="#tab-management">Tab Management</a></h3>
 <p>CView uses a tabbed interface to handle multiple structures simultaneously. The application employs a <strong>smart loading strategy</strong> to keep the workspace clean:</p>
 <ul>
-<li><strong>Replacement Mode:</strong> If the current active tab is empty (labeled "Untitled" with no structure), opening a file will replace this tab.</li>
+<li><strong>Replacement Mode:</strong> If the current active tab is empty (labelled "Untitled" with no structure), opening a file will replace this tab.</li>
 <li><strong>New Tab Mode:</strong> If a structure is already loaded, the new file will open in a separate, closable tab.</li>
 </ul>
 <div id="admonition-workspace-feedback" class="admonition admonish-note" role="note" aria-labelledby="admonition-workspace-feedback-title">
@@ -445,7 +477,7 @@ CView automatically detects the file type based on extension and content. You ca
 </div>
 <h3 id="saving--exporting"><a class="header" href="#saving--exporting">Saving &amp; Exporting</a></h3>
 <h4 id="saving-data"><a class="header" href="#saving-data">Saving Data</a></h4>
-<p>To convert a loaded structure into a different format, use File → Save As. The output format is determined by the selected file filter in the dialog.</p>
+<p>To convert a loaded structure into a different format, use <code>File → Save As (Shift+ Ctrl+ S)</code>. The output format is determined by the selected file filter in the dialog.</p>
 <h5 id="available-output-formats"><a class="header" href="#available-output-formats">Available Output Formats:</a></h5>
 <ul>
 <li>CIF (*.cif)</li>
@@ -454,13 +486,9 @@ CView automatically detects the file type based on extension and content. You ca
 <li>Quantum Espresso Input (*.in)</li>
 <li>XYZ (*.xyz)</li>
 </ul>
-<h3 id="exporting-visuals"><a class="header" href="#exporting-visuals">Exporting Visuals</a></h3>
-<p>For publications and presentations, CView offers high-fidelity export options via the File → Export menu.</p>
-<p>PNG Image: Renders a high-resolution raster image (default resolution: 2000x1500 pixels). Ideal for slides and quick sharing.</p>
-<p>PDF Document: Exports the scene as a vector graphic. This is recommended for academic papers, as it allows for infinite scaling without loss of quality.</p>
-<h4 id="visualization-controls"><a class="header" href="#visualization-controls">Visualization Controls</a></h4>
+<h2 id="visualization-controls"><a class="header" href="#visualization-controls">Visualization Controls</a></h2>
 <p>Once a structure is loaded, the View menu provides tools to orient and inspect the crystal lattice.</p>
-<h5 id="standard-views"><a class="header" href="#standard-views">Standard Views</a></h5>
+<h3 id="standard-views"><a class="header" href="#standard-views">Standard Views</a></h3>
 <p>Quickly align the camera to specific crystallographic axes to inspect symmetry or stacking sequences.</p>
 <ul>
 <li>View Along A: Aligns camera with the a-axis (y=−90°).</li>
@@ -468,13 +496,18 @@ CView automatically detects the file type based on extension and content. You ca
 <li>View Along C: Aligns camera with the c-axis (Standard Plan View).</li>
 <li>Reset View: Restores the default zoom (1.0) and rotation (0,0).</li>
 </ul>
-<h4 id="rotation-modes"><a class="header" href="#rotation-modes">Rotation Modes</a></h4>
+<h3 id="rotation-modes"><a class="header" href="#rotation-modes">Rotation Modes</a></h3>
 <p>You can customize the pivot point around which the camera rotates, depending on whether you are inspecting the atomic cluster or the lattice boundaries.</p>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Mode</th><th style="text-align: left">Description</th></tr></thead><tbody>
-<tr><td style="text-align: left">Centroid</td><td style="text-align: left">Rotates around the geometric center of the atoms. Best for inspecting molecules or specific bonding environments.</td></tr>
-<tr><td style="text-align: left">Unit Cell</td><td style="text-align: left">Rotates around the center of the unit cell box. Best for understanding the lattice boundaries relative to the origin.</td></tr>
+<tr><td style="text-align: left">Centroid</td><td style="text-align: left">Rotates around the geometric centre of the atoms. Best for inspecting molecules or specific bonding environments.</td></tr>
+<tr><td style="text-align: left">Unit Cell</td><td style="text-align: left">Rotates around the centre of the unit cell box. Best for understanding the lattice boundaries relative to the origin.</td></tr>
 </tbody></table>
-</div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div>
+</div>
+<h3 id="exporting-visuals"><a class="header" href="#exporting-visuals">Exporting Visuals</a></h3>
+<p>For publications and presentations, <code>CView</code> offers high-fidelity export options via the <code>File → Export (Ctrl + E)</code> menu.</p>
+<p>PNG Image: Renders a high-resolution raster image (default resolution: $2000\times 1500$ pixels). Ideal for slides and quick sharing.</p>
+<p>PDF Document: Exports the scene as a vector graphic. This is recommended for academic papers, as it allows for infinite scaling without loss of quality.</p>
+<div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div>
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
