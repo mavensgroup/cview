@@ -21,14 +21,14 @@ CView is not just a viewer; it is a **pre-calculation validator**. It focuses on
 
 | Feature | Description |
 | :--- | :--- |
-| **🚀 Fast & Lightweight** | Built on Rust/GTK4. No GPU drivers required. Runs on any laptop. |
-| **⚛️ Analysis First** | Dedicated tools for [K-Paths](guide/kpath.md), [Slabs](guide/slabs.md), and [Void Analysis](guide/voids.md). |
-| **🛠️ DFT Ready** | Native support for VASP, Quantum Espresso, and SPRKKR formats. |
-| **📸 Publication Quality** | Export high-resolution, transparent PNGs and PDFs using PBR rendering. |
+| ** Fast & Lightweight** | Built on Rust/GTK4. No GPU drivers required. Runs on any laptop. |
+| ** Analysis First** | Dedicated tools for [K-Paths](guide/kpath.md), [Slabs](guide/slabs.md), and [Void Analysis](guide/voids.md). |
+| ** DFT Ready** | Native support for VASP, Quantum Espresso, and SPRKKR formats. |
+| ** Publication Quality** | Export high-resolution, transparent PNGs and PDFs using PBR rendering. |
 
 ---
 
-## 📚 Documentation Overview
+## Documentation Overview
 
 This manual is divided into three parts:
 
@@ -41,7 +41,7 @@ This manual is divided into three parts:
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 Get up and running in seconds.
 
@@ -58,13 +58,29 @@ See the [Installation Page](installation.md) for detailed OS-specific instructio
 
 ---
 
-## 📂 Supported Formats
+## Supported Formats
 
 Format | VASP | Quantum Espresso | SPRKKR | CIF / XYZ |
 | :--- | :---: | :---: | :---: | :---: |
 | **Read** | 🟢 | 🟢 | 🟢 | 🟢 |
 | **Write** | 🟢 | 🟠 | 🟠 | 🟢 |
 | **Relaxation** | 🟢 | 🟢 | 🔴 | 🔴 |
+
+---
+
+## Links
+
+
+```admonish important title="Contribute"
+This is an α (alpha) release. While the core functionality is operational, the software may contain
+incomplete features, bugs, or unstable behaviour.
+
+Contributions from testers and developers are welcome.
+
+- [Source Code](https://github.com/mavensgroup/cview)
+- [Bug Report](https://github.com/mavensgroup/cview/issues)
+- [PR](https://github.com/mavensgroup/cview/pulls)
+```
 
 ---
 

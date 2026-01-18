@@ -1,5 +1,10 @@
 # Installation
 
+```admonish tip title="Quick Install"
+If you have `cargo` installed, then jump to [Build from source](#3-build-from-source).
+```
+
+
 CView is a cross-platform application built on **Rust** and **GTK4**. Because it uses the native GTK4 libraries for rendering, the installation process involves two steps:
 1.  Installing the system dependencies (GTK4).
 2.  Compiling the application using Cargo.
@@ -100,6 +105,8 @@ cd cview
 cargo run --release
 
 ```
+
+This will install `cview` in `~/bin` by default. For the subsequent run, just type `cview`
 
 The first compilation may take a few minutes as it compiles the dependencies. Subsequent runs will be instant.
 
