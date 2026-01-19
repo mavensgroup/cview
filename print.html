@@ -205,7 +205,7 @@
                         <div id="cover-page">
 <img src="images/cview.svg" class="cover-logo" alt="CView Logo">
 <h1 id="cview" class="cover-title"><a class="header" href="#cview">CView</a></h1>
-<p class="cover-subtitle">Structure Visualization & Analysis Tool</p>
+<p class="cover-subtitle">Crystal Structure Visualization & Analysis</p>
 <div class="cover-divider"></div>
 <div class="cover-meta">
 <p><a href="https://mavens-group.github.io/author/rudra-banerjee/"><strong>Rudra Banerjee</strong></a></p>
@@ -222,6 +222,18 @@
 <img src="https://img.shields.io/badge/Windows-fcc624?logo=microsoft&amp;logoColor=white" alt="Windows" />
 <img src="https://img.shields.io/badge/macOS-fcc624?logo=apple&amp;logoColor=black" alt="macOS" /></p>
 <p><strong>CView</strong> is a high-performance crystallographic tool written in <strong>Rust</strong> and <strong>GTK4</strong>. It bridges the gap between structure visualization and <em>ab-initio</em> calculation setup (VASP, QE, SPRKKR).</p>
+<div id="admonition-performance-limitation-macromolecules" class="admonition admonish-warning" role="note" aria-labelledby="admonition-performance-limitation-macromolecules-title">
+<div class="admonition-title">
+<div id="admonition-performance-limitation-macromolecules-title">
+<p>Performance Limitation: Macromolecules</p>
+</div>
+<a class="admonition-anchor-link" href="introduction.html#admonition-performance-limitation-macromolecules"></a>
+</div>
+<div>
+<p>This version of <code>CView</code> is built on <strong>GTK4</strong>, which primarily utilizes the CPU for rendering.</p>
+<p>While the engine is optimized, it is designed for <strong>crystal structures</strong> (unit cells, supercells, slabs). It handles systems up to $\approx 1000$ atoms with ease, but it is <strong>not suitable</strong> for visualizing massive biological macromolecules (e.g., proteins, DNA) containing millions of atoms.</p>
+</div>
+</div>
 <div id="admonition-philosophy" class="admonition admonish-note" role="note" aria-labelledby="admonition-philosophy-title">
 <div class="admonition-title">
 <div id="admonition-philosophy-title">
@@ -507,7 +519,224 @@ CView automatically detects the file type based on extension and content. You ca
 <p>For publications and presentations, <code>CView</code> offers high-fidelity export options via the <code>File → Export (Ctrl + E)</code> menu.</p>
 <p>PNG Image: Renders a high-resolution raster image (default resolution: $2000\times 1500$ pixels). Ideal for slides and quick sharing.</p>
 <p>PDF Document: Exports the scene as a vector graphic. This is recommended for academic papers, as it allows for infinite scaling without loss of quality.</p>
-<div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="analysis-tools"><a class="header" href="#analysis-tools">Analysis Tools</a></h1>
+<p>The Analysis module in CView aggregates tools designed to characterize the geometric, symmetric, and diffraction properties of the loaded crystal structure. Unlike simple visualization, these tools perform computational tasks to extract physical descriptors suitable for comparison with experimental data or preparation for <em>ab initio</em> calculations.</p>
+<h2 id="accessing-analysis-tools"><a class="header" href="#accessing-analysis-tools">Accessing Analysis Tools</a></h2>
+<p>The analysis suite is accessible via the <strong>Analysis</strong> menu in the main application window. This triggers the centralized Analysis Window (<code>actions_analysis.rs</code>), which provides tabbed access to the following modules:</p>
+<ol>
+<li><strong>Symmetry</strong>: Space group determination and symmetry operation analysis.</li>
+<li><strong>XRD</strong>: X-Ray Diffraction pattern simulation.</li>
+<li><strong>Voids</strong>: Porosity and intercalation site analysis.</li>
+<li><strong>K-Path</strong>: Reciprocal space path generation for band structures.</li>
+</ol>
+<h2 id="documentation-modules"><a class="header" href="#documentation-modules">Documentation Modules</a></h2>
+<p>Detailed physical derivation and algorithmic implementation for each tool are provided below:</p>
+<ul>
+<li><strong><a href="guide/symmetry.html">Symmetry Analysis</a></strong>
+<ul>
+<li><em>Engine</em>: Moyo (Rust implementation of Spglib).</li>
+<li><em>Output</em>: Space Group symbols, numbers, and crystal systems.</li>
+</ul>
+</li>
+<li><strong><a href="guide/xrd.html">XRD Simulation</a></strong>
+<ul>
+<li><em>Theory</em>: Kinematic Diffraction Theory.</li>
+<li><em>Features</em>: Powder patterns, Cu-K$\alpha$ radiation, Lorentz-Polarization corrections.</li>
+</ul>
+</li>
+<li><strong><a href="guide/voids.html">Void &amp; Intercalation</a></strong>
+<ul>
+<li><em>Method</em>: Grid-based geometric insertion.</li>
+<li><em>Application</em>: Porosity calculation and battery ion insertion sites.</li>
+</ul>
+</li>
+<li><strong><a href="guide/kpath.html">Reciprocal Space (K-Path)</a></strong>
+<ul>
+<li><em>Method</em>: High-symmetry path standardization (Setyawan-Curtarolo).</li>
+<li><em>Application</em>: Band structure calculation inputs.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<p><em>Note: While <strong>Surface Slabs</strong> are technically a structural building operation, their documentation regarding miller index transformation is provided here for completeness.</em></p>
+<ul>
+<li><strong><a href="guide/slabs.html">Surface Slabs</a></strong>
+<ul>
+<li><em>Method</em>: Lattice transformation via planar basis searching.</li>
+</ul>
+</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="symmetry-analysis"><a class="header" href="#symmetry-analysis">Symmetry Analysis</a></h1>
+<p>The Symmetry module identifies the underlying crystallographic space group of the loaded structure. It is essential for reducing computational cost in DFT calculations and validating experimental structures.</p>
+<h2 id="algorithmic-implementation"><a class="header" href="#algorithmic-implementation">Algorithmic Implementation</a></h2>
+<p>CView utilizes the <strong>Moyo</strong> library (a Rust ecosystem equivalent to Spglib) to perform symmetry determination. The analysis pipeline proceeds as follows:</p>
+<ol>
+<li><strong>Lattice Standardization</strong>: The internal <code>Structure</code> (Cartesian coordinates) is converted into a <code>Moyo::Cell</code>, utilizing the lattice vectors as columns of a $3\times3$ matrix.</li>
+<li><strong>Coordinate Transformation</strong>: Atomic positions are transformed from Cartesian ($r_{cart}$) to Fractional ($r_{frac}$) coordinates via the inverse lattice matrix:
+$$r_{frac} = M_{lattice}^{-1} \cdot r_{cart}$$</li>
+<li><strong>Symmetry Search</strong>: The algorithm searches for symmetry operations (rotations $R$ and translations $t$) that map the crystal onto itself:
+$$R \cdot r + t \equiv r' \pmod 1$$
+where $r$ and $r'$ are atomic positions of the same species.</li>
+</ol>
+<h3 id="tolerance-symprec"><a class="header" href="#tolerance-symprec">Tolerance (<code>SYMPREC</code>)</a></h3>
+<p>The code applies a default symmetry precision (<code>SYMPREC</code>) of <strong>1e-3 Å</strong>. This tolerance accommodates minor numerical noise common in file formats like <code>.cif</code> or <code>.xyz</code>, ensuring that slightly distorted experimental structures are correctly identified.</p>
+<h2 id="outputs"><a class="header" href="#outputs">Outputs</a></h2>
+<p>The module returns a <code>SymmetryInfo</code> struct containing:</p>
+<ul>
+<li><strong>Space Group Number</strong>: The International Tables for Crystallography (ITA) number (1–230).</li>
+<li><strong>International Symbol</strong>: The Hermann-Mauguin notation (e.g., $Pm\overline{3}m$, $Fm\overline{3}m$).</li>
+<li><strong>Crystal System</strong>: The classification (Triclinic, Monoclinic, Orthorhombic, Tetragonal, Trigonal, Hexagonal, or Cubic).</li>
+</ul>
+<h2 id="usage-reference"><a class="header" href="#usage-reference">Usage Reference</a></h2>
+<p>This analysis is performed "read-only" regarding the structure; it calculates descriptors without altering the atomic coordinates of the active tab.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="xrd-simulation"><a class="header" href="#xrd-simulation">XRD Simulation</a></h1>
+<p>The X-Ray Diffraction (XRD) module simulates the powder diffraction pattern for the loaded structure. It utilizes <strong>Kinematic Diffraction Theory</strong>, assuming ideal interactions without primary extinction or multiple scattering events.</p>
+<h2 id="physical-model"><a class="header" href="#physical-model">Physical Model</a></h2>
+<h3 id="1-lattice-physics"><a class="header" href="#1-lattice-physics">1. Lattice Physics</a></h3>
+<p>The simulation first calculates the <strong>Reciprocal Lattice</strong> vectors ($b_1, b_2, b_3$) from the real space lattice ($a_1, a_2, a_3$):
+$$b_1 = 2\pi \frac{a_2 \times a_3}{a_1 \cdot (a_2 \times a_3)}$$
+<em>(and cyclic permutations for $b_2, b_3$)</em>.</p>
+<h3 id="2-bragg-condition"><a class="header" href="#2-bragg-condition">2. Bragg Condition</a></h3>
+<p>The code iterates through integer Miller indices $(h, k, l)$ to find reciprocal lattice vectors $G_{hkl} = h b_1 + k b_2 + l b_3$. The d-spacing is calculated as:
+$$d_{hkl} = \frac{2\pi}{|G_{hkl}|}$$
+Diffraction peaks are identified where the Bragg condition is met for the source wavelength ($\lambda = 1.5406 Å$, Cu K$\alpha$):
+$$\lambda = 2d \sin\theta$$</p>
+<h3 id="3-structure-factor-f_hkl"><a class="header" href="#3-structure-factor-f_hkl">3. Structure Factor ($F_{hkl}$)</a></h3>
+<p>The intensity of each reflection is governed by the Structure Factor, calculated by summing over all $N$ atoms in the unit cell:
+$$F_{hkl} = \sum_{j=1}^{N} f_j(\theta) \exp\left[2\pi i (hx_j + ky_j + lz_j)\right]$$</p>
+<ul>
+<li>$x_j, y_j, z_j$: Fractional coordinates of atom $j$.</li>
+<li>$f_j(\theta)$: The atomic scattering factor.</li>
+</ul>
+<div id="admonition-coefficients" class="admonition admonish-info" role="note" aria-labelledby="admonition-coefficients-title">
+<div class="admonition-title">
+<div id="admonition-coefficients-title">
+<p>Coefficients</p>
+</div>
+<a class="admonition-anchor-link" href="guide/xrd.html#admonition-coefficients"></a>
+</div>
+<div>
+<p>The atomic scattering factor ($f_j(\theta)$) has been calculated using Cromer-Mann coefficient (<code>model/elements.rs</code>)</p>
+</div>
+</div>
+<!-- > **Note**: The current implementation approximates $f_j$ using the atomic number ($Z$) or pre-tabulated coefficients compatible with standard crystallographic tables. -->
+<h3 id="4-intensity-correction"><a class="header" href="#4-intensity-correction">4. Intensity Correction</a></h3>
+<p>The raw squared structure factor $|F_{hkl}|^2$ is corrected to obtain the observed intensity $I$. The primary correction applied in <code>xrd.rs</code> is the <strong>Lorentz-Polarization (LP) Factor</strong> for unpolarized radiation (standard laboratory diffractometer):</p>
+<p>$$
+\begin{align}
+LP(\theta) &amp;= \frac{1 + \cos^2(2\theta)}{\sin^2\theta \cos\theta}\\
+I_{calc} &amp;= |F_{hkl}|^2 \times LP(\theta)
+\end{align}$$</p>
+<h3 id="5-multiplicity-and-merging"><a class="header" href="#5-multiplicity-and-merging">5. Multiplicity and Merging</a></h3>
+<p>In powder diffraction, symmetry-equivalent planes (e.g., $(100)$ and $(010)$ in cubic systems) diffract at the same angle. The code algorithmically sorts peaks by $2\theta$ and merges peaks falling within a narrow tolerance ($0.05^\circ$), summing their intensities to account for multiplicity.</p>
+<h3 id="6-match-with-experiment"><a class="header" href="#6-match-with-experiment">6. Match with Experiment</a></h3>
+<p>You can load the experimental ascii/xlsx file to compare the xrd using the "<code>Load Experiment</code>" button.</p>
+<h2 id="settings"><a class="header" href="#settings">Settings</a></h2>
+<ul>
+<li><strong>Wavelength</strong>: Default fixed to Cu K$\alpha$ ($1.5406 Å$).</li>
+<li><strong>Range</strong>: $10^\circ$ to $90^\circ$ $2\theta$.</li>
+<li><strong>Filtering</strong>: Peaks with intensity $\leq 10^{-4}$ relative to the maximum are discarded to reduce noise.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="high-symmetry-k-points-and-k-path"><a class="header" href="#high-symmetry-k-points-and-k-path">High symmetry <em>k-points</em> and <em>k-path</em></a></h1>
+<p>Electronic structure calculations (Band Structures) requires sampling the energy eigenvalues along specific high-symmetry lines in the first Brillouin Zone. This module automates the generation of these paths.</p>
+<h2 id="implementation"><a class="header" href="#implementation">Implementation</a></h2>
+<h3 id="1-brillouin-zone-standardization"><a class="header" href="#1-brillouin-zone-standardization">1. Brillouin Zone Standardization</a></h3>
+<p>The code relies on the <strong>Moyo</strong> library to first determine the Bravais lattice type (e.g., FCC, BCC, HEX). This step is crucial because the definition of "High Symmetry Points" depends entirely on the lattice symmetry.</p>
+<h3 id="2-high-symmetry-points"><a class="header" href="#2-high-symmetry-points">2. High Symmetry Points</a></h3>
+<p>CView implements standard K-point definitions (typically following the <strong>Setyawan-Curtarolo</strong> convention).</p>
+<ul>
+<li><strong>Input</strong>: Real space structure.</li>
+<li><strong>Transformation</strong>: Converted to Primitive Reciprocal space.</li>
+<li><strong>Mapping</strong>: Standard points (e.g., $\Gamma = [0,0,0]$, $X = [0, 0.5, 0]$) are generated based on the detected space group.</li>
+</ul>
+<h3 id="3-path-generation"><a class="header" href="#3-path-generation">3. Path Generation</a></h3>
+<p>The module generates two data sets:</p>
+<ol>
+<li><strong>Linear Path</strong>: A sequence of k-points (e.g., $\Gamma \rightarrow X \rightarrow W \rightarrow K \rightarrow \Gamma$) for band structure plotting.</li>
+<li><strong>Wireframe</strong>: A list of Cartesian line segments representing the edges of the first Brillouin Zone, used for 3D visualization in the UI.</li>
+</ol>
+<h3 id="coordinate-systems"><a class="header" href="#coordinate-systems">Coordinate Systems</a></h3>
+<p>The internal logic handles the matrix multiplication to convert between:</p>
+<ul>
+<li><strong>Fractional Reciprocal Coordinates</strong>: Used for DFT inputs (e.g., KPOINTS file).</li>
+<li><strong>Cartesian Reciprocal Coordinates</strong>: Used for the 3D wireframe visualization in CView.</li>
+</ul>
+<div id="admonition-current-limitations" class="admonition admonish-warning" role="note" aria-labelledby="admonition-current-limitations-title">
+<div class="admonition-title">
+<div id="admonition-current-limitations-title">
+<p>Current Limitations</p>
+</div>
+<a class="admonition-anchor-link" href="guide/kpath.html#admonition-current-limitations"></a>
+</div>
+<div>
+<p>While the generated <em>high-symmetry k-paths</em> are crystallographically correct for all space groups (based on the Setyawan-Curtarolo convention), the 3D Brillouin Zone wireframe visualization is currently hardcoded for Cubic systems.</p>
+<p>Non-cubic lattices will display correct path data but an incorrect (cubic) boundary box in the 3D viewer.</p>
+</div>
+</div>
+<div id="admonition-help-wanted-developers" class="admonition admonish-tip" role="note" aria-labelledby="admonition-help-wanted-developers-title">
+<div class="admonition-title">
+<div id="admonition-help-wanted-developers-title">
+<p>Help Wanted: Developers</p>
+</div>
+<a class="admonition-anchor-link" href="guide/kpath.html#admonition-help-wanted-developers"></a>
+</div>
+<div>
+<p>We welcome contributions to expand BZ visualization!
+If you wish to implement wireframes for other crystal systems, please extend the definitions in:
+<code>src/model/bs_data.rs</code></p>
+</div>
+</div>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="voids-analysis"><a class="header" href="#voids-analysis">Voids Analysis</a></h1>
+<p>This module performs geometric analysis to identify empty space within the crystal lattice. It is critical for research into battery materials (ion intercalation), porous frameworks (MOFs/Zeolites), and defect analysis.</p>
+<h2 id="algorithm-grid-based-geometric-insertion"><a class="header" href="#algorithm-grid-based-geometric-insertion">Algorithm: Grid-Based Geometric Insertion</a></h2>
+<p>The analysis does not rely on Voronoi decomposition but rather a robust <strong>Grid Probe Method</strong>.</p>
+<h3 id="1-grid-generation"><a class="header" href="#1-grid-generation">1. Grid Generation</a></h3>
+<p>A Cartesian grid is superimposed over the unit cell. The resolution is determined dynamically or fixed (standard grid spacing is generally $\leq 0.2 \text{\AA}$ for high precision).
+$$P_{grid} = u \cdot a + v \cdot b + w \cdot c \quad \text{where } u,v,w \in [0, 1]$$</p>
+<h3 id="2-distance-field-calculation"><a class="header" href="#2-distance-field-calculation">2. Distance Field Calculation</a></h3>
+<p>For every point on the grid, the algorithm calculates the Euclidean distance to the nearest atomic surface. This accounts for Periodic Boundary Conditions (PBC) by checking nearest neighbor images.
+$$D_{surf} = \min_{atoms} (||P_{grid} - P_{atom}|| - R_{vdw})$$
+Where $R_{vdw}$ is the Van der Waals radius of the atom.</p>
+<h3 id="3-probe-insertion"><a class="header" href="#3-probe-insertion">3. Probe Insertion</a></h3>
+<p>A geometric probe (representing a gas molecule or ion) with radius $R_{probe}$ is tested at each grid point. A point is considered a "Void" if:
+$$D_{surf} &gt; R_{probe}$$</p>
+<h3 id="4-clustering-largest-sphere"><a class="header" href="#4-clustering-largest-sphere">4. Clustering (Largest Sphere)</a></h3>
+<p>To find discrete void centers (e.g., for <code>max_sphere_center</code>), the algorithm aggregates contiguous void points. The implementation explicitly identifies the point with the maximum clearance radius to locate the largest cavity center.</p>
+<h2 id="presets-and-data"><a class="header" href="#presets-and-data">Presets and Data</a></h2>
+<p>The module includes standard probe definitions for common applications:</p>
+<ul>
+<li><strong>Gases</strong>: He ($1.20 Å$), N$_2$ ($1.82 Å$), CO$_2$ ($1.65 Å$).</li>
+<li><strong>Ions</strong>: Li$^+$ ($0.76 Å$), Na$^+$ ($1.02 Å$), Mg$^{2+}$ ($0.72 Å$).</li>
+</ul>
+<p>The void fraction is calculated as:
+$$\phi = \frac{N_{void}}{N_{total}} \times 100%$$</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="miller-plane"><a class="header" href="#miller-plane">Miller Plane</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><h1 id="surface-slabs-building"><a class="header" href="#surface-slabs-building">Surface Slabs (Building)</a></h1>
+<p>Creating surface models from bulk crystals is a prerequisite for surface science calculations (catalysis, work function, surface energy). The Slab Builder mathematically transforms the unit cell to expose a specific Miller Index plane $(hkl)$.</p>
+<h2 id="mathematical-formulation"><a class="header" href="#mathematical-formulation">Mathematical Formulation</a></h2>
+<h3 id="1-basis-transformation"><a class="header" href="#1-basis-transformation">1. Basis Transformation</a></h3>
+<p>The core challenge is finding two lattice vectors ($u, v$) that lie perfectly within the plane defined by the normal vector $(hkl)$, and a third vector ($w$) that projects out of the plane.</p>
+<p>The algorithm (<code>find_plane_basis</code> in <code>miller_algo</code>) solves the Diophantine equation to ensure integer linear combinations of the original lattice vectors form the new surface basis. This ensures the surface unit cell area is minimized (primitive surface cell).</p>
+<h3 id="2-basis-re-mapping"><a class="header" href="#2-basis-re-mapping">2. Basis Re-mapping</a></h3>
+<p>Once the new basis matrix $M_{surf}$ is found, all atomic positions $r$ are transformed:
+$$r_{new} = M_{surf}^{-1} \cdot r_{old}$$
+Atoms are then wrapped to lie within the boundaries $[0, 1)$ of the new unit cell.</p>
+<h3 id="3-slab-generation"><a class="header" href="#3-slab-generation">3. Slab Generation</a></h3>
+<ol>
+<li><strong>Replication</strong>: The unit cell is repeated <code>thickness</code> times along the new $c$-axis (surface normal).</li>
+<li><strong>Vacuum</strong>: The lattice vector $c$ is elongated by adding <code>vacuum</code> distance (in Ångstroms).
+$$c_{final} = c_{slab} + c_{vacuum}$$
+This isolates the slab in the z-direction, preventing spurious interactions between periodic images in DFT calculations.</li>
+</ol>
+<h3 id="duplicate-removal"><a class="header" href="#duplicate-removal">Duplicate Removal</a></h3>
+<p>The code includes a proximity check (<code>remove_duplicate_atoms</code> with <code>TOLERANCE = 1e-5</code>) to ensure that atoms lying exactly on cell boundaries are not double-counted during the wrapping process.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="to-do"><a class="header" href="#to-do">To Do</a></h1>
+<h2 id="high-priority-list-of-implementation"><a class="header" href="#high-priority-list-of-implementation">High priority list of implementation</a></h2>
+<ul>
+<li><input disabled="" type="checkbox"/>
+List  Brillouin zones for all 230 space group (in <code>src/model/bs_data.rs</code>)</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div>
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">

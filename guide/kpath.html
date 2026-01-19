@@ -201,16 +201,65 @@
 
                 <div id="content" class="content">
                     <main>
-                        
+                        <h1 id="high-symmetry-k-points-and-k-path"><a class="header" href="#high-symmetry-k-points-and-k-path">High symmetry <em>k-points</em> and <em>k-path</em></a></h1>
+<p>Electronic structure calculations (Band Structures) requires sampling the energy eigenvalues along specific high-symmetry lines in the first Brillouin Zone. This module automates the generation of these paths.</p>
+<h2 id="implementation"><a class="header" href="#implementation">Implementation</a></h2>
+<h3 id="1-brillouin-zone-standardization"><a class="header" href="#1-brillouin-zone-standardization">1. Brillouin Zone Standardization</a></h3>
+<p>The code relies on the <strong>Moyo</strong> library to first determine the Bravais lattice type (e.g., FCC, BCC, HEX). This step is crucial because the definition of "High Symmetry Points" depends entirely on the lattice symmetry.</p>
+<h3 id="2-high-symmetry-points"><a class="header" href="#2-high-symmetry-points">2. High Symmetry Points</a></h3>
+<p>CView implements standard K-point definitions (typically following the <strong>Setyawan-Curtarolo</strong> convention).</p>
+<ul>
+<li><strong>Input</strong>: Real space structure.</li>
+<li><strong>Transformation</strong>: Converted to Primitive Reciprocal space.</li>
+<li><strong>Mapping</strong>: Standard points (e.g., $\Gamma = [0,0,0]$, $X = [0, 0.5, 0]$) are generated based on the detected space group.</li>
+</ul>
+<h3 id="3-path-generation"><a class="header" href="#3-path-generation">3. Path Generation</a></h3>
+<p>The module generates two data sets:</p>
+<ol>
+<li><strong>Linear Path</strong>: A sequence of k-points (e.g., $\Gamma \rightarrow X \rightarrow W \rightarrow K \rightarrow \Gamma$) for band structure plotting.</li>
+<li><strong>Wireframe</strong>: A list of Cartesian line segments representing the edges of the first Brillouin Zone, used for 3D visualization in the UI.</li>
+</ol>
+<h3 id="coordinate-systems"><a class="header" href="#coordinate-systems">Coordinate Systems</a></h3>
+<p>The internal logic handles the matrix multiplication to convert between:</p>
+<ul>
+<li><strong>Fractional Reciprocal Coordinates</strong>: Used for DFT inputs (e.g., KPOINTS file).</li>
+<li><strong>Cartesian Reciprocal Coordinates</strong>: Used for the 3D wireframe visualization in CView.</li>
+</ul>
+<div id="admonition-current-limitations" class="admonition admonish-warning" role="note" aria-labelledby="admonition-current-limitations-title">
+<div class="admonition-title">
+<div id="admonition-current-limitations-title">
+<p>Current Limitations</p>
+</div>
+<a class="admonition-anchor-link" href="#admonition-current-limitations"></a>
+</div>
+<div>
+<p>While the generated <em>high-symmetry k-paths</em> are crystallographically correct for all space groups (based on the Setyawan-Curtarolo convention), the 3D Brillouin Zone wireframe visualization is currently hardcoded for Cubic systems.</p>
+<p>Non-cubic lattices will display correct path data but an incorrect (cubic) boundary box in the 3D viewer.</p>
+</div>
+</div>
+<div id="admonition-help-wanted-developers" class="admonition admonish-tip" role="note" aria-labelledby="admonition-help-wanted-developers-title">
+<div class="admonition-title">
+<div id="admonition-help-wanted-developers-title">
+<p>Help Wanted: Developers</p>
+</div>
+<a class="admonition-anchor-link" href="#admonition-help-wanted-developers"></a>
+</div>
+<div>
+<p>We welcome contributions to expand BZ visualization!
+If you wish to implement wireframes for other crystal systems, please extend the definitions in:
+<code>src/model/bs_data.rs</code></p>
+</div>
+</div>
+
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../guide/symmetry.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../guide/xrd.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../guide/building.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../guide/voids.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -220,11 +269,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../guide/symmetry.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../guide/xrd.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../guide/building.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../guide/voids.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Surface Slabs - CView</title>
+        <title>Slab generation - CView</title>
 
 
         <!-- Custom HTML head -->
@@ -201,7 +201,26 @@
 
                 <div id="content" class="content">
                     <main>
-                        
+                        <h1 id="surface-slabs-building"><a class="header" href="#surface-slabs-building">Surface Slabs (Building)</a></h1>
+<p>Creating surface models from bulk crystals is a prerequisite for surface science calculations (catalysis, work function, surface energy). The Slab Builder mathematically transforms the unit cell to expose a specific Miller Index plane $(hkl)$.</p>
+<h2 id="mathematical-formulation"><a class="header" href="#mathematical-formulation">Mathematical Formulation</a></h2>
+<h3 id="1-basis-transformation"><a class="header" href="#1-basis-transformation">1. Basis Transformation</a></h3>
+<p>The core challenge is finding two lattice vectors ($u, v$) that lie perfectly within the plane defined by the normal vector $(hkl)$, and a third vector ($w$) that projects out of the plane.</p>
+<p>The algorithm (<code>find_plane_basis</code> in <code>miller_algo</code>) solves the Diophantine equation to ensure integer linear combinations of the original lattice vectors form the new surface basis. This ensures the surface unit cell area is minimized (primitive surface cell).</p>
+<h3 id="2-basis-re-mapping"><a class="header" href="#2-basis-re-mapping">2. Basis Re-mapping</a></h3>
+<p>Once the new basis matrix $M_{surf}$ is found, all atomic positions $r$ are transformed:
+$$r_{new} = M_{surf}^{-1} \cdot r_{old}$$
+Atoms are then wrapped to lie within the boundaries $[0, 1)$ of the new unit cell.</p>
+<h3 id="3-slab-generation"><a class="header" href="#3-slab-generation">3. Slab Generation</a></h3>
+<ol>
+<li><strong>Replication</strong>: The unit cell is repeated <code>thickness</code> times along the new $c$-axis (surface normal).</li>
+<li><strong>Vacuum</strong>: The lattice vector $c$ is elongated by adding <code>vacuum</code> distance (in Ångstroms).
+$$c_{final} = c_{slab} + c_{vacuum}$$
+This isolates the slab in the z-direction, preventing spurious interactions between periodic images in DFT calculations.</li>
+</ol>
+<h3 id="duplicate-removal"><a class="header" href="#duplicate-removal">Duplicate Removal</a></h3>
+<p>The code includes a proximity check (<code>remove_duplicate_atoms</code> with <code>TOLERANCE = 1e-5</code>) to ensure that atoms lying exactly on cell boundaries are not double-counted during the wrapping process.</p>
+
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
@@ -210,7 +229,7 @@
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../guide/analysis.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../todo.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -224,7 +243,7 @@
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../guide/analysis.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../todo.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

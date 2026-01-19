@@ -209,6 +209,18 @@
 <img src="https://img.shields.io/badge/Windows-fcc624?logo=microsoft&amp;logoColor=white" alt="Windows" />
 <img src="https://img.shields.io/badge/macOS-fcc624?logo=apple&amp;logoColor=black" alt="macOS" /></p>
 <p><strong>CView</strong> is a high-performance crystallographic tool written in <strong>Rust</strong> and <strong>GTK4</strong>. It bridges the gap between structure visualization and <em>ab-initio</em> calculation setup (VASP, QE, SPRKKR).</p>
+<div id="admonition-performance-limitation-macromolecules" class="admonition admonish-warning" role="note" aria-labelledby="admonition-performance-limitation-macromolecules-title">
+<div class="admonition-title">
+<div id="admonition-performance-limitation-macromolecules-title">
+<p>Performance Limitation: Macromolecules</p>
+</div>
+<a class="admonition-anchor-link" href="#admonition-performance-limitation-macromolecules"></a>
+</div>
+<div>
+<p>This version of <code>CView</code> is built on <strong>GTK4</strong>, which primarily utilizes the CPU for rendering.</p>
+<p>While the engine is optimized, it is designed for <strong>crystal structures</strong> (unit cells, supercells, slabs). It handles systems up to $\approx 1000$ atoms with ease, but it is <strong>not suitable</strong> for visualizing massive biological macromolecules (e.g., proteins, DNA) containing millions of atoms.</p>
+</div>
+</div>
 <div id="admonition-philosophy" class="admonition admonish-note" role="note" aria-labelledby="admonition-philosophy-title">
 <div class="admonition-title">
 <div id="admonition-philosophy-title">

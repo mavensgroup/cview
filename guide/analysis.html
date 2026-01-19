@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Physical Analysis - CView</title>
+        <title>Analysis - CView</title>
 
 
         <!-- Custom HTML head -->
@@ -201,16 +201,63 @@
 
                 <div id="content" class="content">
                     <main>
-                        
+                        <h1 id="analysis-tools"><a class="header" href="#analysis-tools">Analysis Tools</a></h1>
+<p>The Analysis module in CView aggregates tools designed to characterize the geometric, symmetric, and diffraction properties of the loaded crystal structure. Unlike simple visualization, these tools perform computational tasks to extract physical descriptors suitable for comparison with experimental data or preparation for <em>ab initio</em> calculations.</p>
+<h2 id="accessing-analysis-tools"><a class="header" href="#accessing-analysis-tools">Accessing Analysis Tools</a></h2>
+<p>The analysis suite is accessible via the <strong>Analysis</strong> menu in the main application window. This triggers the centralized Analysis Window (<code>actions_analysis.rs</code>), which provides tabbed access to the following modules:</p>
+<ol>
+<li><strong>Symmetry</strong>: Space group determination and symmetry operation analysis.</li>
+<li><strong>XRD</strong>: X-Ray Diffraction pattern simulation.</li>
+<li><strong>Voids</strong>: Porosity and intercalation site analysis.</li>
+<li><strong>K-Path</strong>: Reciprocal space path generation for band structures.</li>
+</ol>
+<h2 id="documentation-modules"><a class="header" href="#documentation-modules">Documentation Modules</a></h2>
+<p>Detailed physical derivation and algorithmic implementation for each tool are provided below:</p>
+<ul>
+<li><strong><a href="symmetry.html">Symmetry Analysis</a></strong>
+<ul>
+<li><em>Engine</em>: Moyo (Rust implementation of Spglib).</li>
+<li><em>Output</em>: Space Group symbols, numbers, and crystal systems.</li>
+</ul>
+</li>
+<li><strong><a href="xrd.html">XRD Simulation</a></strong>
+<ul>
+<li><em>Theory</em>: Kinematic Diffraction Theory.</li>
+<li><em>Features</em>: Powder patterns, Cu-K$\alpha$ radiation, Lorentz-Polarization corrections.</li>
+</ul>
+</li>
+<li><strong><a href="voids.html">Void &amp; Intercalation</a></strong>
+<ul>
+<li><em>Method</em>: Grid-based geometric insertion.</li>
+<li><em>Application</em>: Porosity calculation and battery ion insertion sites.</li>
+</ul>
+</li>
+<li><strong><a href="kpath.html">Reciprocal Space (K-Path)</a></strong>
+<ul>
+<li><em>Method</em>: High-symmetry path standardization (Setyawan-Curtarolo).</li>
+<li><em>Application</em>: Band structure calculation inputs.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<p><em>Note: While <strong>Surface Slabs</strong> are technically a structural building operation, their documentation regarding miller index transformation is provided here for completeness.</em></p>
+<ul>
+<li><strong><a href="slabs.html">Surface Slabs</a></strong>
+<ul>
+<li><em>Method</em>: Lattice transformation via planar basis searching.</li>
+</ul>
+</li>
+</ul>
+
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../guide/slabs.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../guide/visualization.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../guide/xrd.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../guide/symmetry.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -220,11 +267,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../guide/slabs.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../guide/visualization.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../guide/xrd.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../guide/symmetry.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

@@ -201,16 +201,64 @@
 
                 <div id="content" class="content">
                     <main>
-                        
+                        <h1 id="xrd-simulation"><a class="header" href="#xrd-simulation">XRD Simulation</a></h1>
+<p>The X-Ray Diffraction (XRD) module simulates the powder diffraction pattern for the loaded structure. It utilizes <strong>Kinematic Diffraction Theory</strong>, assuming ideal interactions without primary extinction or multiple scattering events.</p>
+<h2 id="physical-model"><a class="header" href="#physical-model">Physical Model</a></h2>
+<h3 id="1-lattice-physics"><a class="header" href="#1-lattice-physics">1. Lattice Physics</a></h3>
+<p>The simulation first calculates the <strong>Reciprocal Lattice</strong> vectors ($b_1, b_2, b_3$) from the real space lattice ($a_1, a_2, a_3$):
+$$b_1 = 2\pi \frac{a_2 \times a_3}{a_1 \cdot (a_2 \times a_3)}$$
+<em>(and cyclic permutations for $b_2, b_3$)</em>.</p>
+<h3 id="2-bragg-condition"><a class="header" href="#2-bragg-condition">2. Bragg Condition</a></h3>
+<p>The code iterates through integer Miller indices $(h, k, l)$ to find reciprocal lattice vectors $G_{hkl} = h b_1 + k b_2 + l b_3$. The d-spacing is calculated as:
+$$d_{hkl} = \frac{2\pi}{|G_{hkl}|}$$
+Diffraction peaks are identified where the Bragg condition is met for the source wavelength ($\lambda = 1.5406 Å$, Cu K$\alpha$):
+$$\lambda = 2d \sin\theta$$</p>
+<h3 id="3-structure-factor-f_hkl"><a class="header" href="#3-structure-factor-f_hkl">3. Structure Factor ($F_{hkl}$)</a></h3>
+<p>The intensity of each reflection is governed by the Structure Factor, calculated by summing over all $N$ atoms in the unit cell:
+$$F_{hkl} = \sum_{j=1}^{N} f_j(\theta) \exp\left[2\pi i (hx_j + ky_j + lz_j)\right]$$</p>
+<ul>
+<li>$x_j, y_j, z_j$: Fractional coordinates of atom $j$.</li>
+<li>$f_j(\theta)$: The atomic scattering factor.</li>
+</ul>
+<div id="admonition-coefficients" class="admonition admonish-info" role="note" aria-labelledby="admonition-coefficients-title">
+<div class="admonition-title">
+<div id="admonition-coefficients-title">
+<p>Coefficients</p>
+</div>
+<a class="admonition-anchor-link" href="#admonition-coefficients"></a>
+</div>
+<div>
+<p>The atomic scattering factor ($f_j(\theta)$) has been calculated using Cromer-Mann coefficient (<code>model/elements.rs</code>)</p>
+</div>
+</div>
+<!-- > **Note**: The current implementation approximates $f_j$ using the atomic number ($Z$) or pre-tabulated coefficients compatible with standard crystallographic tables. -->
+<h3 id="4-intensity-correction"><a class="header" href="#4-intensity-correction">4. Intensity Correction</a></h3>
+<p>The raw squared structure factor $|F_{hkl}|^2$ is corrected to obtain the observed intensity $I$. The primary correction applied in <code>xrd.rs</code> is the <strong>Lorentz-Polarization (LP) Factor</strong> for unpolarized radiation (standard laboratory diffractometer):</p>
+<p>$$
+\begin{align}
+LP(\theta) &amp;= \frac{1 + \cos^2(2\theta)}{\sin^2\theta \cos\theta}\\
+I_{calc} &amp;= |F_{hkl}|^2 \times LP(\theta)
+\end{align}$$</p>
+<h3 id="5-multiplicity-and-merging"><a class="header" href="#5-multiplicity-and-merging">5. Multiplicity and Merging</a></h3>
+<p>In powder diffraction, symmetry-equivalent planes (e.g., $(100)$ and $(010)$ in cubic systems) diffract at the same angle. The code algorithmically sorts peaks by $2\theta$ and merges peaks falling within a narrow tolerance ($0.05^\circ$), summing their intensities to account for multiplicity.</p>
+<h3 id="6-match-with-experiment"><a class="header" href="#6-match-with-experiment">6. Match with Experiment</a></h3>
+<p>You can load the experimental ascii/xlsx file to compare the xrd using the "<code>Load Experiment</code>" button.</p>
+<h2 id="settings"><a class="header" href="#settings">Settings</a></h2>
+<ul>
+<li><strong>Wavelength</strong>: Default fixed to Cu K$\alpha$ ($1.5406 Å$).</li>
+<li><strong>Range</strong>: $10^\circ$ to $90^\circ$ $2\theta$.</li>
+<li><strong>Filtering</strong>: Peaks with intensity $\leq 10^{-4}$ relative to the maximum are discarded to reduce noise.</li>
+</ul>
+
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../guide/analysis.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../guide/symmetry.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../guide/voids.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../guide/kpath.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -220,11 +268,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../guide/analysis.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../guide/symmetry.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../guide/voids.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../guide/kpath.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

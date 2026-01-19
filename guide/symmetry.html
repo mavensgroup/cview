@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Symmetry Analysis - CView</title>
+        <title>Symmetry - CView</title>
 
 
         <!-- Custom HTML head -->
@@ -201,16 +201,39 @@
 
                 <div id="content" class="content">
                     <main>
-                        
+                        <h1 id="symmetry-analysis"><a class="header" href="#symmetry-analysis">Symmetry Analysis</a></h1>
+<p>The Symmetry module identifies the underlying crystallographic space group of the loaded structure. It is essential for reducing computational cost in DFT calculations and validating experimental structures.</p>
+<h2 id="algorithmic-implementation"><a class="header" href="#algorithmic-implementation">Algorithmic Implementation</a></h2>
+<p>CView utilizes the <strong>Moyo</strong> library (a Rust ecosystem equivalent to Spglib) to perform symmetry determination. The analysis pipeline proceeds as follows:</p>
+<ol>
+<li><strong>Lattice Standardization</strong>: The internal <code>Structure</code> (Cartesian coordinates) is converted into a <code>Moyo::Cell</code>, utilizing the lattice vectors as columns of a $3\times3$ matrix.</li>
+<li><strong>Coordinate Transformation</strong>: Atomic positions are transformed from Cartesian ($r_{cart}$) to Fractional ($r_{frac}$) coordinates via the inverse lattice matrix:
+$$r_{frac} = M_{lattice}^{-1} \cdot r_{cart}$$</li>
+<li><strong>Symmetry Search</strong>: The algorithm searches for symmetry operations (rotations $R$ and translations $t$) that map the crystal onto itself:
+$$R \cdot r + t \equiv r' \pmod 1$$
+where $r$ and $r'$ are atomic positions of the same species.</li>
+</ol>
+<h3 id="tolerance-symprec"><a class="header" href="#tolerance-symprec">Tolerance (<code>SYMPREC</code>)</a></h3>
+<p>The code applies a default symmetry precision (<code>SYMPREC</code>) of <strong>1e-3 Å</strong>. This tolerance accommodates minor numerical noise common in file formats like <code>.cif</code> or <code>.xyz</code>, ensuring that slightly distorted experimental structures are correctly identified.</p>
+<h2 id="outputs"><a class="header" href="#outputs">Outputs</a></h2>
+<p>The module returns a <code>SymmetryInfo</code> struct containing:</p>
+<ul>
+<li><strong>Space Group Number</strong>: The International Tables for Crystallography (ITA) number (1–230).</li>
+<li><strong>International Symbol</strong>: The Hermann-Mauguin notation (e.g., $Pm\overline{3}m$, $Fm\overline{3}m$).</li>
+<li><strong>Crystal System</strong>: The classification (Triclinic, Monoclinic, Orthorhombic, Tetragonal, Trigonal, Hexagonal, or Cubic).</li>
+</ul>
+<h2 id="usage-reference"><a class="header" href="#usage-reference">Usage Reference</a></h2>
+<p>This analysis is performed "read-only" regarding the structure; it calculates descriptors without altering the atomic coordinates of the active tab.</p>
+
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../guide/visualization.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../guide/analysis.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../guide/kpath.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../guide/xrd.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -220,11 +243,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../guide/visualization.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../guide/analysis.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../guide/kpath.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../guide/xrd.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

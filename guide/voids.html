@@ -201,16 +201,40 @@
 
                 <div id="content" class="content">
                     <main>
-                        
+                        <h1 id="voids-analysis"><a class="header" href="#voids-analysis">Voids Analysis</a></h1>
+<p>This module performs geometric analysis to identify empty space within the crystal lattice. It is critical for research into battery materials (ion intercalation), porous frameworks (MOFs/Zeolites), and defect analysis.</p>
+<h2 id="algorithm-grid-based-geometric-insertion"><a class="header" href="#algorithm-grid-based-geometric-insertion">Algorithm: Grid-Based Geometric Insertion</a></h2>
+<p>The analysis does not rely on Voronoi decomposition but rather a robust <strong>Grid Probe Method</strong>.</p>
+<h3 id="1-grid-generation"><a class="header" href="#1-grid-generation">1. Grid Generation</a></h3>
+<p>A Cartesian grid is superimposed over the unit cell. The resolution is determined dynamically or fixed (standard grid spacing is generally $\leq 0.2 \text{\AA}$ for high precision).
+$$P_{grid} = u \cdot a + v \cdot b + w \cdot c \quad \text{where } u,v,w \in [0, 1]$$</p>
+<h3 id="2-distance-field-calculation"><a class="header" href="#2-distance-field-calculation">2. Distance Field Calculation</a></h3>
+<p>For every point on the grid, the algorithm calculates the Euclidean distance to the nearest atomic surface. This accounts for Periodic Boundary Conditions (PBC) by checking nearest neighbor images.
+$$D_{surf} = \min_{atoms} (||P_{grid} - P_{atom}|| - R_{vdw})$$
+Where $R_{vdw}$ is the Van der Waals radius of the atom.</p>
+<h3 id="3-probe-insertion"><a class="header" href="#3-probe-insertion">3. Probe Insertion</a></h3>
+<p>A geometric probe (representing a gas molecule or ion) with radius $R_{probe}$ is tested at each grid point. A point is considered a "Void" if:
+$$D_{surf} &gt; R_{probe}$$</p>
+<h3 id="4-clustering-largest-sphere"><a class="header" href="#4-clustering-largest-sphere">4. Clustering (Largest Sphere)</a></h3>
+<p>To find discrete void centers (e.g., for <code>max_sphere_center</code>), the algorithm aggregates contiguous void points. The implementation explicitly identifies the point with the maximum clearance radius to locate the largest cavity center.</p>
+<h2 id="presets-and-data"><a class="header" href="#presets-and-data">Presets and Data</a></h2>
+<p>The module includes standard probe definitions for common applications:</p>
+<ul>
+<li><strong>Gases</strong>: He ($1.20 Å$), N$_2$ ($1.82 Å$), CO$_2$ ($1.65 Å$).</li>
+<li><strong>Ions</strong>: Li$^+$ ($0.76 Å$), Na$^+$ ($1.02 Å$), Mg$^{2+}$ ($0.72 Å$).</li>
+</ul>
+<p>The void fraction is calculated as:
+$$\phi = \frac{N_{void}}{N_{total}} \times 100%$$</p>
+
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../guide/xrd.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../guide/kpath.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../tutorials/bi2se3.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../guide/miller.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -220,11 +244,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../guide/xrd.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../guide/kpath.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../tutorials/bi2se3.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../guide/miller.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
