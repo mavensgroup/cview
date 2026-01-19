@@ -1,7 +1,7 @@
 <div id="cover-page">
 <img src="images/cview.svg" class="cover-logo" alt="CView Logo">
 <h1 class="cover-title">CView</h1>
-<p class="cover-subtitle">Structure Visualization & Analysis Tool</p>
+<p class="cover-subtitle">Crystal Structure Visualization & Analysis</p>
 <div class="cover-divider"></div>
 <div class="cover-meta">
 <p><a href="https://mavens-group.github.io/author/rudra-banerjee/"><strong>Rudra Banerjee</strong></a></p>

@@ -168,6 +168,74 @@ html:has(#cover-page) .page-wrapper {
 }
 
 /* ========================================================================
-3. GENERAL TWEAKS
+3. Sidebar Logo Styling
 ======================================================================== */
-/* (Your existing general tweaks remain here) */
+.sidebar-logo-link {
+    display: block;
+    text-align: center;
+    width: 100%;
+    margin-top: 10px;
+    margin-bottom: 20px;
+    text-decoration: none !important; /* Remove underline from link */
+    border: none !important;
+}
+
+.sidebar-logo {
+    width: 30%;
+    max-width: 180px;
+    height: auto;
+    opacity: 0.95;
+    transition: transform 0.2s ease;
+}
+
+.sidebar-logo:hover {
+    transform: scale(1.05);
+    opacity: 1;
+}
+
+/* =========================================
+   HIDE "COVER" TEXT LINK
+   ========================================= */
+/* Since the Logo now serves as the link to the Cover/Home,
+   we hide the first text entry in the sidebar to avoid redundancy.
+*/
+.sidebar-scrollbox .chapter > li:first-child {
+    display: none !important;
+}
+/* /* ========================================= */
+   /* TOP BAR (MAIN PANEL) LOGO */
+   /* ========================================= */ */
+/* [> Ensure the title container uses Flexbox to align icon and text <] */
+/* .menu-title { */
+    /* display: flex !important; */
+    /* align-items: center; */
+    /* justify-content: center; */
+/* } */
+
+/* .top-bar-logo-link { */
+    /* display: flex; [> Removes weird gap under images <] */
+    /* align-items: center; */
+    /* margin-right: 10px; [> Space between logo and text <] */
+    /* text-decoration: none !important; */
+    /* border: none !important; */
+/* } */
+
+/* .top-bar-logo { */
+    /* height: 1.5em; [> Scale relative to the font size <] */
+    /* width: auto; */
+    /* transition: transform 0.2s ease; */
+/* } */
+
+/* .top-bar-logo:hover { */
+    /* transform: scale(1.1); */
+/* } */
+
+/* [> Mobile Tweak: Ensure title text doesn't vanish if logo takes space <] */
+/* @media only screen and (max-width: 600px) { */
+    /* .menu-title { */
+        /* font-size: 1.2rem; [> Slightly smaller text on mobile <] */
+    /* } */
+    /* .top-bar-logo { */
+        /* height: 1.2em; */
+    /* } */
+/* } */
