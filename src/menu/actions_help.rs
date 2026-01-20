@@ -1,24 +1,20 @@
 // src/menu/actions_help.rs
 
 use gtk4::prelude::*;
-use gtk4::{
-  AboutDialog, Application, ApplicationWindow, ButtonsType, MessageDialog, MessageType,
-  ResponseType,
-};
+use gtk4::{AboutDialog, Application, ApplicationWindow, ButtonsType, MessageDialog, MessageType};
 
 pub fn setup(app: &Application, window: &ApplicationWindow) {
-  // --- 1. CONTROLS ACTION ---
-  // Action name: "help_controls" (Mapped to "app.help_controls" in menu)
-  let controls_action = gtk4::gio::SimpleAction::new("help_controls", None);
-  let win_weak_c = window.downgrade();
+    // --- 1. CONTROLS ACTION ---
+    let controls_action = gtk4::gio::SimpleAction::new("help_controls", None);
+    let win_weak_c = window.downgrade();
 
-  controls_action.connect_activate(move |_, _| {
-    let win = match win_weak_c.upgrade() {
-      Some(w) => w,
-      None => return,
-    };
+    controls_action.connect_activate(move |_, _| {
+        let win = match win_weak_c.upgrade() {
+            Some(w) => w,
+            None => return,
+        };
 
-    let info_text = r#"<b>Mouse Controls:</b>
+        let info_text = r#"<b>Mouse Controls:</b>
 • <b>Left Click + Drag:</b> Rotate View
 • <b>Right Click + Drag:</b> Pan View
 • <b>Scroll Wheel:</b> Zoom In/Out
@@ -34,48 +30,62 @@ pub fn setup(app: &Application, window: &ApplicationWindow) {
 • <b>Ctrl + M:</b> Miller Indices Tool
 "#;
 
-    let dialog = MessageDialog::new(
-      Some(&win),
-      gtk4::DialogFlags::MODAL,
-      MessageType::Info,
-      ButtonsType::Ok,
-      "Controls & Shortcuts",
-    );
-    dialog.set_markup(info_text);
-
-    // Connect response to destroy
-    dialog.connect_response(|d, _| {
-      d.destroy();
+        let dialog = MessageDialog::new(
+            Some(&win),
+            gtk4::DialogFlags::MODAL,
+            MessageType::Info,
+            ButtonsType::Ok,
+            "Controls & Shortcuts",
+        );
+        dialog.set_markup(info_text);
+        dialog.connect_response(|d, _| d.destroy());
+        dialog.show();
     });
+    app.add_action(&controls_action);
 
-    dialog.show();
-  });
-  app.add_action(&controls_action);
+    // --- 2. MANUAL ACTION ---
+    let manual_action = gtk4::gio::SimpleAction::new("help_manual", None);
+    let win_weak_m = window.downgrade();
 
-  // --- 2. ABOUT ACTION ---
-  // Action name: "help_about"
-  let about_action = gtk4::gio::SimpleAction::new("help_about", None);
-  let win_weak_a = window.downgrade();
+    manual_action.connect_activate(move |_, _| {
+        let win = match win_weak_m.upgrade() {
+            Some(w) => w,
+            None => return,
+        };
 
-  about_action.connect_activate(move |_, _| {
-    let win = match win_weak_a.upgrade() {
-      Some(w) => w,
-      None => return,
-    };
+        gtk4::show_uri(
+            Some(&win),
+            "https://mavensgroup.github.io/cview/",
+            gtk4::gdk::CURRENT_TIME,
+        );
+    });
+    app.add_action(&manual_action);
 
-    let dialog = AboutDialog::builder()
-      .transient_for(&win)
-      .modal(true)
-      .program_name("CView")
-      .version("0.1.0")
-      .authors(vec!["Rudra".to_string()])
-      .comments("A lightweight Crystal Structure Viewer in Rust & GTK4.")
-      .website("https://github.com/yourusername/cview") // Replace with your repo
-      .logo_icon_name("applications-science")
-      .license_type(gtk4::License::MitX11)
-      .build();
+    // --- 3. ABOUT ACTION (Safe & Portable) ---
+    let about_action = gtk4::gio::SimpleAction::new("help_about", None);
+    let win_weak_a = window.downgrade();
 
-    dialog.show();
-  });
-  app.add_action(&about_action);
+    about_action.connect_activate(move |_, _| {
+        let win = match win_weak_a.upgrade() {
+            Some(w) => w,
+            None => return,
+        };
+
+        let dialog = AboutDialog::builder()
+            .transient_for(&win)
+            .modal(true)
+            .program_name("CView")
+            .version("0.1.0")
+            .copyright("© 2026 Rudra")
+            .authors(vec!["Rudra".to_string()])
+            .comments("A lightweight Crystal Structure Viewer in Rust & GTK4.")
+            .logo_icon_name("applications-science")
+            .website("https://mavensgroup.github.io/cview/")
+            .website_label("Manual & Issue Tracker") // Combined for portability
+            .license_type(gtk4::License::MitX11)
+            .build();
+
+        dialog.show();
+    });
+    app.add_action(&about_action);
 }

@@ -1,6 +1,7 @@
 use crate::model::{Atom, Structure};
 use std::fs;
 use std::io;
+use std::io::Write;
 
 const BOHR_TO_ANG: f64 = 0.5291772109;
 
@@ -408,4 +409,61 @@ fn clean_and_parse_first_number(raw: &str) -> Option<f64> {
     let float_str = token.to_lowercase().replace('d', "e");
 
     float_str.parse::<f64>().ok()
+}
+
+pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
+    let mut file = std::fs::File::create(path)?;
+
+    // Basic Control Block
+    writeln!(file, "&CONTROL")?;
+    writeln!(file, "  calculation = 'scf'")?;
+    writeln!(file, "  pseudo_dir = './'")?;
+    writeln!(file, "  outdir = './out'")?;
+    writeln!(file, "  prefix = 'calc'")?;
+    writeln!(file, "/")?;
+
+    // System Block
+    writeln!(file, "&SYSTEM")?;
+    writeln!(file, "  ibrav = 0")?;
+    writeln!(file, "  nat = {}", structure.atoms.len())?;
+
+    // Count unique types
+    let mut unique_els: Vec<String> = Vec::new();
+    for atom in &structure.atoms {
+        if !unique_els.contains(&atom.element) {
+            unique_els.push(atom.element.clone());
+        }
+    }
+    writeln!(file, "  ntyp = {}", unique_els.len())?;
+    writeln!(file, "  ecutwfc = 60.0")?;
+    writeln!(file, "/")?;
+
+    // Electrons Block
+    writeln!(file, "&ELECTRONS")?;
+    writeln!(file, "  conv_thr = 1.0d-8")?;
+    writeln!(file, "/")?;
+
+    // Atomic Species (Placeholder masses and pseudos)
+    writeln!(file, "ATOMIC_SPECIES")?;
+    for el in &unique_els {
+        writeln!(file, " {:<3}  1.000  {}.UPF", el, el)?;
+    }
+
+    // Cell Parameters
+    writeln!(file, "CELL_PARAMETERS (angstrom)")?;
+    for vec in &structure.lattice {
+        writeln!(file, "  {:15.9} {:15.9} {:15.9}", vec[0], vec[1], vec[2])?;
+    }
+
+    // Atomic Positions
+    writeln!(file, "ATOMIC_POSITIONS (angstrom)")?;
+    for atom in &structure.atoms {
+        writeln!(
+            file,
+            "  {:<3}  {:15.9} {:15.9} {:15.9}",
+            atom.element, atom.position[0], atom.position[1], atom.position[2]
+        )?;
+    }
+
+    Ok(())
 }
