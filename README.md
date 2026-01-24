@@ -100,16 +100,16 @@ CView automatically detects file types based on extension and content.
 * **Build Tools:** Rust toolchain (`cargo`) and GTK4 development libraries.
 
 ### Building from Source
-```bash
-# Clone the repository
-git clone [https://github.com/mavensgroup/cview.git](https://github.com/mavensgroup/cview.git)
-cd cview
-```
 
-### Build and run with optimizations
 ```bash
+sudo dnf install gcc gtk4-devel libadwaita-devel
+git clone https://github.com/mavensgroup/cview.git
+cd cview
 cargo run --release
 ```
+
+After the first run, it can be run from anywhere in the system just by using `cview` in your
+trminal.
 
 ---
 ## ❓ Troubleshooting
