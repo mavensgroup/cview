@@ -43,7 +43,10 @@ CView implements rigorous algorithms to ensure physical accuracy for computation
 * **Intensity Calculation:** Peak intensities are derived from the **Structure Factor** formalism:
     $$I \propto |F_{hkl}|^2 \cdot LP(\theta)$$
     Where $F_{hkl}$ is the structure factor summed over all atoms $j$:
-    $$F_{hkl} = \sum_{j} f_j \exp[2\pi i (hx_j + ky_j + lz_j)]$$
+
+    $$
+    F_{hkl} = \sum_{j} f_j \exp[2\pi i (hx_j + ky_j + lz_j)]
+    $$
 * **Corrections:** Includes the **Lorentz-Polarization (LP) factor** for powder diffraction:
     $$LP(\theta) = \frac{1 + \cos^2(2\theta)}{\sin^2(\theta)\cos(\theta)}$$
 * **Output:** Generates $2\theta$ vs. Intensity plots suitable for comparing theoretical structures against experimental patterns.
