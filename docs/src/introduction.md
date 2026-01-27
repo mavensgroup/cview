@@ -27,10 +27,10 @@ CView is not just a viewer; it is a **pre-calculation validator**. It focuses on
 
 | Feature | Description |
 | :--- | :--- |
-| ** Fast & Lightweight** | Built on Rust/GTK4. No GPU drivers required. Runs on any laptop. |
-| ** Analysis First** | Dedicated tools for [K-Paths](guide/kpath.md), [Slabs](guide/slabs.md), and [Void Analysis](guide/voids.md). |
-| ** DFT Ready** | Native support for VASP, Quantum Espresso, and SPRKKR formats. |
-| ** Publication Quality** | Export high-resolution, transparent PNGs and PDFs using PBR rendering. |
+| **Fast & Lightweight** | Built on Rust/GTK4. No GPU drivers required. Runs on any laptop. |
+| **Analysis First** | Dedicated tools for [K-Paths](guide/kpath.md), [Slabs](guide/slabs.md), and [Void Analysis](guide/voids.md). |
+| **DFT Ready** | Native support for VASP, Quantum Espresso, and SPRKKR formats. |
+| **Publication Quality** | Export high-resolution, transparent PNGs and PDFs using PBR rendering. |
 
 ---
 
