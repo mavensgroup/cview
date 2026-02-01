@@ -112,7 +112,10 @@ cargo run --release
 ```
 
 After the first run, it can be run from anywhere in the system just by using `cview` in your
-trminal.
+terminal.
+
+### Documentation
+[CView Documentation](https://mavensgroup.github.io/cview/)
 
 ---
 ## ❓ Troubleshooting
@@ -127,7 +130,7 @@ trminal.
 ---
 
 ## 📚 Citation
-   If you use CView in your research, please cite:[CView](https://github.com/mavensgroup/cview)
+   If you use CView in your research, please cite: [CView](https://github.com/mavensgroup/cview)
    repo.
 
 ---
