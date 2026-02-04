@@ -2,8 +2,10 @@
 
 [package]
 name = "cview"
-version = "0.1.0"
+version = "0.4.0"
 edition = "2021"
+license = "MIT"  # Or "GPL-3.0", "Apache-2.0", etc.
+description = "Crystal Structure Visualization & Analysis"
 
 [dependencies]
 gtk4 = { version = "0.8", features = ["v4_6"] }
@@ -27,3 +29,29 @@ opt-level = 3
 lto = true
 codegen-units = 1
 strip = true
+
+
+[package.metadata.packager]
+product_name = "CView"
+identifier = "org.mavensgroup.cview"
+version = "0.2.0"
+before_packaging_command = "cargo build --release"
+resources = ["assets"]  # This copies the whole assets folder into the package
+
+# CHANGE THIS LINE:
+icons = ["assets/org.mavensgroup.cview.png"]
+
+[package.metadata.packager.deb]
+section = "utils"
+depends = ["libgtk-4-1", "libadwaita-1-0"]
+
+[package.metadata.packager.rpm]
+requires = ["gtk4", "libadwaita"]
+
+[package.metadata.generate-rpm]
+assets = [
+    { source = "target/release/cview", dest = "/usr/bin/cview", mode = "755" },
+    { source = "assets/org.mavensgroup.cview.desktop", dest = "/usr/share/applications/org.mavensgroup.cview.desktop", mode = "644" },
+    { source = "assets/org.mavensgroup.cview.svg", dest = "/usr/share/icons/hicolor/scalable/apps/org.mavensgroup.cview.svg", mode = "644" }
+]
+auto-req = "yes"

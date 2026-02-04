@@ -75,14 +75,13 @@ pub fn setup(app: &Application, window: &ApplicationWindow) {
             .transient_for(&win)
             .modal(true)
             .program_name("CView")
-            .version("0.1.0")
+            .version(env!("CARGO_PKG_VERSION"))
             .copyright("© 2026 Rudra")
             .authors(vec!["Rudra".to_string()])
-            .comments("A lightweight Crystal Structure Viewer in Rust & GTK4.")
-            .logo_icon_name("applications-science")
+            .comments("Crystal Structure Visualization and Analysis")
+            .logo_icon_name("org.mavensgroup.cview")
             .website("https://mavensgroup.github.io/cview/")
-            .website_label("Manual & Issue Tracker") // Combined for portability
-            .license_type(gtk4::License::MitX11)
+            .license_type(gtk4::License::Gpl30)
             .build();
 
         dialog.show();

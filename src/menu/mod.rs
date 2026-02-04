@@ -98,6 +98,7 @@ pub fn build_menu_and_actions(
     // --- HELP MENU ---
     let help_menu = gtk4::gio::Menu::new();
     help_menu.append(Some("Controls & Shortcuts"), Some("app.help_controls"));
+    help_menu.append(Some("Manual"), Some("app.help_manual"));
     help_menu.append(Some("About"), Some("app.help_about"));
     root_model.append_submenu(Some("Help"), &help_menu);
 

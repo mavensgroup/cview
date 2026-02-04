@@ -47,7 +47,6 @@ where
         let mut i_sum = 0.0;
         for p in peaks {
             let x = t - p.two_theta;
-            // Optimization: Only calc Gaussian if close to peak
             if x.abs() < 5.0 * sigma {
                 i_sum += p.intensity * f64::exp(-0.5 * (x / sigma).powi(2));
             }
@@ -59,26 +58,30 @@ where
     // 2. NORMALIZE Simulation to 0-100%
     let max_sim = raw_curve.iter().map(|(_, y)| *y).fold(0.0f64, f64::max);
     let scale = if max_sim > 1e-6 { 100.0 / max_sim } else { 1.0 };
-
     let sim_curve: Vec<(f64, f64)> = raw_curve.into_iter().map(|(t, i)| (t, i * scale)).collect();
 
     // 3. Draw Chart Frame
     root.fill(&WHITE)?;
 
     let mut chart = ChartBuilder::on(root)
-        .caption("XRD Pattern Comparison", ("sans-serif", 20).into_font())
-        .margin(10)
-        .x_label_area_size(40)
-        .y_label_area_size(40)
-        .build_cartesian_2d(settings.min_2theta..settings.max_2theta, 0.0..115.0)?; // Extra Y space for labels
+        .caption("XRD Pattern Comparison", ("sans-serif", 26).into_font())
+        .margin(20)
+        .x_label_area_size(55)
+        .y_label_area_size(65)
+        .build_cartesian_2d(settings.min_2theta..settings.max_2theta, 0.0..115.0)?;
 
+    // 4. CONFIGURE MESH (Fixed)
     chart
         .configure_mesh()
-        .x_desc("2Theta (deg)")
+        // Sets the font for the numbers (10, 20, 30...)
+        .label_style(("sans-serif", 18).into_font())
+        // Sets the font for "2θ (deg)" and "Intensity (%)"
+        .axis_desc_style(("sans-serif", 22).into_font())
+        .x_desc("2θ (deg)")
         .y_desc("Intensity (%)")
         .draw()?;
 
-    // 4. Draw Experimental Data (Background, Grey)
+    // 5. Draw Experimental Data
     if let Some(data) = exp_data {
         let label_name = format!("Exp: {}", data.name);
 
@@ -94,13 +97,13 @@ where
             .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &GREY));
     }
 
-    // 5. Draw Simulation (Foreground, Red)
+    // 6. Draw Simulation
     chart
         .draw_series(LineSeries::new(sim_curve, RED.stroke_width(2)))?
         .label("Simulation")
         .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
 
-    // 6. DRAW LABELS (h k l) on top of peaks
+    // 7. Draw Peak Labels
     let visible_peaks: Vec<&XRDPattern> = peaks
         .iter()
         .filter(|p| {
@@ -113,22 +116,21 @@ where
     chart.draw_series(visible_peaks.iter().enumerate().map(|(i, p)| {
         let (h, k, l) = p.hkl[0];
         let label = format!("({} {} {})", h, k, l);
-
-        let y_offset = if i % 2 == 0 { -15 } else { -28 };
+        let y_offset = if i % 2 == 0 { -20 } else { -35 };
 
         EmptyElement::at((p.two_theta, p.intensity))
-            + Text::new(label, (0, y_offset), ("sans-serif", 10).into_font())
+            + Text::new(label, (0, y_offset), ("sans-serif", 14).into_font())
     }))?;
 
     chart
         .configure_series_labels()
+        .label_font(("sans-serif", 16).into_font())
         .background_style(&WHITE.mix(0.8))
         .border_style(&BLACK)
         .draw()?;
 
     Ok(())
 }
-
 pub fn build(state: Rc<RefCell<AppState>>) -> gtk4::Box {
     let root = gtk4::Box::new(Orientation::Horizontal, 15);
     root.set_margin_top(15);

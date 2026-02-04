@@ -6,8 +6,8 @@ use crate::ui::show_preferences_window;
 use gtk4::prelude::*;
 use gtk4::{Application, ApplicationWindow, DrawingArea, Notebook};
 use std::cell::RefCell;
-use std::f64::consts::PI;
 use std::rc::Rc;
+// Note: std::f64::consts::PI is removed as we now use degrees (90.0) instead of radians (PI/2)
 
 pub fn setup(
     app: &Application,
@@ -43,7 +43,7 @@ pub fn setup(
     app.add_action(&act_reset);
 
     // 2. View Along Axes
-    // Along A
+    // Along A -> Rotate Y by -90 degrees
     let act_a = gtk4::gio::SimpleAction::new("view_along_a", None);
     let s_a = state.clone();
     let nb_a = notebook.downgrade();
@@ -52,14 +52,15 @@ pub fn setup(
         if let Some(da) = get_da(&nb_a) {
             let mut st = s_a.borrow_mut();
             let tab = st.active_tab_mut();
+            // 0, -90 degrees (was -PI/2 radians)
             tab.view.rot_x = 0.0;
-            tab.view.rot_y = -PI / 2.0;
+            tab.view.rot_y = -90.0;
             da.queue_draw();
         }
     });
     app.add_action(&act_a);
 
-    // Along B
+    // Along B -> Rotate X by 90 degrees
     let act_b = gtk4::gio::SimpleAction::new("view_along_b", None);
     let s_b = state.clone();
     let nb_b = notebook.downgrade();
@@ -68,14 +69,15 @@ pub fn setup(
         if let Some(da) = get_da(&nb_b) {
             let mut st = s_b.borrow_mut();
             let tab = st.active_tab_mut();
-            tab.view.rot_x = PI / 2.0;
+            // 90, 0 degrees (was PI/2 radians)
+            tab.view.rot_x = 90.0;
             tab.view.rot_y = 0.0;
             da.queue_draw();
         }
     });
     app.add_action(&act_b);
 
-    // Along C
+    // Along C -> Reset Rotation (0, 0)
     let act_c = gtk4::gio::SimpleAction::new("view_along_c", None);
     let s_c = state.clone();
     let nb_c = notebook.downgrade();
@@ -137,12 +139,11 @@ pub fn setup(
     let nb_pref = notebook.downgrade();
     let win_weak = window.downgrade();
 
-    // FIX: Clone the drawing area reference to own it before moving it into the closure
+    // Preserve the fallback logic
     let da_fallback = drawing_area.clone();
 
     act_pref.connect_activate(move |_, _| {
         if let Some(win) = win_weak.upgrade() {
-            // Now we can use da_fallback because we own it
             let da = get_da(&nb_pref).unwrap_or(da_fallback.clone());
             show_preferences_window(&win, s_pref.clone(), da);
         }
@@ -157,16 +158,11 @@ pub fn setup(
     act_boundary.connect_activate(move |_, _| {
         if let Some(da) = get_da(&nb_bound) {
             let mut st = s_bound.borrow_mut();
-
-            // FIX: Copy the index BEFORE mutable borrow
+            // Important: We access the index first to print it safely
             let idx = st.active_tab_index;
-
-            // Now borrow tab mutably
             let tab = st.active_tab_mut();
 
             tab.view.show_full_unit_cell = !tab.view.show_full_unit_cell;
-
-            // Use 'idx' instead of 'st.active_tab_index'
             println!("Tab {} Full Cell: {}", idx, tab.view.show_full_unit_cell);
 
             da.queue_draw();

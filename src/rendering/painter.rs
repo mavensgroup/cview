@@ -3,6 +3,7 @@
 use super::primitives::*;
 use super::scene::RenderAtom;
 use crate::model::elements::{get_atom_cov, get_atom_properties};
+use crate::physics::operations::miller_algo::MillerMath;
 use crate::state::TabState;
 use gtk4::cairo;
 use std::cmp::Ordering;
@@ -44,9 +45,9 @@ pub fn draw_unit_cell(cr: &cairo::Context, corners: &[[f64; 2]], is_export: bool
 pub fn draw_structure(
     cr: &cairo::Context,
     atoms: &[RenderAtom],
-    tab: &TabState, // CHANGED: Now takes the specific TabState
+    tab: &TabState,
     scale: f64,
-    _is_export: bool,
+    is_export: bool, // UPDATED: Renamed from _is_export to use the flag
 ) {
     // Access volatile view settings from the tab
     let tolerance = if tab.view.bond_cutoff < 0.1 || tab.view.bond_cutoff > 2.0 {
@@ -197,28 +198,42 @@ pub fn draw_structure(
             cr.restore().unwrap();
         }
 
-        // Sprite
-        if !cache_access.contains_key(&atom.element) {
-            let sprite = create_atom_sprite(
-                rgb.0,
-                rgb.1,
-                rgb.2,
-                tab.style.metallic,
-                tab.style.roughness,
-                tab.style.transmission,
+        // --- RENDER STRATEGY SWITCH ---
+        if is_export {
+            // PURE VECTOR MODE (Publication Quality)
+            // Uses mathematical gradients instead of sprites
+            draw_atom_vector(
+                cr,
+                atom.screen_pos[0],
+                atom.screen_pos[1],
+                target_atom_cov,
+                rgb,
             );
-            cache_access.insert(atom.element.clone(), sprite);
-        }
-        let sprite = cache_access.get(&atom.element).unwrap();
+        } else {
+            // SPRITE MODE (High Performance)
+            // Uses cached bitmaps for 60 FPS rotation
+            if !cache_access.contains_key(&atom.element) {
+                let sprite = create_atom_sprite(
+                    rgb.0,
+                    rgb.1,
+                    rgb.2,
+                    tab.style.metallic,
+                    tab.style.roughness,
+                    tab.style.transmission,
+                );
+                cache_access.insert(atom.element.clone(), sprite);
+            }
+            let sprite = cache_access.get(&atom.element).unwrap();
 
-        cr.save().unwrap();
-        cr.translate(atom.screen_pos[0], atom.screen_pos[1]);
-        let scale_factor = (target_atom_cov * 2.0) / sprite_size;
-        cr.scale(scale_factor, scale_factor);
-        cr.set_source_surface(sprite, -sprite_size / 2.0, -sprite_size / 2.0)
-            .unwrap();
-        cr.paint().unwrap();
-        cr.restore().unwrap();
+            cr.save().unwrap();
+            cr.translate(atom.screen_pos[0], atom.screen_pos[1]);
+            let scale_factor = (target_atom_cov * 2.0) / sprite_size;
+            cr.scale(scale_factor, scale_factor);
+            cr.set_source_surface(sprite, -sprite_size / 2.0, -sprite_size / 2.0)
+                .unwrap();
+            cr.paint().unwrap();
+            cr.restore().unwrap();
+        }
     }
 }
 
@@ -347,9 +362,10 @@ pub fn draw_axes(cr: &cairo::Context, tab: &TabState, width: f64, height: f64) {
     cr.fill().unwrap();
 }
 
+// --- 4. DIAMOND STANDARD: Miller Planes ---
 pub fn draw_miller_planes(
     cr: &cairo::Context,
-    tab: &TabState, // CHANGED
+    tab: &TabState,
     lattice_corners: &[[f64; 2]],
     _scale: f64,
     _width: f64,
@@ -359,6 +375,7 @@ pub fn draw_miller_planes(
         return;
     }
 
+    // Vectors defining the Unit Cell Box on Screen
     let p_origin = lattice_corners[0];
     let p_x_vec = [
         lattice_corners[4][0] - p_origin[0],
@@ -374,86 +391,47 @@ pub fn draw_miller_planes(
     ];
 
     for plane in &tab.miller_planes {
-        let h = plane.h as f64;
-        let k = plane.k as f64;
-        let l = plane.l as f64;
+        // 1. DELEGATE TO THE BRAIN
+        let math = MillerMath::new(plane.h, plane.k, plane.l);
 
-        if h == 0. && k == 0. && l == 0. {
+        // This returns fractional coordinates [0..1, 0..1, 0..1]
+        // sorted and ready to draw.
+        let poly_3d = math.get_intersection_polygon();
+
+        if poly_3d.len() < 3 {
             continue;
         }
 
-        let edges_frac = [
-            ([0., 0., 0.], [1., 0., 0.]),
-            ([0., 0., 0.], [0., 1., 0.]),
-            ([0., 0., 0.], [0., 0., 1.]),
-            ([1., 0., 0.], [0., 1., 0.]),
-            ([1., 0., 0.], [0., 0., 1.]),
-            ([0., 1., 0.], [1., 0., 0.]),
-            ([0., 1., 0.], [0., 0., 1.]),
-            ([0., 0., 1.], [1., 0., 0.]),
-            ([0., 0., 1.], [0., 1., 0.]),
-            ([1., 1., 0.], [0., 0., 1.]),
-            ([1., 0., 1.], [0., 1., 0.]),
-            ([0., 1., 1.], [1., 0., 0.]),
-        ];
+        // 2. Map 3D Fractional -> 2D Screen
+        let poly_points: Vec<[f64; 2]> = poly_3d
+            .iter()
+            .map(|p| {
+                let u = p[0];
+                let v = p[1];
+                let w = p[2];
 
-        let mut poly_points: Vec<[f64; 2]> = Vec::new();
+                let sx = p_origin[0] + u * p_x_vec[0] + v * p_y_vec[0] + w * p_z_vec[0];
+                let sy = p_origin[1] + u * p_x_vec[1] + v * p_y_vec[1] + w * p_z_vec[1];
+                [sx, sy]
+            })
+            .collect();
 
-        for (start, dir) in edges_frac.iter() {
-            let denom = h * dir[0] + k * dir[1] + l * dir[2];
-            let numer = 1.0 - (h * start[0] + k * start[1] + l * start[2]);
-
-            if denom.abs() > 1e-6 {
-                let t = numer / denom;
-                if t >= -0.001 && t <= 1.001 {
-                    let u = start[0] + t * dir[0];
-                    let v = start[1] + t * dir[1];
-                    let w = start[2] + t * dir[2];
-
-                    let sx = p_origin[0] + u * p_x_vec[0] + v * p_y_vec[0] + w * p_z_vec[0];
-                    let sy = p_origin[1] + u * p_x_vec[1] + v * p_y_vec[1] + w * p_z_vec[1];
-
-                    poly_points.push([sx, sy]);
-                }
-            }
+        // 3. Draw
+        cr.set_source_rgba(0.0, 0.5, 1.0, 0.4); // Blue transparent
+        cr.move_to(poly_points[0][0], poly_points[0][1]);
+        for p in poly_points.iter().skip(1) {
+            cr.line_to(p[0], p[1]);
         }
+        cr.close_path();
+        cr.fill_preserve().unwrap();
 
-        if poly_points.len() >= 3 {
-            let cen_x: f64 =
-                poly_points.iter().map(|p| p[0]).sum::<f64>() / poly_points.len() as f64;
-            let cen_y: f64 =
-                poly_points.iter().map(|p| p[1]).sum::<f64>() / poly_points.len() as f64;
-
-            poly_points.sort_by(|a, b| {
-                let ang_a = (a[1] - cen_y).atan2(a[0] - cen_x);
-                let ang_b = (b[1] - cen_y).atan2(b[0] - cen_x);
-                ang_a.partial_cmp(&ang_b).unwrap()
-            });
-
-            poly_points.dedup_by(|a, b| (a[0] - b[0]).abs() < 1e-4 && (a[1] - b[1]).abs() < 1e-4);
-
-            if poly_points.len() < 3 {
-                continue;
-            }
-
-            cr.set_source_rgba(0.0, 0.5, 1.0, 0.4);
-            cr.move_to(poly_points[0][0], poly_points[0][1]);
-            for p in poly_points.iter().skip(1) {
-                cr.line_to(p[0], p[1]);
-            }
-            cr.close_path();
-            cr.fill_preserve().unwrap();
-
-            cr.set_source_rgba(0.0, 0.2, 0.8, 0.8);
-            cr.set_line_width(2.0);
-            cr.stroke().unwrap();
-        }
+        cr.set_source_rgba(0.0, 0.2, 0.8, 0.8); // Blue Outline
+        cr.set_line_width(2.0);
+        cr.stroke().unwrap();
     }
 }
-
 // --- NEW FUNCTION: Draw Box Selection ---
 pub fn draw_selection_box(cr: &cairo::Context, tab: &TabState) {
-    // CHANGED
     if let Some(((start_x, start_y), (curr_x, curr_y))) = tab.interaction.selection_box {
         let width = curr_x - start_x;
         let height = curr_y - start_y;

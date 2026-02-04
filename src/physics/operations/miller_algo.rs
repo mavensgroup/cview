@@ -1,195 +1,197 @@
 // src/physics/operations/miller_algo.rs
-use nalgebra::{Matrix3, Vector3};
+//
+use nalgebra::Vector3;
 
-// --- VISUALIZATION HELPERS (Used by painter.rs) ---
-
-/// Get the intersection points of the Miller Plane with the Unit Cell (0..1 box)
-/// Returns: (List of vertices in Cartesian coords, Normal Vector)
-pub fn get_plane_geometry(
-  h: i32,
-  k: i32,
-  l: i32,
-  lattice: [[f64; 3]; 3],
-) -> Option<(Vec<[f64; 3]>, [f64; 3])> {
-  if h == 0 && k == 0 && l == 0 {
-    return None;
-  }
-
-  let h_f = h as f64;
-  let k_f = k as f64;
-  let l_f = l as f64;
-
-  // 1. Calculate Normal Vector using Lattice Basis (Reciprocal direction)
-  // Normal = h(b x c) + k(c x a) + l(a x b)
-  let v_a = Vector3::from(lattice[0]);
-  let v_b = Vector3::from(lattice[1]);
-  let v_c = Vector3::from(lattice[2]);
-
-  let b_x_c = v_b.cross(&v_c);
-  let c_x_a = v_c.cross(&v_a);
-  let a_x_b = v_a.cross(&v_b);
-
-  let normal_vec = b_x_c.scale(h_f) + c_x_a.scale(k_f) + a_x_b.scale(l_f);
-
-  // Normalize normal safely
-  let normal: [f64; 3] = normal_vec
-    .try_normalize(1e-9)
-    .unwrap_or(Vector3::y()) // Default if zero length
-    .into();
-
-  // 2. Define the 12 edges of the unit cube (Start Point, Direction)
-  let edges = [
-    ([0., 0., 0.], [1., 0., 0.]),
-    ([0., 0., 0.], [0., 1., 0.]),
-    ([0., 0., 0.], [0., 0., 1.]),
-    ([1., 0., 0.], [0., 1., 0.]),
-    ([1., 0., 0.], [0., 0., 1.]),
-    ([0., 1., 0.], [1., 0., 0.]),
-    ([0., 1., 0.], [0., 0., 1.]),
-    ([0., 0., 1.], [1., 0., 0.]),
-    ([0., 0., 1.], [0., 1., 0.]),
-    ([1., 1., 0.], [0., 0., 1.]),
-    ([1., 0., 1.], [0., 1., 0.]),
-    ([0., 1., 1.], [1., 0., 0.]),
-  ];
-
-  let mut points: Vec<[f64; 3]> = Vec::new();
-
-  // 3. Find intersections: h*x + k*y + l*z = 1
-  for (start, dir) in edges.iter() {
-    // Parametric line: P = start + t*dir
-    // Plane eq: h(sx + t*dx) + ... = 1
-    let p_dot_d = h_f * dir[0] + k_f * dir[1] + l_f * dir[2];
-    let p_dot_s = h_f * start[0] + k_f * start[1] + l_f * start[2];
-
-    if p_dot_d.abs() > 1e-6 {
-      let t = (1.0 - p_dot_s) / p_dot_d;
-      if t >= -0.001 && t <= 1.001 {
-        // Point in Fractional Coords
-        let fx = start[0] + t * dir[0];
-        let fy = start[1] + t * dir[1];
-        let fz = start[2] + t * dir[2];
-
-        // Convert to Cartesian
-        let cx = fx * lattice[0][0] + fy * lattice[1][0] + fz * lattice[2][0];
-        let cy = fx * lattice[0][1] + fy * lattice[1][1] + fz * lattice[2][1];
-        let cz = fx * lattice[0][2] + fy * lattice[1][2] + fz * lattice[2][2];
-
-        points.push([cx, cy, cz]);
-      }
-    }
-  }
-
-  if points.len() < 3 {
-    return None;
-  }
-
-  // Deduplicate
-  points.sort_by(|a, b| a[0].partial_cmp(&b[0]).unwrap_or(std::cmp::Ordering::Equal));
-  points.dedup_by(|a, b| {
-    (a[0] - b[0]).abs() < 1e-4 && (a[1] - b[1]).abs() < 1e-4 && (a[2] - b[2]).abs() < 1e-4
-  });
-
-  if points.len() < 3 {
-    return None;
-  }
-
-  Some((points, normal))
+#[derive(Clone, Copy)]
+pub struct MillerMath {
+    pub h: i32,
+    pub k: i32,
+    pub l: i32,
 }
 
-// --- PHYSICS LOGIC (Basis Finding) ---
+impl MillerMath {
+    pub fn new(h: i32, k: i32, l: i32) -> Self {
+        Self { h, k, l }
+    }
 
-/// Calculates the basis vectors for a Miller plane (h k l).
-/// Returns (u_vec, v_vec, w_vec)
-pub fn find_plane_basis(
-  h: i32,
-  k: i32,
-  l: i32,
-  lattice: [[f64; 3]; 3],
-) -> Result<(Vector3<i32>, Vector3<i32>, Vector3<i32>), String> {
-  if h == 0 && k == 0 && l == 0 {
-    return Err("Indices cannot be (0,0,0)".to_string());
-  }
+    pub fn normal(&self) -> Vector3<f64> {
+        let n = Vector3::new(self.h as f64, self.k as f64, self.l as f64);
+        if n.norm() < 1e-6 {
+            Vector3::new(0.0, 0.0, 1.0)
+        } else {
+            n.normalize()
+        }
+    }
 
-  let mat_orig = Matrix3::new(
-    lattice[0][0],
-    lattice[0][1],
-    lattice[0][2],
-    lattice[1][0],
-    lattice[1][1],
-    lattice[1][2],
-    lattice[2][0],
-    lattice[2][1],
-    lattice[2][2],
-  );
+    // ==========================================
+    // PART A: PHYSICS ENGINE
+    // ==========================================
+    pub fn find_basis(&self) -> Result<(Vector3<i32>, Vector3<i32>, Vector3<i32>), String> {
+        let h = self.h;
+        let k = self.k;
+        let l = self.l;
 
-  // 1. Search for In-Plane Vectors (h*u + k*v + l*w = 0)
-  let limit = 4;
-  let mut candidates = Vec::new();
-
-  for u in -limit..=limit {
-    for v in -limit..=limit {
-      for w in -limit..=limit {
-        if u == 0 && v == 0 && w == 0 {
-          continue;
+        if h == 0 && k == 0 && l == 0 {
+            return Err("Miller indices cannot be (0,0,0)".to_string());
         }
 
-        if h * u + k * v + l * w == 0 {
-          let vec_int = Vector3::new(u as f64, v as f64, w as f64);
-          // Check physical length in Cartesian space
-          let cart = mat_orig.transpose() * vec_int;
-          let len_sq = cart.norm_squared();
-          candidates.push((Vector3::new(u, v, w), len_sq));
+        // 1. Find Surface Vectors (u, v)
+        let limit = 10;
+        let mut candidates = Vec::new();
+
+        for x in -limit..=limit {
+            for y in -limit..=limit {
+                for z in -limit..=limit {
+                    if x == 0 && y == 0 && z == 0 {
+                        continue;
+                    }
+
+                    if h * x + k * y + l * z == 0 {
+                        candidates.push(Vector3::new(x, y, z));
+                    }
+                }
+            }
         }
-      }
-    }
-  }
 
-  candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        // FIX: Use dot product for integer squared magnitude
+        candidates.sort_by(|a, b| a.dot(a).cmp(&b.dot(b)));
 
-  if candidates.len() < 2 {
-    return Err("Could not find surface vectors. indices too high?".to_string());
-  }
-
-  let u_vec = candidates[0].0;
-
-  // Find v_vec (shortest non-parallel to u)
-  let mut v_vec = Vector3::zeros();
-  let mut found_v = false;
-  for cand in candidates.iter().skip(1) {
-    let t = cand.0;
-    // nalgebra supports cross product for integer vectors directly
-    let cp = u_vec.cross(&t);
-    if cp.x != 0 || cp.y != 0 || cp.z != 0 {
-      v_vec = t;
-      found_v = true;
-      break;
-    }
-  }
-
-  if !found_v {
-    return Err("Could not define primitive surface unit cell.".to_string());
-  }
-
-  // 2. Search for Stacking Vector (Shortest vector NOT in plane)
-  let mut w_vec = Vector3::zeros();
-  let mut min_len_w = f64::MAX;
-
-  for u in -limit..=limit {
-    for v in -limit..=limit {
-      for w in -limit..=limit {
-        if h * u + k * v + l * w != 0 {
-          let vec_int = Vector3::new(u as f64, v as f64, w as f64);
-          let cart = mat_orig.transpose() * vec_int;
-          let len_sq = cart.norm_squared();
-          if len_sq < min_len_w {
-            min_len_w = len_sq;
-            w_vec = Vector3::new(u, v, w);
-          }
+        if candidates.is_empty() {
+            return Err("Could not find surface vectors. Indices might be too high.".to_string());
         }
-      }
-    }
-  }
 
-  Ok((u_vec, v_vec, w_vec))
+        let u_vec = candidates[0];
+
+        // Find v_vec: The shortest vector NOT parallel to u_vec
+        let mut v_vec = Vector3::zeros();
+        let mut found_v = false;
+
+        for cand in candidates.iter().skip(1) {
+            let cp = u_vec.cross(cand);
+            // Check against zero vector
+            if cp != Vector3::zeros() {
+                v_vec = *cand;
+                found_v = true;
+                break;
+            }
+        }
+
+        if !found_v {
+            return Err("Could not define primitive surface unit cell.".to_string());
+        }
+
+        // 2. Find Stacking Vector (w)
+        let mut w_vec = Vector3::zeros();
+        let mut found_w = false;
+        let w_limit = 10;
+
+        let mut w_candidates = Vec::new();
+
+        for x in -w_limit..=w_limit {
+            for y in -w_limit..=w_limit {
+                for z in -w_limit..=w_limit {
+                    if h * x + k * y + l * z == 1 {
+                        w_candidates.push(Vector3::new(x, y, z));
+                    }
+                }
+            }
+        }
+
+        // FIX: Use dot product for integer squared magnitude
+        w_candidates.sort_by(|a, b| a.dot(a).cmp(&b.dot(b)));
+
+        if !w_candidates.is_empty() {
+            w_vec = w_candidates[0];
+            found_w = true;
+        }
+
+        if !found_w {
+            return Err("Could not find valid stacking vector for these indices.".to_string());
+        }
+
+        Ok((u_vec, v_vec, w_vec))
+    }
+
+    // ==========================================
+    // PART B: VISUALIZATION ENGINE
+    // ==========================================
+    pub fn get_intersection_polygon(&self) -> Vec<[f64; 3]> {
+        if self.h == 0 && self.k == 0 && self.l == 0 {
+            return vec![];
+        }
+
+        let h = self.h as f64;
+        let k = self.k as f64;
+        let l = self.l as f64;
+
+        let edges = [
+            ([0., 0., 0.], [1., 0., 0.]),
+            ([0., 0., 0.], [0., 1., 0.]),
+            ([0., 0., 0.], [0., 0., 1.]),
+            ([1., 0., 0.], [0., 1., 0.]),
+            ([1., 0., 0.], [0., 0., 1.]),
+            ([0., 1., 0.], [1., 0., 0.]),
+            ([0., 1., 0.], [0., 0., 1.]),
+            ([0., 0., 1.], [1., 0., 0.]),
+            ([0., 0., 1.], [0., 1., 0.]),
+            ([1., 1., 0.], [0., 0., 1.]),
+            ([1., 0., 1.], [0., 1., 0.]),
+            ([0., 1., 1.], [1., 0., 0.]),
+        ];
+
+        let mut points = Vec::new();
+
+        for (start, dir) in edges.iter() {
+            let start_val = h * start[0] + k * start[1] + l * start[2];
+            let dir_val = h * dir[0] + k * dir[1] + l * dir[2];
+
+            if dir_val.abs() > 1e-6 {
+                let t = (1.0 - start_val) / dir_val;
+                if t >= -0.0001 && t <= 1.0001 {
+                    points.push([
+                        start[0] + t * dir[0],
+                        start[1] + t * dir[1],
+                        start[2] + t * dir[2],
+                    ]);
+                }
+            }
+        }
+
+        if points.len() < 3 {
+            return vec![];
+        }
+
+        let cx: f64 = points.iter().map(|p| p[0]).sum::<f64>() / points.len() as f64;
+        let cy: f64 = points.iter().map(|p| p[1]).sum::<f64>() / points.len() as f64;
+        let cz: f64 = points.iter().map(|p| p[2]).sum::<f64>() / points.len() as f64;
+        let centroid = Vector3::new(cx, cy, cz);
+
+        let n = Vector3::new(h, k, l).normalize();
+
+        let mut u = if n.x.abs() < 0.9 {
+            Vector3::new(1.0, 0.0, 0.0)
+        } else {
+            Vector3::new(0.0, 1.0, 0.0)
+        };
+        u = n.cross(&u).normalize();
+        let v = n.cross(&u).normalize();
+
+        points.sort_by(|a, b| {
+            let vec_a = Vector3::new(a[0], a[1], a[2]) - centroid;
+            let vec_b = Vector3::new(b[0], b[1], b[2]) - centroid;
+
+            let ang_a = vec_a.dot(&v).atan2(vec_a.dot(&u));
+            let ang_b = vec_b.dot(&v).atan2(vec_b.dot(&u));
+
+            ang_a
+                .partial_cmp(&ang_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        points.dedup_by(|a, b| {
+            (a[0] - b[0]).abs() < 1e-5 && (a[1] - b[1]).abs() < 1e-5 && (a[2] - b[2]).abs() < 1e-5
+        });
+
+        points
+    }
 }
