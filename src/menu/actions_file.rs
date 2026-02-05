@@ -5,6 +5,7 @@ use crate::rendering::export::{export_pdf, export_png};
 use crate::state::AppState;
 use crate::ui::create_tab_content;
 use crate::ui::preferences::show_preferences_window;
+use crate::utils::report; // <--- ADDED: Needed for structure_summary
 use gtk4::prelude::*;
 use gtk4::{
     Application, ApplicationWindow, DrawingArea, FileChooserAction, FileChooserNative, FileFilter,
@@ -75,7 +76,7 @@ pub fn setup(
         filter_struct.add_pattern("*.out");
         dialog.add_filter(&filter_struct);
 
-        // Individual Filters (Optional, but good for clarity)
+        // Individual Filters
         let f_cif = FileFilter::new();
         f_cif.set_name(Some("CIF (*.cif)"));
         f_cif.add_pattern("*.cif");
@@ -215,6 +216,17 @@ pub fn setup(
                                     }
                                     if let Some(iv) = interact_inner.upgrade() {
                                         log_msg(&iv, &format!("Loaded: {}", filename));
+
+                                        // --- ADDED: Print Structure Summary Report ---
+                                        // This ensures the table appears for Menu loads, not just CLI.
+                                        let s = st_rc.borrow();
+                                        // Use active_tab() because we just set/added it above
+                                        let tab = s.active_tab();
+                                        if let Some(strc) = &tab.structure {
+                                            let report_text =
+                                                report::structure_summary(strc, &filename);
+                                            log_msg(&iv, &report_text);
+                                        }
                                     }
                                 }
                                 Err(e) => {
