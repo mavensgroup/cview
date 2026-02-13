@@ -179,10 +179,8 @@ pub fn draw_structure(
         let target_atom_cov = raw_r * tab.style.atom_scale * scale;
 
         // Selection Glow
-        if tab
-            .interaction
-            .selected_indices
-            .contains(&atom.original_index)
+        if tab.interaction.selected_indices.contains(&atom.unique_id)
+        // Changed to unique_id
         {
             cr.save().unwrap();
             let highlight_radius = target_atom_cov + 4.0;

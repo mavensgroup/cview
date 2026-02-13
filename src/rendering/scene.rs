@@ -6,9 +6,11 @@ use nalgebra::{Matrix3, Rotation3, Vector3};
 
 // This struct is used by interactions.rs for hit-testing and painter.rs
 pub struct RenderAtom {
-    pub screen_pos: [f64; 3], // x, y, z (depth)
+    pub screen_pos: [f64; 3], // x, y, z (depth) - after rotation and projection
+    pub cart_pos: [f64; 3],   // Actual Cartesian position (before rotation)
     pub element: String,
-    pub original_index: usize, // Used for selection
+    pub original_index: usize, // Base atom index from structure
+    pub unique_id: usize,      // Unique ID for this specific rendered instance
     pub is_ghost: bool,
 }
 
@@ -119,6 +121,8 @@ pub fn calculate_scene(
     let tol = 0.05;
 
     // --- 4. Process Atoms ---
+    let mut unique_id_counter = 0; // Track unique ID for each atom instance
+
     for (i, atom) in structure.atoms.iter().enumerate() {
         let pos_cart = Vector3::new(atom.position[0], atom.position[1], atom.position[2]);
 
@@ -163,10 +167,14 @@ pub fn calculate_scene(
 
                         render_atoms.push(RenderAtom {
                             screen_pos: [r_pos.x, r_pos.y, r_pos.z],
+                            cart_pos: [cart_vec.x, cart_vec.y, cart_vec.z], // Store actual Cartesian position
                             element: atom.element.clone(),
                             original_index: i,
+                            unique_id: unique_id_counter, // Assign unique ID
                             is_ghost,
                         });
+
+                        unique_id_counter += 1; // Increment for next atom
                     }
                 }
             }

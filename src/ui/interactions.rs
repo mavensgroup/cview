@@ -11,6 +11,7 @@ use gtk4::{
     GestureClick, GestureDrag, PropagationPhase,
 };
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::rc::Rc;
 
 // Helper to append text to the TextView
@@ -154,10 +155,7 @@ pub fn setup_interactions(
                     let ay = atom.screen_pos[1];
 
                     if ax >= min_x && ax <= max_x && ay >= min_y && ay <= max_y {
-                        tab_mut
-                            .interaction
-                            .selected_indices
-                            .insert(atom.original_index);
+                        tab_mut.interaction.selected_indices.insert(atom.unique_id); // Changed to unique_id
                         count += 1;
                     }
                 }
@@ -223,6 +221,7 @@ pub fn setup_interactions(
 
         let mut clicked_index = None;
         let mut min_dist = 40.0;
+        let mut best_z = f64::NEG_INFINITY; // Track depth for overlapping atoms
 
         for atom in &atoms {
             let dx = atom.screen_pos[0] - x;
@@ -230,9 +229,14 @@ pub fn setup_interactions(
 
             let dist = (dx * dx + dy * dy).sqrt();
 
-            if dist < min_dist && dist < 30.0 {
-                min_dist = dist;
-                clicked_index = Some(atom.original_index);
+            // Select closest atom in 2D, or if tied, the one nearest to camera (highest Z)
+            if dist < 30.0 {
+                if dist < min_dist - 1.0 || (dist <= min_dist + 1.0 && atom.screen_pos[2] > best_z)
+                {
+                    min_dist = dist;
+                    best_z = atom.screen_pos[2];
+                    clicked_index = Some(atom.unique_id); // Changed to unique_id
+                }
             }
         }
 
@@ -242,8 +246,30 @@ pub fn setup_interactions(
 
             // Re-borrow active tab for reporting
             let tab = st.active_tab();
-            if let Some(structure) = &tab.structure {
-                let text = report::geometry_analysis(structure, &tab.interaction.selected_indices);
+            if let Some(_structure) = &tab.structure {
+                // Collect selected atoms with their actual 3D Cartesian positions
+                let (atoms_for_analysis, _, _) =
+                    scene::calculate_scene(tab, &st.config, w, h, false, None, None);
+
+                // Build list of selected atoms: (unique_id, element, cartesian_position)
+                let mut selected_atoms: Vec<(usize, String, [f64; 3])> = Vec::new();
+                for selected_uid in &tab.interaction.selected_indices {
+                    if let Some(atom) = atoms_for_analysis
+                        .iter()
+                        .find(|a| a.unique_id == *selected_uid)
+                    {
+                        selected_atoms.push((
+                            atom.unique_id,
+                            atom.element.clone(),
+                            atom.cart_pos, // Use the actual Cartesian position (including shifts)
+                        ));
+                    }
+                }
+
+                // Sort by unique_id for consistent ordering
+                selected_atoms.sort_by_key(|a| a.0);
+
+                let text = report::geometry_analysis_from_positions(&selected_atoms);
                 append_to_console(&console, &text);
             }
 
