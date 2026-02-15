@@ -9,7 +9,7 @@ description = "Crystal Structure Visualization & Analysis"
 
 [dependencies]
 gtk4 = { version = "0.8", features = ["v4_6"] }
-cairo-rs = { version = "0.19", features = ["pdf", "png"] }
+cairo-rs = { version = "0.19", features = ["pdf", "png", "svg"] }
 gdk4 = "0.8"
 moyo = "0.7"
 serde = { version = "1.0", features = ["derive"] }

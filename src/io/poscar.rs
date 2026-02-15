@@ -1,34 +1,9 @@
+// src/io/poscar.rs
+
 use crate::model::structure::{Atom, Structure};
+use crate::utils::linalg::{cart_to_frac, frac_to_cart};
 use std::fs::File;
 use std::io::{self, BufRead, Write};
-// use std::path::Path;
-
-/// Calculates the inverse of a 3x3 matrix (Used by CIF parser and internally)
-pub fn inverse_matrix(m: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
-    let det = m[0][0] * (m[1][1] * m[2][2] - m[2][1] * m[1][2])
-        - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
-        + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
-
-    let inv_det = 1.0 / det;
-
-    [
-        [
-            (m[1][1] * m[2][2] - m[2][1] * m[1][2]) * inv_det,
-            (m[0][2] * m[2][1] - m[0][1] * m[2][2]) * inv_det,
-            (m[0][1] * m[1][2] - m[0][2] * m[1][1]) * inv_det,
-        ],
-        [
-            (m[1][2] * m[2][0] - m[1][0] * m[2][2]) * inv_det,
-            (m[0][0] * m[2][2] - m[0][2] * m[2][0]) * inv_det,
-            (m[1][0] * m[0][2] - m[0][0] * m[1][2]) * inv_det,
-        ],
-        [
-            (m[1][0] * m[2][1] - m[2][0] * m[1][1]) * inv_det,
-            (m[2][0] * m[0][1] - m[0][0] * m[2][1]) * inv_det,
-            (m[0][0] * m[1][1] - m[1][0] * m[0][1]) * inv_det,
-        ],
-    ]
-}
 
 pub fn parse(path: &str) -> io::Result<Structure> {
     let file = File::open(path)?;
@@ -158,7 +133,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
             ))??;
             let parts: Vec<&str> = line.split_whitespace().collect();
 
-            // Fix: Only take first 3 parts (ignores "T T T" flags)
+            // Only take first 3 parts (ignores "T T T" selective dynamics flags)
             if parts.len() < 3 {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -176,24 +151,18 @@ pub fn parse(path: &str) -> io::Result<Structure> {
                 .parse()
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid coordinate"))?;
 
-            let mut position = [c1, c2, c3];
-
-            if is_fractional {
-                let x = c1 * lattice[0][0] + c2 * lattice[1][0] + c3 * lattice[2][0];
-                let y = c1 * lattice[0][1] + c2 * lattice[1][1] + c3 * lattice[2][1];
-                let z = c1 * lattice[0][2] + c2 * lattice[1][2] + c3 * lattice[2][2];
-                position = [x, y, z];
+            let position = if is_fractional {
+                // Convert fractional to Cartesian using nalgebra
+                frac_to_cart([c1, c2, c3], lattice)
             } else {
-                position[0] *= scale;
-                position[1] *= scale;
-                position[2] *= scale;
-            }
+                // Scale Cartesian coordinates
+                [c1 * scale, c2 * scale, c3 * scale]
+            };
 
             atoms.push(Atom {
                 element: element.clone(),
                 position,
                 original_index: atom_id,
-                // Removed is_ghost field
             });
             atom_id += 1;
         }
@@ -208,9 +177,9 @@ pub fn parse(path: &str) -> io::Result<Structure> {
         .join("");
 
     Ok(Structure {
-        lattice, // Used 'lattice', not 'cell'
+        lattice,
         atoms,
-        formula, // Added formula
+        formula,
     })
 }
 
@@ -228,14 +197,12 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
         writeln!(file, "  {:15.9} {:15.9} {:15.9}", vec[0], vec[1], vec[2])?;
     }
 
-    // 4. Species logic (VASP 5)
+    // 4. Species logic (VASP 5 format)
     let mut groups: Vec<(String, usize)> = Vec::new();
     if !structure.atoms.is_empty() {
-        // Group consecutive atoms of same type?
-        // VASP expects grouped atoms. We must sort or group them.
-        // Simple approach: Collect unique elements in order of appearance
+        // Group consecutive atoms of same type
+        // VASP expects grouped atoms - sort by element first
         let mut temp_atoms = structure.atoms.clone();
-        // Stable sort by element to ensure they are grouped
         temp_atoms.sort_by(|a, b| a.element.cmp(&b.element));
 
         let mut current_el = temp_atoms[0].element.clone();
@@ -265,20 +232,17 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
         }
         writeln!(file)?;
 
-        // 5. Mode
-        writeln!(file, "Cartesian")?;
+        // 5. Mode (Direct = fractional coordinates)
+        writeln!(file, "Direct")?;
 
-        // 6. Coordinates (Must match sorted order!)
+        // 6. Coordinates in fractional (must match sorted order!)
         for atom in &temp_atoms {
-            writeln!(
-                file,
-                "  {:15.9} {:15.9} {:15.9}",
-                atom.position[0], atom.position[1], atom.position[2]
-            )?;
+            let frac = cart_to_frac(atom.position, structure.lattice).unwrap_or([0.0, 0.0, 0.0]);
+            writeln!(file, "  {:15.9} {:15.9} {:15.9}", frac[0], frac[1], frac[2])?;
         }
     } else {
         // Empty case
-        writeln!(file, "Cartesian")?;
+        writeln!(file, "Direct")?;
     }
 
     Ok(())

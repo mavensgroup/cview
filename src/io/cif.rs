@@ -1,16 +1,21 @@
+use crate::model::{Atom, Structure};
+use crate::utils::linalg::frac_to_cart;
 use std::fs::File;
+use std::io::Write;
 use std::io::{self, BufRead};
 use std::path::Path;
-use crate::model::{Atom, Structure};
-use std::io::Write;
 
 pub fn parse(path: &str) -> io::Result<Structure> {
     let path = Path::new(path);
     let file = File::open(path)?;
     let reader = io::BufReader::new(file);
 
-    let mut a = 0.0; let mut b = 0.0; let mut c = 0.0;
-    let mut alpha = 90.0; let mut beta = 90.0; let mut gamma = 90.0;
+    let mut a = 0.0;
+    let mut b = 0.0;
+    let mut c = 0.0;
+    let mut alpha = 90.0;
+    let mut beta = 90.0;
+    let mut gamma = 90.0;
 
     let mut symmetry_ops = Vec::new();
     let mut base_atoms = Vec::new();
@@ -23,15 +28,29 @@ pub fn parse(path: &str) -> io::Result<Structure> {
     while let Some(line_res) = lines.next() {
         let line = line_res?;
         let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
 
         // 1. Cell Parameters
-        if trimmed.starts_with("_cell_length_a") { a = parse_cif_val(trimmed); }
-        if trimmed.starts_with("_cell_length_b") { b = parse_cif_val(trimmed); }
-        if trimmed.starts_with("_cell_length_c") { c = parse_cif_val(trimmed); }
-        if trimmed.starts_with("_cell_angle_alpha") { alpha = parse_cif_val(trimmed); }
-        if trimmed.starts_with("_cell_angle_beta") { beta = parse_cif_val(trimmed); }
-        if trimmed.starts_with("_cell_angle_gamma") { gamma = parse_cif_val(trimmed); }
+        if trimmed.starts_with("_cell_length_a") {
+            a = parse_cif_val(trimmed);
+        }
+        if trimmed.starts_with("_cell_length_b") {
+            b = parse_cif_val(trimmed);
+        }
+        if trimmed.starts_with("_cell_length_c") {
+            c = parse_cif_val(trimmed);
+        }
+        if trimmed.starts_with("_cell_angle_alpha") {
+            alpha = parse_cif_val(trimmed);
+        }
+        if trimmed.starts_with("_cell_angle_beta") {
+            beta = parse_cif_val(trimmed);
+        }
+        if trimmed.starts_with("_cell_angle_gamma") {
+            gamma = parse_cif_val(trimmed);
+        }
 
         // 2. Loop Detection
         if trimmed.starts_with("loop_") {
@@ -51,54 +70,71 @@ pub fn parse(path: &str) -> io::Result<Structure> {
             if trimmed.starts_with("data_") || trimmed.starts_with("loop_") {
                 in_loop = false;
             } else {
-                let is_atom_loop = current_loop_headers.iter().any(|h| h.contains("_atom_site_fract_x"));
-                let is_sym_loop = current_loop_headers.iter().any(|h| h.contains("_symmetry_equiv_pos_as_xyz"));
+                let is_atom_loop = current_loop_headers
+                    .iter()
+                    .any(|h| h.contains("_atom_site_fract_x"));
+                let is_sym_loop = current_loop_headers
+                    .iter()
+                    .any(|h| h.contains("_symmetry_equiv_pos_as_xyz"));
 
                 if is_sym_loop {
                     // Robust extraction of symmetry string
                     let full_line = trimmed.replace("'", "").replace("\"", "");
                     // Find where the operation likely starts (contains x, y, z or commas)
-                    if let Some(op_start) = full_line.find(|c: char| c.is_alphabetic() && "xyz".contains(c)) {
-                         // Check if preceded by an index number
-                         if let Some(idx) = full_line[..op_start].rfind(|c: char| c.is_numeric()) {
-                             // likely "96  x, y, z" -> slice from op_start
-                             // But we need to be careful not to slice off a minus sign like " -x"
-                             // Safer strategy: find the first alphabetic char or minus sign after the index
-                             let op = full_line[idx+1..].trim();
-                             symmetry_ops.push(op.to_string());
-                         } else {
-                             // No index found, take whole line or heuristic
-                             symmetry_ops.push(full_line.trim().to_string());
-                         }
+                    if let Some(op_start) =
+                        full_line.find(|c: char| c.is_alphabetic() && "xyz".contains(c))
+                    {
+                        // Check if preceded by an index number
+                        if let Some(idx) = full_line[..op_start].rfind(|c: char| c.is_numeric()) {
+                            // likely "96  x, y, z" -> slice from op_start
+                            // But we need to be careful not to slice off a minus sign like " -x"
+                            // Safer strategy: find the first alphabetic char or minus sign after the index
+                            let op = full_line[idx + 1..].trim();
+                            symmetry_ops.push(op.to_string());
+                        } else {
+                            // No index found, take whole line or heuristic
+                            symmetry_ops.push(full_line.trim().to_string());
+                        }
                     } else {
                         // Fallback: splitting by whitespace might fail on "x, y, z" vs "1 x,y,z"
                         // Try finding the comma
                         if full_line.contains(',') {
-                             // heuristic: if it has commas, it's likely the op, maybe strip leading number
-                             let op = full_line.trim_start_matches(|c: char| c.is_numeric() || c.is_whitespace());
-                             symmetry_ops.push(op.to_string());
+                            // heuristic: if it has commas, it's likely the op, maybe strip leading number
+                            let op = full_line
+                                .trim_start_matches(|c: char| c.is_numeric() || c.is_whitespace());
+                            symmetry_ops.push(op.to_string());
                         }
                     }
                 } else if is_atom_loop {
                     let parts: Vec<&str> = trimmed.split_whitespace().collect();
                     if parts.len() >= 4 {
                         let mut label = "X".to_string();
-                        let mut fx = 0.0; let mut fy = 0.0; let mut fz = 0.0;
+                        let mut fx = 0.0;
+                        let mut fy = 0.0;
+                        let mut fz = 0.0;
 
                         for (i, header) in current_loop_headers.iter().enumerate() {
-                            if i >= parts.len() { break; }
+                            if i >= parts.len() {
+                                break;
+                            }
                             let val = parts[i];
-                            if header.contains("_atom_site_label") || header.contains("_atom_site_type_symbol") {
+                            if header.contains("_atom_site_label")
+                                || header.contains("_atom_site_type_symbol")
+                            {
                                 label = val.chars().filter(|c| c.is_alphabetic()).collect();
-                            } else if header.contains("_atom_site_fract_x") { fx = parse_cif_float(val); }
-                            else if header.contains("_atom_site_fract_y") { fy = parse_cif_float(val); }
-                            else if header.contains("_atom_site_fract_z") { fz = parse_cif_float(val); }
+                            } else if header.contains("_atom_site_fract_x") {
+                                fx = parse_cif_float(val);
+                            } else if header.contains("_atom_site_fract_y") {
+                                fy = parse_cif_float(val);
+                            } else if header.contains("_atom_site_fract_z") {
+                                fz = parse_cif_float(val);
+                            }
                         }
                         // base_atoms.push(Atom { element: label, position: [fx, fy, fz] });
                         base_atoms.push(Atom {
                             element: label,
                             position: [fx, fy, fz],
-                            original_index: 0
+                            original_index: 0,
                         });
                     }
                 }
@@ -129,18 +165,18 @@ pub fn parse(path: &str) -> io::Result<Structure> {
                 let dy = (existing.position[1] - wy).abs();
                 let dz = (existing.position[2] - wz).abs();
                 // Check direct distance OR wrapped distance
-                (dx < epsilon || (1.0 - dx) < epsilon) &&
-                (dy < epsilon || (1.0 - dy) < epsilon) &&
-                (dz < epsilon || (1.0 - dz) < epsilon)
+                (dx < epsilon || (1.0 - dx) < epsilon)
+                    && (dy < epsilon || (1.0 - dy) < epsilon)
+                    && (dz < epsilon || (1.0 - dz) < epsilon)
             });
 
             if !is_duplicate {
-               // final_atoms.push(Atom { element: atom.element.clone(), position: [wx, wy, wz] });
+                // final_atoms.push(Atom { element: atom.element.clone(), position: [wx, wy, wz] });
                 let idx = final_atoms.len(); // <--- Capture index
                 final_atoms.push(Atom {
                     element: atom.element.clone(),
                     position: [wx, wy, wz],
-                    original_index: idx
+                    original_index: idx,
                 });
             }
         }
@@ -152,33 +188,41 @@ pub fn parse(path: &str) -> io::Result<Structure> {
     let beta_r = beta * to_rad;
     let gamma_r = gamma * to_rad;
     let v = (1.0 - alpha_r.cos().powi(2) - beta_r.cos().powi(2) - gamma_r.cos().powi(2)
-             + 2.0 * alpha_r.cos() * beta_r.cos() * gamma_r.cos()).sqrt();
+        + 2.0 * alpha_r.cos() * beta_r.cos() * gamma_r.cos())
+    .sqrt();
 
     let lattice = [
         [a, 0.0, 0.0],
         [b * gamma_r.cos(), b * gamma_r.sin(), 0.0],
-        [c * beta_r.cos(), c * (alpha_r.cos() - beta_r.cos() * gamma_r.cos()) / gamma_r.sin(), c * v / gamma_r.sin()]
+        [
+            c * beta_r.cos(),
+            c * (alpha_r.cos() - beta_r.cos() * gamma_r.cos()) / gamma_r.sin(),
+            c * v / gamma_r.sin(),
+        ],
     ];
 
     for atom in &mut final_atoms {
-        let f = atom.position;
-        let x = f[0]*lattice[0][0] + f[1]*lattice[1][0] + f[2]*lattice[2][0];
-        let y = f[0]*lattice[0][1] + f[1]*lattice[1][1] + f[2]*lattice[2][1];
-        let z = f[0]*lattice[0][2] + f[1]*lattice[1][2] + f[2]*lattice[2][2];
-        atom.position = [x, y, z];
+        atom.position = frac_to_cart(atom.position, lattice);
+        // let f = atom.position;
+        // let x = f[0] * lattice[0][0] + f[1] * lattice[1][0] + f[2] * lattice[2][0];
+        // let y = f[0] * lattice[0][1] + f[1] * lattice[1][1] + f[2] * lattice[2][1];
+        // let z = f[0] * lattice[0][2] + f[1] * lattice[1][2] + f[2] * lattice[2][2];
+        // atom.position = [x, y, z];
     }
 
     // Ok(Structure { lattice, atoms: final_atoms })
-   Ok(Structure {
-    lattice,
-    atoms: final_atoms,
-    formula: "CIF Import".to_string()
+    Ok(Structure {
+        lattice,
+        atoms: final_atoms,
+        formula: "CIF Import".to_string(),
     })
 }
 
 fn apply_symmetry(p: [f64; 3], op: &str) -> [f64; 3] {
     let parts: Vec<&str> = op.split(',').collect();
-    if parts.len() != 3 { return p; }
+    if parts.len() != 3 {
+        return p;
+    }
 
     [
         evaluate_expr(parts[0], p),
@@ -197,8 +241,8 @@ fn evaluate_expr(expr: &str, p: [f64; 3]) -> f64 {
     // Split by + or - but keep the delimiter
     for c in s.chars() {
         if (c == '+' || c == '-') && !current_term.is_empty() {
-             val += evaluate_term(&current_term, p);
-             current_term.clear();
+            val += evaluate_term(&current_term, p);
+            current_term.clear();
         }
         current_term.push(c);
     }
@@ -233,7 +277,7 @@ fn evaluate_term(term: &str, p: [f64; 3]) -> f64 {
     // 3. Identify Fraction or Number
     if let Some(idx) = t.find('/') {
         let num: f64 = t[..idx].parse().unwrap_or(0.0);
-        let den: f64 = t[idx+1..].parse().unwrap_or(1.0);
+        let den: f64 = t[idx + 1..].parse().unwrap_or(1.0);
         return sign * (num / den);
     } else {
         return sign * t.parse::<f64>().unwrap_or(0.0);
@@ -242,7 +286,7 @@ fn evaluate_term(term: &str, p: [f64; 3]) -> f64 {
 
 fn parse_cif_val(line: &str) -> f64 {
     if let Some(idx) = line.find(char::is_whitespace) {
-         return parse_cif_float(line[idx..].trim());
+        return parse_cif_float(line[idx..].trim());
     }
     0.0
 }
@@ -251,7 +295,6 @@ fn parse_cif_float(s: &str) -> f64 {
     let clean: String = s.chars().take_while(|c| *c != '(').collect();
     clean.parse().unwrap_or(0.0)
 }
-
 
 pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
     let mut file = std::fs::File::create(path)?;
@@ -272,13 +315,13 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
 
     // Dot products for angles
     // alpha = angle between b and c
-    let b_dot_c = b_vec[0]*c_vec[0] + b_vec[1]*c_vec[1] + b_vec[2]*c_vec[2];
-    let a_dot_c = a_vec[0]*c_vec[0] + a_vec[1]*c_vec[1] + a_vec[2]*c_vec[2];
-    let a_dot_b = a_vec[0]*b_vec[0] + a_vec[1]*b_vec[1] + a_vec[2]*b_vec[2];
+    let b_dot_c = b_vec[0] * c_vec[0] + b_vec[1] * c_vec[1] + b_vec[2] * c_vec[2];
+    let a_dot_c = a_vec[0] * c_vec[0] + a_vec[1] * c_vec[1] + a_vec[2] * c_vec[2];
+    let a_dot_b = a_vec[0] * b_vec[0] + a_vec[1] * b_vec[1] + a_vec[2] * b_vec[2];
 
     let to_deg = 180.0 / std::f64::consts::PI;
     let alpha = (b_dot_c / (b * c)).acos() * to_deg;
-    let beta  = (a_dot_c / (a * c)).acos() * to_deg;
+    let beta = (a_dot_c / (a * c)).acos() * to_deg;
     let gamma = (a_dot_b / (a * b)).acos() * to_deg;
 
     writeln!(file, "_cell_length_a    {:.6}", a)?;
@@ -295,16 +338,27 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
     writeln!(file, " _atom_site_fract_z")?;
 
     // Need fractional coordinates
-    let inv = crate::io::poscar::inverse_matrix(structure.lattice);
+    // let inv = crate::io::poscar::inverse_matrix(structure.lattice);
+    use crate::utils::linalg::cart_to_frac;
 
     for (i, atom) in structure.atoms.iter().enumerate() {
-        let p = atom.position;
-        let u = p[0]*inv[0][0] + p[1]*inv[1][0] + p[2]*inv[2][0];
-        let v = p[0]*inv[0][1] + p[1]*inv[1][1] + p[2]*inv[2][1];
-        let w = p[0]*inv[0][2] + p[1]*inv[1][2] + p[2]*inv[2][2];
+        let frac = cart_to_frac(atom.position, structure.lattice).unwrap_or([0.0, 0.0, 0.0]);
+        let (u, v, w) = (frac[0], frac[1], frac[2]);
+        // let p = atom.position;
+        // let u = p[0] * inv[0][0] + p[1] * inv[1][0] + p[2] * inv[2][0];
+        // let v = p[0] * inv[0][1] + p[1] * inv[1][1] + p[2] * inv[2][1];
+        // let w = p[0] * inv[0][2] + p[1] * inv[1][2] + p[2] * inv[2][2];
 
         // Ensure unique label e.g., Fe1, Fe2
-        writeln!(file, " {}{} {:.6} {:.6} {:.6}", atom.element, i+1, u, v, w)?;
+        writeln!(
+            file,
+            " {}{} {:.6} {:.6} {:.6}",
+            atom.element,
+            i + 1,
+            u,
+            v,
+            w
+        )?;
     }
 
     Ok(())

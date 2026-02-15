@@ -2,6 +2,7 @@
 
 pub mod analysis;
 pub mod dialogs;
+pub mod export_dialog;
 pub mod interactions;
 pub mod preferences;
 
@@ -9,6 +10,7 @@ pub mod preferences;
 pub use interactions::setup_interactions;
 pub use preferences::show_preferences_window;
 
+use crate::config::ColorMode;
 use crate::rendering;
 use crate::state::AppState;
 use gtk4::prelude::*;
@@ -40,6 +42,21 @@ pub fn create_tab_content(state: Rc<RefCell<AppState>>, tab_id: usize) -> (Drawi
     let tid = tab_id;
 
     drawing_area.set_draw_func(move |_, cr, w, h| {
+        // === CRITICAL FIX: Pre-calculate BVS before immutable borrow ===
+        // We need to calculate BVS values BEFORE we create the immutable borrow
+        // for rendering, because get_bvs_values() requires a mutable borrow.
+        {
+            let mut st = s.borrow_mut();
+            if tid < st.tabs.len() {
+                let tab = &mut st.tabs[tid];
+                // Only calculate if we're in BVS mode
+                if matches!(tab.style.color_mode, ColorMode::BondValence) {
+                    let _ = tab.get_bvs_values(); // This populates the cache
+                }
+            }
+        } // Drop mutable borrow here
+
+        // Now proceed with immutable borrow for rendering
         let st = s.borrow();
 
         // Safety check to prevent crash if tab doesn't exist yet

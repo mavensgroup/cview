@@ -1,4 +1,7 @@
+// src/io/qe.rs
+
 use crate::model::{Atom, Structure};
+use crate::utils::linalg::frac_to_cart;
 use std::fs;
 use std::io;
 use std::io::Write;
@@ -82,19 +85,13 @@ fn parse_output(content: &str) -> io::Result<Structure> {
                 let parts: Vec<&str> = atom_line.split_whitespace().collect();
                 if parts.len() >= 4 {
                     let el = parts[0].to_string();
-                    let coords = parse_vec3(atom_line); // Use robust parsing for coords too
+                    let coords = parse_vec3(atom_line);
                     let (x, y, z) = (coords[0], coords[1], coords[2]);
 
                     let pos = if unit == "crystal" {
+                        // Convert fractional to Cartesian using nalgebra
                         if let Some(lat) = lattice {
-                            let lx = lat[0];
-                            let ly = lat[1];
-                            let lz = lat[2];
-                            [
-                                x * lx[0] + y * ly[0] + z * lz[0],
-                                x * lx[1] + y * ly[1] + z * lz[1],
-                                x * lx[2] + y * ly[2] + z * lz[2],
-                            ]
+                            frac_to_cart([x, y, z], lat)
                         } else {
                             [0.0, 0.0, 0.0]
                         }
@@ -148,12 +145,11 @@ fn parse_input(content: &str) -> io::Result<Structure> {
         let trimmed = line.trim();
         if trimmed.starts_with('!') || trimmed.starts_with('#') {
             continue;
-        } // Skip comments
+        }
 
         let lower = trimmed.to_lowercase();
 
         // Handle "celldm(1) = ..." and "celldm (1) = ..."
-        // We remove spaces to make matching "celldm(1)" robust against "celldm (1)"
         let clean_line = lower.replace(" ", "");
 
         if clean_line.contains("celldm(1)=") {
@@ -227,15 +223,22 @@ fn parse_input(content: &str) -> io::Result<Structure> {
                 let parts: Vec<&str> = atom_line.split_whitespace().collect();
                 if parts.len() >= 4 {
                     let el = parts[0].to_string();
-                    let coords = parse_vec3(atom_line); // Use robust vec3 parsing (handles 1.0d-8 and commas)
+                    let coords = parse_vec3(atom_line);
                     let (x, y, z) = (coords[0], coords[1], coords[2]);
 
-                    let pos = if unit == "alat" {
+                    let pos = if unit == "crystal" {
+                        // Convert fractional to Cartesian using nalgebra
+                        if let Some(lat) = lattice {
+                            frac_to_cart([x, y, z], lat)
+                        } else {
+                            [x, y, z] // Fallback
+                        }
+                    } else if unit == "alat" {
                         [x * alat, y * alat, z * alat]
                     } else if unit == "bohr" {
                         [x * BOHR_TO_ANG, y * BOHR_TO_ANG, z * BOHR_TO_ANG]
                     } else {
-                        // Angstrom or Crystal (if raw)
+                        // Angstrom
                         [x, y, z]
                     };
 
@@ -282,10 +285,6 @@ fn generate_lattice_from_ibrav(ibrav: i32, a: f64) -> Option<[[f64; 3]; 3]> {
         return None;
     }
 
-    // Standard QE Vectors (Symmetric)
-
-    // [Image of primitive vectors for BCC lattice]
-
     match ibrav {
         1 => {
             // Simple Cubic
@@ -297,13 +296,13 @@ fn generate_lattice_from_ibrav(ibrav: i32, a: f64) -> Option<[[f64; 3]; 3]> {
             Some([[-h, 0.0, h], [0.0, h, h], [-h, h, 0.0]])
         }
         3 => {
-            // BCC - Standard Symmetric
+            // BCC
             let h = a / 2.0;
             Some([[-h, h, h], [h, -h, h], [h, h, -h]])
         }
         4 => {
             // Hexagonal
-            let c = a * 1.633; // Fallback c/a
+            let c = a * 1.633; // Fallback c/a ratio
             Some([[a, 0.0, 0.0], [-0.5 * a, 0.866 * a, 0.0], [0.0, 0.0, c]])
         }
         _ => None,
@@ -369,14 +368,11 @@ fn extract_val(line: &str, delimiter: &str) -> Option<f64> {
 fn parse_vec3(line: &str) -> [f64; 3] {
     let parts: Vec<String> = line.split_whitespace().map(|s| s.to_string()).collect();
 
-    // We need to find the first 3 numeric-looking strings
     let mut nums = Vec::new();
     for p in parts {
         if nums.len() == 3 {
             break;
         }
-        // Skip Element label (alphabetic) but allow scientific E/e/d/D
-        // Logic: if it contains alphabetic chars that are NOT 'e'/'d', it's likely a label
         let clean_p = p.to_lowercase().replace(',', "");
 
         let is_numeric = clean_and_parse_first_number(&clean_p).is_some();
@@ -399,7 +395,7 @@ fn clean_and_parse_first_number(raw: &str) -> Option<f64> {
     // 1. Remove comments
     let pre_comment = raw.split('!').next()?.split('#').next()?;
 
-    // 2. Remove commas (QE often uses commas as delimiters)
+    // 2. Remove commas
     let no_comma = pre_comment.replace(',', " ");
 
     // 3. Find first token

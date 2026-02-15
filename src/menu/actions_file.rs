@@ -329,7 +329,8 @@ pub fn setup(
     });
     app.add_action(&act_save);
 
-    // --- EXPORT ---
+    // // --- EXPORT ---
+    // --- EXPORT ACTION (ADVANCED DIALOG) ---
     let act_export = gtk4::gio::SimpleAction::new("export", None);
     let win_weak_e = window.downgrade();
     let state_weak_e = Rc::downgrade(&state);
@@ -340,53 +341,78 @@ pub fn setup(
             None => return,
         };
 
-        if let Some(st) = state_weak_e.upgrade() {
-            if st.borrow().tabs.is_empty() {
-                return;
-            }
+        let state = match state_weak_e.upgrade() {
+            Some(s) => s,
+            None => return,
+        };
+
+        // Check if there's a structure loaded
+        if state.borrow().tabs.is_empty() {
+            return;
         }
 
-        let dialog = FileChooserNative::new(
-            Some("Export Image/PDF"),
-            Some(&win),
-            FileChooserAction::Save,
-            Some("Export"),
-            Some("Cancel"),
-        );
-
-        let f_png = FileFilter::new();
-        f_png.set_name(Some("PNG Image (*.png)"));
-        f_png.add_pattern("*.png");
-        dialog.add_filter(&f_png);
-        let f_pdf = FileFilter::new();
-        f_pdf.set_name(Some("PDF Document (*.pdf)"));
-        f_pdf.add_pattern("*.pdf");
-        dialog.add_filter(&f_pdf);
-
-        let state_inner = state_weak_e.clone();
-
-        dialog.connect_response(move |d, r| {
-            if r == ResponseType::Accept {
-                if let Some(f) = d.file() {
-                    if let Some(p) = f.path() {
-                        let path = p.to_string_lossy().to_string();
-                        if let Some(st) = state_inner.upgrade() {
-                            if !st.borrow().tabs.is_empty() {
-                                if path.to_lowercase().ends_with(".pdf") {
-                                    let _ = export_pdf(st, &path);
-                                } else {
-                                    let _ = export_png(st, 2000.0, 1500.0, &path);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            d.destroy();
-        });
-        dialog.show();
+        // Show the advanced export dialog
+        crate::ui::export_dialog::show_export_dialog(&win, state);
     });
     app.add_action(&act_export);
+
+    // let act_export = gtk4::gio::SimpleAction::new("export", None);
+    // let win_weak_e = window.downgrade();
+    // let state_weak_e = Rc::downgrade(&state);
+
+    // act_export.connect_activate(move |_, _| {
+    // let win = match win_weak_e.upgrade() {
+    // Some(w) => w,
+    // None => return,
+    // };
+
+    // if let Some(st) = state_weak_e.upgrade() {
+    // if st.borrow().tabs.is_empty() {
+    // return;
+    // }
+    // }
+
+    // let dialog = FileChooserNative::new(
+    // Some("Export Image/PDF"),
+    // Some(&win),
+    // FileChooserAction::Save,
+    // Some("Export"),
+    // Some("Cancel"),
+    // );
+
+    // let f_png = FileFilter::new();
+    // f_png.set_name(Some("PNG Image (*.png)"));
+    // f_png.add_pattern("*.png");
+    // dialog.add_filter(&f_png);
+    // let f_pdf = FileFilter::new();
+    // f_pdf.set_name(Some("PDF Document (*.pdf)"));
+    // f_pdf.add_pattern("*.pdf");
+    // dialog.add_filter(&f_pdf);
+
+    // let state_inner = state_weak_e.clone();
+
+    // dialog.connect_response(move |d, r| {
+    // if r == ResponseType::Accept {
+    // if let Some(f) = d.file() {
+    // if let Some(p) = f.path() {
+    // let path = p.to_string_lossy().to_string();
+    // if let Some(st) = state_inner.upgrade() {
+    // if !st.borrow().tabs.is_empty() {
+    // if path.to_lowercase().ends_with(".pdf") {
+    // let _ = export_pdf(st, &path);
+    // } else {
+    // let _ = export_png(st, 2000.0, 1500.0, &path);
+    // }
+    // }
+    // }
+    // }
+    // }
+    // }
+    // d.destroy();
+    // });
+    // dialog.show();
+    // });
+    // app.add_action(&act_export);
 
     // --- PREFS & QUIT ---
     let act_pref = gtk4::gio::SimpleAction::new("preferences", None);
