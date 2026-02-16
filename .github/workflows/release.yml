@@ -36,6 +36,7 @@ jobs:
 
   build-windows:
     needs: create-release
+    if: false  # TEMPORARILY DISABLED
     runs-on: windows-latest
     defaults:
       run:
@@ -100,6 +101,7 @@ jobs:
 
   build-macos:
     needs: create-release
+    if: false  # TEMPORARILY DISABLED
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -213,6 +215,7 @@ jobs:
         run: |
           gh release upload ${{ github.ref_name }} cview-macos.dmg
 
+
   build-flatpak:
     needs: create-release
     runs-on: ubuntu-latest
@@ -225,11 +228,18 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y flatpak-builder python3-pip
+          sudo apt-get install -y flatpak flatpak-builder python3-pip
           pip3 install tomlkit aiohttp
 
-          # Fix: Add Flathub remote to SYSTEM config
+          # 1. Add Remote (System-wide)
           sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+          # 2. Pre-install Runtimes & Extensions (System-wide with Sudo)
+          # We manually install GNOME 45 and the Rust extension to avoid permission errors later
+          sudo flatpak install -y --noninteractive flathub \
+            org.gnome.Sdk//45 \
+            org.gnome.Platform//45 \
+            org.freedesktop.Sdk.Extension.rust-stable//23.08
 
       - name: Generate Cargo.lock
         run: cargo generate-lockfile
@@ -245,6 +255,8 @@ jobs:
           bundle: cview.flatpak
           manifest-path: org.mavensgroup.cview.yml
           cache-key: flatpak-builder-${{ github.sha }}
+          # FIX: Tell the action NOT to try installing deps, because we did it manually above
+          install-deps-from: false
 
       - name: Upload Flatpak
         env:
