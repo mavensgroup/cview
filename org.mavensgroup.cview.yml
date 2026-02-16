@@ -1,6 +1,6 @@
 app-id: org.mavensgroup.cview
 runtime: org.gnome.Platform
-runtime-version: '45'
+runtime-version: '49'     # <--- CHANGED to 49
 sdk: org.gnome.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
