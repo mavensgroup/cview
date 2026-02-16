@@ -108,7 +108,8 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install Dependencies
-        run: brew install gtk4 libadwaita
+        # Added adwaita-icon-theme specifically
+        run: brew install gtk4 libadwaita adwaita-icon-theme
 
       - name: Build
         run: cargo build --release
@@ -125,43 +126,26 @@ jobs:
           # Rename binary for the wrapper script
           cp target/release/cview "$APP_DIR/Contents/MacOS/cview-bin"
 
-          # --- Manual Bundling Logic (Replaces dylibbundler) ---
-
-          # Function to recursively bundle dylibs
+          # --- Manual Bundling Logic ---
           bundle_libs() {
             local binary="$1"
-
-            # Find dependencies:
-            # 1. otool -L lists libraries
-            # 2. Grep filters out system libs (/usr/lib, /System/Library) and special paths
             local deps=$(otool -L "$binary" | awk '/\t+/ {print $1}' | grep -vE "^/usr/lib|^/System/Library|^@executable_path|^@loader_path")
-
             for dep in $deps; do
               local lib_name=$(basename "$dep")
               local target_path="$APP_DIR/Contents/Libs/$lib_name"
-
-              # If we haven't copied this lib yet, do it now
               if [ ! -f "$target_path" ]; then
                 echo "Bundling $lib_name"
                 cp -L "$dep" "$target_path"
                 chmod 755 "$target_path"
-
-                # Update the dylib's own ID
                 install_name_tool -id "@executable_path/../Libs/$lib_name" "$target_path"
-
-                # Recursively process the new lib's dependencies
                 bundle_libs "$target_path"
               fi
-
-              # Update the binary to point to the bundled lib
               install_name_tool -change "$dep" "@executable_path/../Libs/$lib_name" "$binary"
             done
           }
-
           echo "Starting recursive bundling..."
           bundle_libs "$APP_DIR/Contents/MacOS/cview-bin"
           echo "Bundling complete."
-
           # --- End Bundling Logic ---
 
           # Copy Resources
@@ -171,8 +155,19 @@ jobs:
           glib-compile-schemas "$APP_DIR/Contents/Resources/share/glib-2.0/schemas"
 
           mkdir -p "$APP_DIR/Contents/Resources/share/icons"
-          cp -r "$BREW_PREFIX/share/icons/Adwaita" "$APP_DIR/Contents/Resources/share/icons/"
-          cp -r "$BREW_PREFIX/share/icons/hicolor" "$APP_DIR/Contents/Resources/share/icons/"
+
+          # Improved Icon Copying: Check if folders exist before copying
+          if [ -d "$BREW_PREFIX/share/icons/Adwaita" ]; then
+            cp -r "$BREW_PREFIX/share/icons/Adwaita" "$APP_DIR/Contents/Resources/share/icons/"
+          else
+            echo "Warning: Adwaita icons not found at $BREW_PREFIX/share/icons/Adwaita"
+          fi
+
+          if [ -d "$BREW_PREFIX/share/icons/hicolor" ]; then
+            cp -r "$BREW_PREFIX/share/icons/hicolor" "$APP_DIR/Contents/Resources/share/icons/"
+          else
+            echo "Warning: Hicolor icons not found at $BREW_PREFIX/share/icons/hicolor"
+          fi
 
           # Create Launcher Script
           cat << 'EOF' > "$APP_DIR/Contents/MacOS/cview"
@@ -206,7 +201,7 @@ jobs:
           </plist>
           EOF
 
-          # Ad-hoc code signing is REQUIRED on Apple Silicon
+          # Ad-hoc sign the bundle
           codesign --force --deep -s - "$APP_DIR"
 
           # Create DMG
@@ -233,8 +228,8 @@ jobs:
           sudo apt-get install -y flatpak-builder python3-pip
           pip3 install tomlkit aiohttp
 
-          # Fix: Add Flathub remote so the builder can find org.gnome.Sdk
-          flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          # Fix: Add Flathub remote to SYSTEM config
+          sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
       - name: Generate Cargo.lock
         run: cargo generate-lockfile
