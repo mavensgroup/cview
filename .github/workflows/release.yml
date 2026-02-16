@@ -60,6 +60,7 @@ jobs:
             mingw-w64-ucrt-x86_64-pkgconf
             mingw-w64-ucrt-x86_64-toolchain
             mingw-w64-ucrt-x86_64-rust
+            mingw-w64-ucrt-x86_64-nsis
 
       - name: Build
         env:
@@ -69,13 +70,39 @@ jobs:
         run: |
           cargo build --release --target x86_64-pc-windows-gnu
 
-      - name: Upload Windows binary
+      - name: Bundle DLLs and Assets
+        run: |
+          # 1. Create a staging directory
+          mkdir -p dist
+          
+          # 2. Copy the main executable
+          cp target/x86_64-pc-windows-gnu/release/cview.exe dist/
+          
+          # 3. Use ldd to find all DLL dependencies and copy them to dist
+          echo "Collecting DLL dependencies..."
+          ldd target/x86_64-pc-windows-gnu/release/cview.exe | grep '/ucrt64' | awk '{print $3}' | xargs -I '{}' cp -u '{}' dist/
+          
+          # 4. Copy GTK/GLib schemas (Crucial for "libgio" errors and settings)
+          mkdir -p dist/share/glib-2.0/schemas
+          cp /ucrt64/share/glib-2.0/schemas/* dist/share/glib-2.0/schemas/
+          glib-compile-schemas dist/share/glib-2.0/schemas/
+
+          # 5. Copy Icons (Optional but recommended for UI apps)
+          mkdir -p dist/share/icons
+          cp -r /ucrt64/share/icons/Adwaita dist/share/icons/
+          cp -r /ucrt64/share/icons/hicolor dist/share/icons/
+
+      - name: Create Installer
+        run: |
+          makensis installer.ini
+
+      - name: Upload Installer
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          gh release upload ${{ github.ref_name }} target/x86_64-pc-windows-gnu/release/cview.exe
-
+          gh release upload ${{ github.ref_name }} cview-installer.exe
+          
   build-macos:
     needs: create-release
     runs-on: macos-latest
