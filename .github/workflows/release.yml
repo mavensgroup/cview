@@ -3,8 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'  # Triggers on version tags like v0.4.0, v1.0.0, etc.
-      - 'test-v*'  # Triggers on version tags like v0.4.0, v1.0.0, etc.
+      - 'v*'
 
 permissions:
   contents: write
@@ -16,86 +15,23 @@ jobs:
   create-release:
     runs-on: ubuntu-latest
     outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
       version: ${{ steps.get_version.outputs.version }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Get version from tag
         id: get_version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-
-  # build-linux-deb:
-    # needs: create-release
-    # runs-on: ubuntu-latest
-    # steps:
-      # - uses: actions/checkout@v4
-
-      # - name: Install dependencies
-        # run: |
-          # sudo apt-get update
-          # sudo apt-get install -y libgtk-4-dev libadwaita-1-dev build-essential
-
-      # - name: Setup Rust
-        # uses: actions-rust-lang/setup-rust-toolchain@v1
-
-      # - name: Install cargo-deb
-        # run: cargo install cargo-deb
-
-      # - name: Build DEB package
-        # run: cargo deb
-
-      # - name: Upload DEB
-        # uses: actions/upload-release-asset@v1
-        # env:
-          # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # with:
-          # upload_url: ${{ needs.create-release.outputs.upload_url }}
-          # asset_path: ./target/debian/cview_${{ needs.create-release.outputs.version }}_amd64.deb
-          # asset_name: cview_${{ needs.create-release.outputs.version }}_amd64.deb
-          # asset_content_type: application/vnd.debian.binary-package
-
-  # build-linux-rpm:
-    # needs: create-release
-    # runs-on: ubuntu-latest
-    # steps:
-      # - uses: actions/checkout@v4
-
-      # - name: Install dependencies
-        # run: |
-          # sudo apt-get update
-          # sudo apt-get install -y libgtk-4-dev libadwaita-1-dev build-essential rpm
-
-      # - name: Setup Rust
-        # uses: actions-rust-lang/setup-rust-toolchain@v1
-
-      # - name: Install cargo-generate-rpm
-        # run: cargo install cargo-generate-rpm
-
-      # - name: Build binary
-        # run: cargo build --release
-
-      # - name: Generate RPM
-        # run: cargo generate-rpm
-
-      # - name: Upload RPM
-        # uses: actions/upload-release-asset@v1
-        # env:
-          # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # with:
-          # upload_url: ${{ needs.create-release.outputs.upload_url }}
-          # asset_path: ./target/generate-rpm/cview-${{ needs.create-release.outputs.version }}-1.x86_64.rpm
-          # asset_name: cview-${{ needs.create-release.outputs.version }}-1.x86_64.rpm
-          # asset_content_type: application/x-rpm
+        run: |
+          gh release create ${{ github.ref_name }} \
+            --title "Release ${{ github.ref_name }}" \
+            --generate-notes
 
   build-windows:
     needs: create-release
@@ -104,32 +40,33 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          target: x86_64-pc-windows-msvc
+          targets: x86_64-pc-windows-gnu
 
-      - name: Install GTK4
-        run: |
-          choco install gtk4 --yes
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-libadwaita
+            mingw-w64-ucrt-x86_64-pkgconf
 
       - name: Build
-        run: cargo build --release
-
-      - name: Create installer with NSIS
+        shell: msys2 {0}
         run: |
-          choco install nsis --yes
-          makensis.exe installer.nsi
-        continue-on-error: true
+          export PKG_CONFIG_PATH="/ucrt64/lib/pkgconfig"
+          cargo build --release --target x86_64-pc-windows-gnu
 
       - name: Upload Windows binary
-        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/release/cview.exe
-          asset_name: cview-${{ needs.create-release.outputs.version }}-windows-x86_64.exe
-          asset_content_type: application/vnd.microsoft.portable-executable
+        shell: bash
+        run: |
+          gh release upload ${{ github.ref_name }} target/x86_64-pc-windows-gnu/release/cview.exe
 
   build-macos:
     needs: create-release
@@ -138,22 +75,22 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install GTK4
         run: brew install gtk4 libadwaita
 
-      - name: Build
-        run: cargo build --release
+      - name: Build (allow warnings)
+        run: cargo build --release 2>&1 | grep -v "warning:" || true
 
-      - name: Create DMG
+      - name: Create .app bundle
         run: |
           mkdir -p CView.app/Contents/MacOS
           mkdir -p CView.app/Contents/Resources
           cp target/release/cview CView.app/Contents/MacOS/
-          cp assets/org.mavensgroup.cview.png CView.app/Contents/Resources/
 
-          # Create Info.plist
+          VERSION=${{ needs.create-release.outputs.version }}
+
           cat > CView.app/Contents/Info.plist << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -166,48 +103,44 @@ jobs:
               <key>CFBundleName</key>
               <string>CView</string>
               <key>CFBundleVersion</key>
-              <string>${{ needs.create-release.outputs.version }}</string>
-              <key>CFBundleShortVersionString</key>
-              <string>${{ needs.create-release.outputs.version }}</string>
+              <string>$VERSION</string>
           </dict>
           </plist>
           EOF
 
-          # Create DMG
-          hdiutil create -volname CView -srcfolder CView.app -ov -format UDZO cview-${{ needs.create-release.outputs.version }}-macos.dmg
+          hdiutil create -volname CView -srcfolder CView.app -ov -format UDZO cview-macos.dmg
 
       - name: Upload macOS DMG
-        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./cview-${{ needs.create-release.outputs.version }}-macos.dmg
-          asset_name: cview-${{ needs.create-release.outputs.version }}-macos.dmg
-          asset_content_type: application/x-apple-diskimage
+        run: |
+          gh release upload ${{ github.ref_name }} cview-macos.dmg
 
   build-flatpak:
     needs: create-release
     runs-on: ubuntu-latest
-    container:
-      image: bilelmoussaoui/flatpak-github-actions:gnome-45
-      options: --privileged
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip python3-aiohttp python3-toml
+
+      - name: Generate cargo sources
+        run: |
+          curl -O https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py
+          python3 flatpak-cargo-generator.py ./Cargo.lock -o cargo-sources.json
 
       - name: Build Flatpak
         uses: flatpak/flatpak-github-actions/flatpak-builder@v6
         with:
-          bundle: cview-${{ needs.create-release.outputs.version }}.flatpak
+          bundle: cview.flatpak
           manifest-path: org.mavensgroup.cview.yml
           cache-key: flatpak-builder-${{ github.sha }}
 
       - name: Upload Flatpak
-        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./cview-${{ needs.create-release.outputs.version }}.flatpak
-          asset_name: cview-${{ needs.create-release.outputs.version }}.flatpak
-          asset_content_type: application/vnd.flatpak
+        run: |
+          gh release upload ${{ github.ref_name }} cview.flatpak

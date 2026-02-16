@@ -4,6 +4,7 @@ runtime-version: '45'
 sdk: org.gnome.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
+
 command: cview
 
 finish-args:
@@ -22,8 +23,8 @@ modules:
   - name: cview
     buildsystem: simple
     build-commands:
-      - cargo --offline fetch --manifest-path Cargo.toml --verbose
-      - cargo --offline build --release --verbose
+      - cargo --offline fetch --manifest-path Cargo.toml
+      - cargo --offline build --release
       - install -Dm755 ./target/release/cview -t /app/bin/
       - install -Dm644 assets/org.mavensgroup.cview.desktop -t /app/share/applications/
       - install -Dm644 assets/org.mavensgroup.cview.svg -t /app/share/icons/hicolor/scalable/apps/

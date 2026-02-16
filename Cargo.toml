@@ -30,6 +30,10 @@ lto = true
 codegen-units = 1
 strip = true
 
+[lints.rust]
+unused_imports = "warn"
+unused_variables = "warn"
+unexpected_cfgs = "warn"
 
 [package.metadata.packager]
 product_name = "CView"
