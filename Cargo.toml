@@ -45,12 +45,17 @@ resources = ["assets"]  # This copies the whole assets folder into the package
 # CHANGE THIS LINE:
 icons = ["assets/org.mavensgroup.cview.png"]
 
-[package.metadata.packager.deb]
-section = "utils"
-depends = ["libgtk-4-1", "libadwaita-1-0"]
-
-[package.metadata.packager.rpm]
-requires = ["gtk4", "libadwaita"]
+[package.metadata.deb]
+maintainer = "Mavens Group"
+copyright = "2026, Mavens Group"
+depends = "$auto"
+section = "science"
+priority = "optional"
+assets = [
+    ["target/release/cview", "usr/bin/", "755"],
+    ["assets/org.mavensgroup.cview.desktop", "usr/share/applications/", "644"],
+    ["assets/org.mavensgroup.cview.svg", "usr/share/icons/hicolor/scalable/apps/", "644"]
+]
 
 [package.metadata.generate-rpm]
 assets = [

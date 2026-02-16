@@ -217,6 +217,7 @@ jobs:
 
   build-flatpak:
     needs: create-release
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -262,3 +263,43 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload ${{ github.ref_name }} cview.flatpak
+
+  build-linux-pkg:
+    name: Build DEB & RPM
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libadwaita-1-dev librust-gdk4-sys-dev
+
+      - name: Install Packaging Tools
+        run: |
+          cargo install cargo-deb
+          cargo install cargo-generate-rpm
+
+      - name: Build Binary (Release)
+        run: cargo build --release
+
+      - name: Build DEB
+        run: |
+          cargo deb --no-build --output target/debian/cview.deb
+
+      - name: Build RPM
+        run: |
+          cargo generate-rpm
+          # Rename for clarity (optional, but nice)
+          mv target/generate-rpm/*.rpm target/generate-rpm/cview.rpm
+
+      - name: Upload Linux Packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.ref_name }} target/debian/cview.deb
+          gh release upload ${{ github.ref_name }} target/generate-rpm/cview.rpm
