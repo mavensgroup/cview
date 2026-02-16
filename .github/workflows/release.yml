@@ -63,9 +63,7 @@ jobs:
 
       - name: Build
         env:
-          # Crucial fix: Allow pkg-config to run in "cross" mode
           PKG_CONFIG_ALLOW_CROSS: 1
-          # Point to the correct library paths in MSYS2
           PKG_CONFIG_PATH: /ucrt64/lib/pkgconfig
           LIBRARY_PATH: /ucrt64/lib
         run: |
@@ -132,12 +130,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Install dependencies
-        # Updated to use pip for tomlkit to fix the ModuleNotFoundError
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-pip
+          # Added flatpak-builder here
+          sudo apt-get install -y flatpak-builder python3-pip
           pip3 install tomlkit aiohttp
+
+      - name: Generate Cargo.lock
+        run: cargo generate-lockfile
 
       - name: Generate cargo sources
         run: |
