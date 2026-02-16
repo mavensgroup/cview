@@ -310,40 +310,6 @@ pub fn build(
     frame_atom.set_child(Some(&vbox_atom));
     style_box.append(&frame_atom);
 
-    // --- BACKGROUND ---
-    let frame_bg = Frame::new(Some("Background"));
-    let vbox_bg = GtkBox::new(Orientation::Vertical, 10);
-    vbox_bg.set_margin_top(10);
-    vbox_bg.set_margin_bottom(10);
-    vbox_bg.set_margin_start(10);
-    vbox_bg.set_margin_end(10);
-
-    let box_bg = GtkBox::new(Orientation::Horizontal, 10);
-    box_bg.append(&Label::new(Some("Color:")));
-
-    let current_bg = {
-        let st = state.borrow();
-        let c = st.active_tab().style.background_color;
-        gdk::RGBA::new(c.0 as f32, c.1 as f32, c.2 as f32, 1.0)
-    };
-    let btn_bg = ColorButton::new();
-    btn_bg.set_rgba(&current_bg);
-
-    let s_bg = state.clone();
-    let nb_bg = nb_weak.clone();
-    let cb_bg = queue_active_draw.clone();
-    btn_bg.connect_color_set(move |b| {
-        let c = b.rgba();
-        s_bg.borrow_mut().active_tab_mut().style.background_color =
-            (c.red() as f64, c.green() as f64, c.blue() as f64);
-        cb_bg(&nb_bg);
-    });
-    box_bg.append(&btn_bg);
-    vbox_bg.append(&box_bg);
-
-    frame_bg.set_child(Some(&vbox_bg));
-    style_box.append(&frame_bg);
-
     // --- ELEMENT COLORS ---
     let frame_elem = Frame::new(Some("Element Colors"));
     frame_elem.set_child(Some(&atoms_list_container));
@@ -687,6 +653,53 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
                 }
             });
             row.append(&btn_reset);
+
+            // Polyhedra checkbox
+            let check_poly = gtk4::CheckButton::with_label("📐 Poly");
+            check_poly.set_active({
+                let st = state.borrow();
+                st.active_tab()
+                    .style
+                    .polyhedra_settings
+                    .as_ref()
+                    .map(|ps| ps.enabled_elements.contains(&elem))
+                    .unwrap_or(false)
+            });
+
+            let s_poly = state.clone();
+            let elem_poly = elem.clone();
+            let nb_poly = nb_weak.clone();
+            check_poly.connect_toggled(move |c: &gtk4::CheckButton| {
+                let mut st = s_poly.borrow_mut();
+                let tab = st.active_tab_mut();
+
+                if tab.style.polyhedra_settings.is_none() {
+                    tab.style.polyhedra_settings =
+                        Some(crate::config::PolyhedraSettings::default());
+                }
+
+                let settings = tab.style.polyhedra_settings.as_mut().unwrap();
+
+                if c.is_active() {
+                    if !settings.enabled_elements.contains(&elem_poly) {
+                        settings.enabled_elements.push(elem_poly.clone());
+                    }
+                    settings.show_polyhedra = true;
+                } else {
+                    settings.enabled_elements.retain(|e| e != &elem_poly);
+                    if settings.enabled_elements.is_empty() {
+                        settings.show_polyhedra = false;
+                    }
+                }
+
+                drop(st);
+                if let Some(nb) = nb_poly.upgrade() {
+                    if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
+                        da.queue_draw();
+                    }
+                }
+            });
+            row.append(&check_poly);
 
             container.append(&row);
         }

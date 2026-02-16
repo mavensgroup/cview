@@ -9,6 +9,7 @@ use crate::config::ColorMode;
 use crate::model::elements::{get_atom_cov, get_atom_properties};
 use crate::physics::bond_valence::get_ideal_oxidation_state;
 use crate::physics::operations::miller_algo::MillerMath;
+use crate::rendering::polyhedra::{self, Face};
 use crate::state::TabState;
 use gtk4::cairo;
 use std::cmp::Ordering;
@@ -91,6 +92,86 @@ pub fn draw_unit_cell(cr: &cairo::Context, corners: &[[f64; 2]], is_export: bool
 }
 
 // ============================================================================
+// POLYHEDRA RENDERING
+// ============================================================================
+
+/// Draw a single polyhedron face
+fn draw_polyhedron_face(
+    cr: &cairo::Context,
+    face: &Face,
+    color: (f64, f64, f64),
+    alpha: f64,
+    draw_edges: bool,
+) {
+    if face.vertices.is_empty() {
+        return;
+    }
+
+    cr.move_to(face.vertices[0][0], face.vertices[0][1]);
+    for vertex in &face.vertices[1..] {
+        cr.line_to(vertex[0], vertex[1]);
+    }
+    cr.close_path();
+
+    cr.set_source_rgba(color.0, color.1, color.2, alpha);
+    if draw_edges {
+        cr.fill_preserve().expect("Failed to fill face");
+    } else {
+        cr.fill().expect("Failed to fill face");
+    }
+
+    if draw_edges {
+        cr.set_source_rgba(0.0, 0.0, 0.0, alpha * 0.5);
+        cr.set_line_width(0.5);
+        cr.stroke().expect("Failed to stroke edges");
+    }
+}
+
+/// Get polyhedron color
+fn get_polyhedron_color(element: &str) -> (f64, f64, f64) {
+    let (_, color) = get_atom_properties(element);
+    color
+}
+
+/// Draw all polyhedra
+fn draw_all_polyhedra(cr: &cairo::Context, atoms: &[RenderAtom], tab: &TabState, scale: f64) {
+    let settings = match &tab.style.polyhedra_settings {
+        Some(s) if s.show_polyhedra => s,
+        _ => return,
+    };
+
+    let all_polyhedra = polyhedra::build_polyhedra(
+        atoms,
+        &settings.enabled_elements,
+        tab.view.bond_cutoff,
+        scale,
+        settings.min_coordination,
+        settings.max_coordination,
+    );
+
+    let mut all_faces: Vec<(&Face, (f64, f64, f64))> = Vec::new();
+
+    for poly in &all_polyhedra {
+        let center_atom = &atoms[poly.center_idx];
+        let color = get_polyhedron_color(&center_atom.element);
+
+        for face in &poly.faces {
+            all_faces.push((face, color));
+        }
+    }
+
+    all_faces.sort_by(|a, b| {
+        b.0.center[2]
+            .partial_cmp(&a.0.center[2])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    for (face, color) in all_faces {
+        draw_polyhedron_face(cr, face, color, settings.transparency, settings.show_edges);
+    }
+}
+
+// ============================================================================
 // MAIN STRUCTURE DRAWING
 // ============================================================================
 
@@ -124,10 +205,6 @@ pub fn draw_structure(
     // ========================================================================
     if tab.view.show_bonds {
         for (i, r1) in atoms.iter().enumerate() {
-            if r1.is_ghost {
-                continue; // Ghost atoms don't initiate bonds
-            }
-
             let rad1 = get_atom_cov(&r1.element);
 
             for (j, r2) in atoms.iter().enumerate() {
@@ -135,23 +212,18 @@ pub fn draw_structure(
                     continue; // Avoid duplicates
                 }
 
-                // Calculate distance
-                let v_x = r2.screen_pos[0] - r1.screen_pos[0];
-                let v_y = r2.screen_pos[1] - r1.screen_pos[1];
-                let v_z = r2.screen_pos[2] - r1.screen_pos[2];
+                // Calculate CARTESIAN distance (not screen distance!)
+                let dx = r2.cart_pos[0] - r1.cart_pos[0];
+                let dy = r2.cart_pos[1] - r1.cart_pos[1];
+                let dz = r2.cart_pos[2] - r1.cart_pos[2];
 
-                let d_x = v_x / scale;
-                let d_y = v_y / scale;
-                let d_z = v_z;
+                let dist = (dx * dx + dy * dy + dz * dz).sqrt();
 
-                let dist_sq = d_x * d_x + d_y * d_y + d_z * d_z;
-
-                // Early distance cutoff
-                if dist_sq > 16.0 {
+                // Early distance cutoff (in Angstroms)
+                if dist > 4.0 {
                     continue;
                 }
 
-                let dist = dist_sq.sqrt();
                 let rad2 = get_atom_cov(&r2.element);
 
                 // Bond distance criteria
@@ -165,6 +237,10 @@ pub fn draw_structure(
                     let r1_px = raw_r1 * tab.style.atom_scale * scale;
                     let r2_px = raw_r2 * tab.style.atom_scale * scale;
 
+                    // Calculate SCREEN distance for offset
+                    let v_x = r2.screen_pos[0] - r1.screen_pos[0];
+                    let v_y = r2.screen_pos[1] - r1.screen_pos[1];
+                    let v_z = r2.screen_pos[2] - r1.screen_pos[2];
                     let full_screen_dist = (v_x * v_x + v_y * v_y + v_z * v_z).sqrt();
 
                     // Offset bonds to avoid overlapping atoms
@@ -230,6 +306,11 @@ pub fn draw_structure(
             tab.style.transmission,
         );
     }
+
+    // ========================================================================
+    // STEP 4.5: Draw Polyhedra (if enabled)
+    // ========================================================================
+    draw_all_polyhedra(cr, atoms, tab, scale);
 
     // ========================================================================
     // STEP 5: Draw Atoms (Layer 1 - Front)

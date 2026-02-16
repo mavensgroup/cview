@@ -93,6 +93,9 @@ pub struct RenderStyle {
     pub bvs_threshold_good: f64,
     pub bvs_threshold_warn: f64,
 
+    // Polyhedra settings
+    pub polyhedra_settings: Option<PolyhedraSettings>,
+
     // SOTA LRU sprite cache (not serialized)
     pub atom_cache: Rc<RefCell<SpriteCache>>,
 }
@@ -152,6 +155,7 @@ impl<'de> Deserialize<'de> for RenderStyle {
             color_mode: data.color_mode,
             bvs_threshold_good: data.bvs_threshold_good,
             bvs_threshold_warn: data.bvs_threshold_warn,
+            polyhedra_settings: None,
             atom_cache: Rc::new(RefCell::new(SpriteCache::default())),
         })
     }
@@ -181,6 +185,7 @@ impl Default for RenderStyle {
             color_mode: ColorMode::Element,
             bvs_threshold_good: 0.15,
             bvs_threshold_warn: 0.40,
+            polyhedra_settings: None,
             atom_cache: Rc::new(RefCell::new(SpriteCache::default())),
         }
     }
@@ -387,6 +392,42 @@ impl Config {
             proj.config_dir().join("settings.json")
         } else {
             PathBuf::from("settings.json")
+        }
+    }
+}
+
+// ============================================================================
+// POLYHEDRA SETTINGS
+// ============================================================================
+
+#[derive(Debug, Clone)]
+pub struct PolyhedraSettings {
+    pub show_polyhedra: bool,
+    pub enabled_elements: Vec<String>,
+    pub transparency: f64,
+    pub show_edges: bool,
+    pub min_coordination: usize,
+    pub max_coordination: usize,
+    pub color_mode: PolyhedraColorMode,
+}
+
+#[derive(Debug, Clone)]
+pub enum PolyhedraColorMode {
+    Element,
+    Coordination,
+    Custom(f64, f64, f64),
+}
+
+impl Default for PolyhedraSettings {
+    fn default() -> Self {
+        Self {
+            show_polyhedra: false,
+            enabled_elements: vec![],
+            transparency: 0.3,
+            show_edges: true,
+            min_coordination: 4,
+            max_coordination: 12,
+            color_mode: PolyhedraColorMode::Element,
         }
     }
 }
