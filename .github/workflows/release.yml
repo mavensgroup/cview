@@ -108,7 +108,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install Dependencies
-        run: brew install gtk4 libadwaita dylibbundler
+        run: brew install gtk4 libadwaita
 
       - name: Build
         run: cargo build --release
@@ -122,12 +122,49 @@ jobs:
           mkdir -p "$APP_DIR/Contents/Resources"
           mkdir -p "$APP_DIR/Contents/Libs"
 
+          # Rename binary for the wrapper script
           cp target/release/cview "$APP_DIR/Contents/MacOS/cview-bin"
 
-          dylibbundler -of -b -x "$APP_DIR/Contents/MacOS/cview-bin" \
-            -d "$APP_DIR/Contents/Libs" \
-            -p "@executable_path/../Libs"
+          # --- Manual Bundling Logic (Replaces dylibbundler) ---
 
+          # Function to recursively bundle dylibs
+          bundle_libs() {
+            local binary="$1"
+
+            # Find dependencies:
+            # 1. otool -L lists libraries
+            # 2. Grep filters out system libs (/usr/lib, /System/Library) and special paths
+            local deps=$(otool -L "$binary" | awk '/\t+/ {print $1}' | grep -vE "^/usr/lib|^/System/Library|^@executable_path|^@loader_path")
+
+            for dep in $deps; do
+              local lib_name=$(basename "$dep")
+              local target_path="$APP_DIR/Contents/Libs/$lib_name"
+
+              # If we haven't copied this lib yet, do it now
+              if [ ! -f "$target_path" ]; then
+                echo "Bundling $lib_name"
+                cp -L "$dep" "$target_path"
+                chmod 755 "$target_path"
+
+                # Update the dylib's own ID
+                install_name_tool -id "@executable_path/../Libs/$lib_name" "$target_path"
+
+                # Recursively process the new lib's dependencies
+                bundle_libs "$target_path"
+              fi
+
+              # Update the binary to point to the bundled lib
+              install_name_tool -change "$dep" "@executable_path/../Libs/$lib_name" "$binary"
+            done
+          }
+
+          echo "Starting recursive bundling..."
+          bundle_libs "$APP_DIR/Contents/MacOS/cview-bin"
+          echo "Bundling complete."
+
+          # --- End Bundling Logic ---
+
+          # Copy Resources
           BREW_PREFIX=$(brew --prefix)
           mkdir -p "$APP_DIR/Contents/Resources/share/glib-2.0/schemas"
           cp "$BREW_PREFIX/share/glib-2.0/schemas/"* "$APP_DIR/Contents/Resources/share/glib-2.0/schemas/"
@@ -137,6 +174,7 @@ jobs:
           cp -r "$BREW_PREFIX/share/icons/Adwaita" "$APP_DIR/Contents/Resources/share/icons/"
           cp -r "$BREW_PREFIX/share/icons/hicolor" "$APP_DIR/Contents/Resources/share/icons/"
 
+          # Create Launcher Script
           cat << 'EOF' > "$APP_DIR/Contents/MacOS/cview"
           #!/bin/sh
           DIR=$(cd "$(dirname "$0")" && pwd)
@@ -147,6 +185,7 @@ jobs:
           EOF
           chmod +x "$APP_DIR/Contents/MacOS/cview"
 
+          # Create Info.plist
           VERSION=${{ needs.create-release.outputs.version }}
           cat > "$APP_DIR/Contents/Info.plist" << EOF
           <?xml version="1.0" encoding="UTF-8"?>
@@ -167,6 +206,10 @@ jobs:
           </plist>
           EOF
 
+          # Ad-hoc code signing is REQUIRED on Apple Silicon
+          codesign --force --deep -s - "$APP_DIR"
+
+          # Create DMG
           hdiutil create -volname CView -srcfolder "$APP_DIR" -ov -format UDZO cview-macos.dmg
 
       - name: Upload macOS DMG
