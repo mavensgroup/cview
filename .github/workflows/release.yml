@@ -4,6 +4,10 @@ on:
   push:
     tags:
       - 'v*'  # Triggers on version tags like v0.4.0, v1.0.0, etc.
+      - 'test-v*'  # Triggers on version tags like v0.4.0, v1.0.0, etc.
+
+permissions:
+  contents: write
 
 env:
   CARGO_TERM_COLOR: always
