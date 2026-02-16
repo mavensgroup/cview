@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+      - 'test-v*'
 
 permissions:
   contents: write
@@ -144,3 +145,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload ${{ github.ref_name }} cview.flatpak
+# Release workflow
