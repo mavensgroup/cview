@@ -36,7 +36,6 @@ jobs:
 
   build-windows:
     needs: create-release
-    if: false  # TEMPORARILY DISABLED
     runs-on: windows-latest
     defaults:
       run:
@@ -101,7 +100,6 @@ jobs:
 
   build-macos:
     needs: create-release
-    if: false  # TEMPORARILY DISABLED
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -217,7 +215,6 @@ jobs:
 
   build-flatpak:
     needs: create-release
-    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
