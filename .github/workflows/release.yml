@@ -31,91 +31,95 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create ${{ github.ref_name }} \
-            --title "Release ${{ github.ref_name }}" \
-            --generate-notes
+          --title "Release ${{ github.ref_name }}" \
+                                                  --generate-notes
 
-  build-windows:
-    needs: create-release
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
+    build-windows:
+      needs: create-release
+      runs-on: windows-latest
+      defaults:
+        run:
+          shell: msys2 {0}
+        steps:
+          - uses: actions/checkout@v4
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-gnu
+          - name: Setup Rust
+            uses: dtolnay/rust-toolchain@stable
+            with:
+              targets: x86_64-pc-windows-gnu
 
-      - name: Setup MSYS2
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          update: true
-          install: >-
-            mingw-w64-ucrt-x86_64-gcc
-            mingw-w64-ucrt-x86_64-gtk4
-            mingw-w64-ucrt-x86_64-libadwaita
-            mingw-w64-ucrt-x86_64-pkgconf
+          - name: Setup MSYS2
+            uses: msys2/setup-msys2@v2
+            with:
+              msystem: UCRT64
+              update: true
+              install: >-
+                mingw-w64-ucrt-x86_64-gcc
+                mingw-w64-ucrt-x86_64-gtk4
+                mingw-w64-ucrt-x86_64-libadwaita
+                mingw-w64-ucrt-x86_64-pkgconf
+                mingw-w64-ucrt-x86_64-rust
 
-      - name: Build
-        shell: msys2 {0}
-        run: |
-          export PKG_CONFIG_PATH="/ucrt64/lib/pkgconfig"
-          cargo build --release --target x86_64-pc-windows-gnu
+          - name: Build
+            run: |
+              export PKG_CONFIG_PATH="/ucrt64/lib/pkgconfig"
+              export PATH="/c/Users/runneradmin/.cargo/bin:$PATH"
+              cargo build --release --target x86_64-pc-windows-gnu
 
-      - name: Upload Windows binary
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          gh release upload ${{ github.ref_name }} target/x86_64-pc-windows-gnu/release/cview.exe
+          - name: Upload Windows binary
+            env:
+              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            shell: bash
+            run: |
+              gh release upload ${{ github.ref_name }} target/x86_64-pc-windows-gnu/release/cview.exe
 
-  build-macos:
-    needs: create-release
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
+    build-macos:
+      needs: create-release
+      runs-on: macos-latest
+      steps:
+        - uses: actions/checkout@v4
 
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        - name: Setup Rust
+          uses: dtolnay/rust-toolchain@stable
 
-      - name: Install GTK4
-        run: brew install gtk4 libadwaita
+        - name: Install GTK4
+          run: brew install gtk4 libadwaita
 
-      - name: Build (allow warnings)
-        run: cargo build --release 2>&1 | grep -v "warning:" || true
+        - name: Build (allow warnings)
+          run: cargo build --release 2>&1 | grep -v "warning:" || true
 
-      - name: Create .app bundle
-        run: |
-          mkdir -p CView.app/Contents/MacOS
-          mkdir -p CView.app/Contents/Resources
-          cp target/release/cview CView.app/Contents/MacOS/
+        - name: Create .app bundle
+          run: |
+            mkdir -p CView.app/Contents/MacOS
+            mkdir -p CView.app/Contents/Resources
+            cp target/release/cview CView.app/Contents/MacOS/
 
-          VERSION=${{ needs.create-release.outputs.version }}
+            VERSION=${{ needs.create-release.outputs.version }}
 
-          cat > CView.app/Contents/Info.plist << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>CFBundleExecutable</key>
-              <string>cview</string>
-              <key>CFBundleIdentifier</key>
-              <string>org.mavensgroup.cview</string>
-              <key>CFBundleName</key>
-              <string>CView</string>
-              <key>CFBundleVersion</key>
-              <string>$VERSION</string>
-          </dict>
-          </plist>
-          EOF
+            cat > CView.app/Contents/Info.plist << EOF
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+            <plist version="1.0">
+            <dict>
+            <key>CFBundleExecutable</key>
+            <string>cview</string>
+            <key>CFBundleIdentifier</key>
+            <string>org.mavensgroup.cview</string>
+            <key>CFBundleName</key>
+            <string>CView</string>
+            <key>CFBundleVersion</key>
+            <string>$VERSION</string>
+            </dict>
+            </plist>
+            EOF
 
-          hdiutil create -volname CView -srcfolder CView.app -ov -format UDZO cview-macos.dmg
+            hdiutil create -volname CView -srcfolder CView.app -ov -format UDZO cview-macos.dmg
 
-      - name: Upload macOS DMG
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload ${{ github.ref_name }} cview-macos.dmg
+        - name: Upload macOS DMG
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            run: |
+              gh release upload ${{ github.ref_name }} cview-macos.dmg
 
   build-flatpak:
     needs: create-release
@@ -145,4 +149,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload ${{ github.ref_name }} cview.flatpak
-# Release workflow
+          # Release workflow
