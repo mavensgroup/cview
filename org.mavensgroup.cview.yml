@@ -1,0 +1,33 @@
+app-id: org.mavensgroup.cview
+runtime: org.gnome.Platform
+runtime-version: '45'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: cview
+
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --filesystem=home
+
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  env:
+    CARGO_HOME: /run/build/cview/cargo
+
+modules:
+  - name: cview
+    buildsystem: simple
+    build-commands:
+      - cargo --offline fetch --manifest-path Cargo.toml --verbose
+      - cargo --offline build --release --verbose
+      - install -Dm755 ./target/release/cview -t /app/bin/
+      - install -Dm644 assets/org.mavensgroup.cview.desktop -t /app/share/applications/
+      - install -Dm644 assets/org.mavensgroup.cview.svg -t /app/share/icons/hicolor/scalable/apps/
+    sources:
+      - type: dir
+        path: .
+      - cargo-sources.json
