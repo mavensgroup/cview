@@ -72,22 +72,17 @@ jobs:
 
       - name: Bundle DLLs and Assets
         run: |
-          # 1. Create a staging directory
           mkdir -p dist
-          
-          # 2. Copy the main executable
           cp target/x86_64-pc-windows-gnu/release/cview.exe dist/
-          
-          # 3. Use ldd to find all DLL dependencies and copy them to dist
-          echo "Collecting DLL dependencies..."
+
+          # Bundle Dependencies (DLLs)
           ldd target/x86_64-pc-windows-gnu/release/cview.exe | grep '/ucrt64' | awk '{print $3}' | xargs -I '{}' cp -u '{}' dist/
-          
-          # 4. Copy GTK/GLib schemas (Crucial for "libgio" errors and settings)
+
+          # Bundle Assets (Schemas & Icons)
           mkdir -p dist/share/glib-2.0/schemas
           cp /ucrt64/share/glib-2.0/schemas/* dist/share/glib-2.0/schemas/
           glib-compile-schemas dist/share/glib-2.0/schemas/
 
-          # 5. Copy Icons (Optional but recommended for UI apps)
           mkdir -p dist/share/icons
           cp -r /ucrt64/share/icons/Adwaita dist/share/icons/
           cp -r /ucrt64/share/icons/hicolor dist/share/icons/
@@ -102,7 +97,7 @@ jobs:
         shell: bash
         run: |
           gh release upload ${{ github.ref_name }} cview-installer.exe
-          
+
   build-macos:
     needs: create-release
     runs-on: macos-latest
@@ -112,21 +107,48 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install GTK4
-        run: brew install gtk4 libadwaita
+      - name: Install Dependencies
+        run: brew install gtk4 libadwaita dylibbundler
 
-      - name: Build (allow warnings)
-        run: cargo build --release 2>&1 | grep -v "warning:" || true
+      - name: Build
+        run: cargo build --release
 
-      - name: Create .app bundle
+      - name: Bundle App
         run: |
-          mkdir -p CView.app/Contents/MacOS
-          mkdir -p CView.app/Contents/Resources
-          cp target/release/cview CView.app/Contents/MacOS/
+          APP_NAME="CView"
+          APP_DIR="$APP_NAME.app"
+
+          mkdir -p "$APP_DIR/Contents/MacOS"
+          mkdir -p "$APP_DIR/Contents/Resources"
+          mkdir -p "$APP_DIR/Contents/Libs"
+
+          cp target/release/cview "$APP_DIR/Contents/MacOS/cview-bin"
+
+          dylibbundler -of -b -x "$APP_DIR/Contents/MacOS/cview-bin" \
+            -d "$APP_DIR/Contents/Libs" \
+            -p "@executable_path/../Libs"
+
+          BREW_PREFIX=$(brew --prefix)
+          mkdir -p "$APP_DIR/Contents/Resources/share/glib-2.0/schemas"
+          cp "$BREW_PREFIX/share/glib-2.0/schemas/"* "$APP_DIR/Contents/Resources/share/glib-2.0/schemas/"
+          glib-compile-schemas "$APP_DIR/Contents/Resources/share/glib-2.0/schemas"
+
+          mkdir -p "$APP_DIR/Contents/Resources/share/icons"
+          cp -r "$BREW_PREFIX/share/icons/Adwaita" "$APP_DIR/Contents/Resources/share/icons/"
+          cp -r "$BREW_PREFIX/share/icons/hicolor" "$APP_DIR/Contents/Resources/share/icons/"
+
+          cat << 'EOF' > "$APP_DIR/Contents/MacOS/cview"
+          #!/bin/sh
+          DIR=$(cd "$(dirname "$0")" && pwd)
+          export GSETTINGS_SCHEMA_DIR="$DIR/../Resources/share/glib-2.0/schemas"
+          export XDG_DATA_DIRS="$DIR/../Resources/share"
+          export GTK_DATA_PREFIX="$DIR/../Resources"
+          exec "$DIR/cview-bin" "$@"
+          EOF
+          chmod +x "$APP_DIR/Contents/MacOS/cview"
 
           VERSION=${{ needs.create-release.outputs.version }}
-
-          cat > CView.app/Contents/Info.plist << EOF
+          cat > "$APP_DIR/Contents/Info.plist" << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -139,11 +161,13 @@ jobs:
               <string>CView</string>
               <key>CFBundleVersion</key>
               <string>$VERSION</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
           </dict>
           </plist>
           EOF
 
-          hdiutil create -volname CView -srcfolder CView.app -ov -format UDZO cview-macos.dmg
+          hdiutil create -volname CView -srcfolder "$APP_DIR" -ov -format UDZO cview-macos.dmg
 
       - name: Upload macOS DMG
         env:
@@ -163,9 +187,11 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          # Added flatpak-builder here
           sudo apt-get install -y flatpak-builder python3-pip
           pip3 install tomlkit aiohttp
+
+          # Fix: Add Flathub remote so the builder can find org.gnome.Sdk
+          flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
       - name: Generate Cargo.lock
         run: cargo generate-lockfile
