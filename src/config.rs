@@ -98,6 +98,7 @@ pub struct RenderStyle {
 
     // SOTA LRU sprite cache (not serialized)
     pub atom_cache: Rc<RefCell<SpriteCache>>,
+    pub show_labels: bool,
 }
 
 // Manual Serialize implementation (skip atom_cache)
@@ -157,6 +158,7 @@ impl<'de> Deserialize<'de> for RenderStyle {
             bvs_threshold_warn: data.bvs_threshold_warn,
             polyhedra_settings: None,
             atom_cache: Rc::new(RefCell::new(SpriteCache::default())),
+            show_labels: false,
         })
     }
 }
@@ -187,6 +189,7 @@ impl Default for RenderStyle {
             bvs_threshold_warn: 0.40,
             polyhedra_settings: None,
             atom_cache: Rc::new(RefCell::new(SpriteCache::default())),
+            show_labels: false,
         }
     }
 }

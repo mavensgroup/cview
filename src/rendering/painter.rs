@@ -174,7 +174,6 @@ fn draw_all_polyhedra(cr: &cairo::Context, atoms: &[RenderAtom], tab: &TabState,
 // ============================================================================
 // MAIN STRUCTURE DRAWING
 // ============================================================================
-
 pub fn draw_structure(
     cr: &cairo::Context,
     atoms: &[RenderAtom],
@@ -209,24 +208,20 @@ pub fn draw_structure(
 
             for (j, r2) in atoms.iter().enumerate() {
                 if i >= j {
-                    continue; // Avoid duplicates
+                    continue;
                 }
 
-                // Calculate CARTESIAN distance (not screen distance!)
+                // Calculate CARTESIAN distance
                 let dx = r2.cart_pos[0] - r1.cart_pos[0];
                 let dy = r2.cart_pos[1] - r1.cart_pos[1];
                 let dz = r2.cart_pos[2] - r1.cart_pos[2];
-
                 let dist = (dx * dx + dy * dy + dz * dz).sqrt();
 
-                // Early distance cutoff (in Angstroms)
                 if dist > 4.0 {
                     continue;
                 }
 
                 let rad2 = get_atom_cov(&r2.element);
-
-                // Bond distance criteria
                 let max_bond_dist = (rad1 + rad2) * tolerance;
                 let min_bond_dist = 0.4;
 
@@ -237,13 +232,11 @@ pub fn draw_structure(
                     let r1_px = raw_r1 * tab.style.atom_scale * scale;
                     let r2_px = raw_r2 * tab.style.atom_scale * scale;
 
-                    // Calculate SCREEN distance for offset
                     let v_x = r2.screen_pos[0] - r1.screen_pos[0];
                     let v_y = r2.screen_pos[1] - r1.screen_pos[1];
                     let v_z = r2.screen_pos[2] - r1.screen_pos[2];
                     let full_screen_dist = (v_x * v_x + v_y * v_y + v_z * v_z).sqrt();
 
-                    // Offset bonds to avoid overlapping atoms
                     let off1 = r1_px * 0.95;
                     let off2 = r2_px * 0.95;
 
@@ -276,23 +269,20 @@ pub fn draw_structure(
     // ========================================================================
     // STEP 3: Depth Sort (Far to Near)
     // ========================================================================
-
-    // Sort bonds by depth
     render_bonds.sort_by(|a, b| {
         let z_a = (a.start[2] + a.end[2]) / 2.0;
         let z_b = (b.start[2] + b.end[2]) / 2.0;
-        z_b.partial_cmp(&z_a).unwrap_or(Ordering::Equal) // NaN-safe
+        z_b.partial_cmp(&z_a).unwrap_or(Ordering::Equal)
     });
 
-    // Sort atoms by depth
     render_atoms.sort_by(|a, b| {
         b.screen_pos[2]
             .partial_cmp(&a.screen_pos[2])
-            .unwrap_or(Ordering::Equal) // NaN-safe
+            .unwrap_or(Ordering::Equal)
     });
 
     // ========================================================================
-    // STEP 4: Draw Bonds (Layer 0 - Behind atoms)
+    // STEP 4: Draw Bonds
     // ========================================================================
     for bond in render_bonds {
         draw_cylinder_impostor(
@@ -308,12 +298,12 @@ pub fn draw_structure(
     }
 
     // ========================================================================
-    // STEP 4.5: Draw Polyhedra (if enabled)
+    // STEP 4.5: Draw Polyhedra
     // ========================================================================
     draw_all_polyhedra(cr, atoms, tab, scale);
 
     // ========================================================================
-    // STEP 5: Draw Atoms (Layer 1 - Front)
+    // STEP 5: Draw Atoms
     // ========================================================================
     let sprite_size = 128.0;
     let mut cache_access = tab.style.atom_cache.borrow_mut();
@@ -321,20 +311,14 @@ pub fn draw_structure(
     for atom in render_atoms {
         let (raw_r, default_rgb) = get_atom_properties(&atom.element);
 
-        // ====================================================================
-        // Determine atom color based on mode
-        // ====================================================================
         let rgb = match tab.style.color_mode {
-            ColorMode::Element => {
-                // Traditional element coloring
-                tab.style
-                    .element_colors
-                    .get(&atom.element)
-                    .copied()
-                    .unwrap_or(default_rgb)
-            }
+            ColorMode::Element => tab
+                .style
+                .element_colors
+                .get(&atom.element)
+                .copied()
+                .unwrap_or(default_rgb),
             ColorMode::BondValence => {
-                // Live BVS coloring
                 if let Some(bvs_value) = tab.bvs_cache.get(atom.original_index) {
                     let ideal = get_ideal_oxidation_state(&atom.element);
                     get_bvs_color(
@@ -344,7 +328,7 @@ pub fn draw_structure(
                         tab.style.bvs_threshold_warn,
                     )
                 } else {
-                    (0.7, 0.7, 0.7) // Fallback gray
+                    (0.7, 0.7, 0.7)
                 }
             }
             _ => default_rgb,
@@ -352,12 +336,9 @@ pub fn draw_structure(
 
         let target_atom_cov = raw_r * tab.style.atom_scale * scale;
 
-        // ====================================================================
         // Selection glow
-        // ====================================================================
         if tab.interaction.selected_indices.contains(&atom.unique_id) {
-            cr.save()
-                .expect("Failed to save Cairo state for selection glow");
+            cr.save().ok();
             let highlight_radius = target_atom_cov + 4.0;
             cr.set_source_rgba(1.0, 0.85, 0.0, 0.8);
             cr.arc(
@@ -367,17 +348,12 @@ pub fn draw_structure(
                 0.0,
                 2.0 * PI,
             );
-            cr.fill().expect("Failed to fill selection glow");
-            cr.restore()
-                .expect("Failed to restore Cairo state after selection glow");
+            cr.fill().ok();
+            cr.restore().ok();
         }
 
-        // ====================================================================
-        // Render atom based on context
-        // ====================================================================
-
-        // PUBLICATION QUALITY: Always use vector rendering for exports
-        if is_export {
+        // Draw Atom (Vector vs Sprite)
+        if is_export || atom.is_ghost || matches!(tab.style.color_mode, ColorMode::BondValence) {
             draw_atom_vector(
                 cr,
                 atom.screen_pos[0],
@@ -385,100 +361,143 @@ pub fn draw_structure(
                 target_atom_cov,
                 rgb,
             );
-        } else if atom.is_ghost {
-            // Ghost atoms: Semi-transparent vector rendering
-            if matches!(tab.style.color_mode, ColorMode::BondValence) {
-                draw_atom_vector(
-                    cr,
-                    atom.screen_pos[0],
-                    atom.screen_pos[1],
-                    target_atom_cov,
-                    rgb,
-                );
-            } else {
-                // SOTA LRU Cache: Multi-resolution + material-aware
-                use crate::rendering::sprite_cache::SpriteCache;
-                let cache_key = SpriteCache::make_key(
-                    &atom.element,
-                    tab.style.atom_scale,
-                    tab.style.metallic,
-                    tab.style.roughness,
-                    tab.style.transmission,
-                );
-
-                let sprite = cache_access.get_or_insert(cache_key, || {
-                    create_atom_sprite(
-                        rgb.0,
-                        rgb.1,
-                        rgb.2,
-                        tab.style.metallic,
-                        tab.style.roughness,
-                        tab.style.transmission,
-                    )
-                });
-
-                cr.save()
-                    .expect("Failed to save Cairo state for ghost atom");
-                cr.translate(atom.screen_pos[0], atom.screen_pos[1]);
-                let scale_factor = (target_atom_cov * 2.0) / sprite_size;
-                cr.scale(scale_factor, scale_factor);
-                cr.set_source_surface(&sprite, -sprite_size / 2.0, -sprite_size / 2.0)
-                    .expect("Failed to set sprite surface for ghost atom");
-                cr.paint().expect("Failed to paint ghost atom");
-                cr.restore()
-                    .expect("Failed to restore Cairo state after ghost atom");
-            }
         } else {
-            // REGULAR (NON-GHOST) ATOMS
+            use crate::rendering::sprite_cache::SpriteCache;
+            let cache_key = SpriteCache::make_key(
+                &atom.element,
+                tab.style.atom_scale,
+                tab.style.metallic,
+                tab.style.roughness,
+                tab.style.transmission,
+            );
 
-            // BVS mode: Use vector rendering (colors change per atom)
-            if matches!(tab.style.color_mode, ColorMode::BondValence) {
-                draw_atom_vector(
-                    cr,
-                    atom.screen_pos[0],
-                    atom.screen_pos[1],
-                    target_atom_cov,
-                    rgb,
-                );
-            } else {
-                // SOTA LRU Cache: Multi-resolution + material-aware
-                use crate::rendering::sprite_cache::SpriteCache;
-                let cache_key = SpriteCache::make_key(
-                    &atom.element,
-                    tab.style.atom_scale,
+            let sprite = cache_access.get_or_insert(cache_key, || {
+                create_atom_sprite(
+                    rgb.0,
+                    rgb.1,
+                    rgb.2,
                     tab.style.metallic,
                     tab.style.roughness,
                     tab.style.transmission,
-                );
+                )
+            });
 
-                let sprite = cache_access.get_or_insert(cache_key, || {
-                    create_atom_sprite(
-                        rgb.0,
-                        rgb.1,
-                        rgb.2,
-                        tab.style.metallic,
-                        tab.style.roughness,
-                        tab.style.transmission,
-                    )
-                });
-
-                cr.save().expect("Failed to save Cairo state for atom");
-                cr.translate(atom.screen_pos[0], atom.screen_pos[1]);
-                let scale_factor = (target_atom_cov * 2.0) / sprite_size;
-                cr.scale(scale_factor, scale_factor);
-                cr.set_source_surface(&sprite, -sprite_size / 2.0, -sprite_size / 2.0)
-                    .expect("Failed to set sprite surface");
-                cr.paint().expect("Failed to paint atom");
-                cr.restore()
-                    .expect("Failed to restore Cairo state after atom");
-            }
+            cr.save().ok();
+            cr.translate(atom.screen_pos[0], atom.screen_pos[1]);
+            let scale_factor = (target_atom_cov * 2.0) / sprite_size;
+            cr.scale(scale_factor, scale_factor);
+            cr.set_source_surface(&sprite, -sprite_size / 2.0, -sprite_size / 2.0)
+                .ok();
+            cr.paint().ok();
+            cr.restore().ok();
         }
-    }
-}
 
-// ============================================================================
-// COORDINATE AXES DRAWING
-// ============================================================================
+        // ====================================================================
+        // ENGRAVED BILLIARD LABELS
+        // ====================================================================
+        if tab.style.show_labels && target_atom_cov > 12.0 {
+            // 1. Determine Contrast & Engraving Colors
+            let lum = 0.299 * rgb.0 + 0.587 * rgb.1 + 0.114 * rgb.2;
+            let (text_col, shadow_col) = if lum > 0.65 {
+                // Bright Atom: Black text with white highlight (stamped in)
+                ((0.0, 0.0, 0.0, 0.8), (1.0, 1.0, 1.0, 0.4))
+            } else {
+                // Dark Atom: White text with dark shadow (embossed)
+                ((1.0, 1.0, 1.0, 0.9), (0.0, 0.0, 0.0, 0.5))
+            };
+
+            // 2. Font Settings (Smaller to avoid curvature distortion issues)
+            // Reduced from 0.9 to 0.6 to keep text in the "flat" center zone
+            let font_size = target_atom_cov * 0.6;
+            cr.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Bold);
+            cr.set_font_size(font_size);
+
+            if let Ok(extents) = cr.text_extents(&atom.element) {
+                let x_off = extents.width() / 2.0 + extents.x_bearing();
+                let y_off = extents.height() / 2.0 + extents.y_bearing();
+
+                let base_x = atom.screen_pos[0] - x_off;
+                let base_y = atom.screen_pos[1] - y_off;
+
+                // 3. Draw "Engraving" Shadow (Offset slightly down-right)
+                cr.set_source_rgba(shadow_col.0, shadow_col.1, shadow_col.2, shadow_col.3);
+                cr.move_to(base_x + 1.0, base_y + 1.0);
+                cr.show_text(&atom.element).ok();
+
+                // 4. Draw Main Text
+                cr.set_source_rgba(text_col.0, text_col.1, text_col.2, text_col.3);
+                cr.move_to(base_x, base_y);
+                cr.show_text(&atom.element).ok();
+            }
+
+            // 5. Heavy Gloss Overlay (Bakes the text under the shine)
+            let grad = cairo::RadialGradient::new(
+                atom.screen_pos[0] - target_atom_cov * 0.3,
+                atom.screen_pos[1] - target_atom_cov * 0.3,
+                target_atom_cov * 0.1,
+                atom.screen_pos[0],
+                atom.screen_pos[1],
+                target_atom_cov,
+            );
+            // Stronger shine to reinforce spherical shape over the text
+            grad.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, 0.5);
+            grad.add_color_stop_rgba(1.0, 1.0, 1.0, 1.0, 0.0);
+
+            cr.set_source(&grad).ok();
+            cr.arc(
+                atom.screen_pos[0],
+                atom.screen_pos[1],
+                target_atom_cov,
+                0.0,
+                2.0 * PI,
+            );
+            cr.fill().ok();
+        } // if tab.style.show_labels && target_atom_cov > 12.0 {
+          // let lum = 0.299 * rgb.0 + 0.587 * rgb.1 + 0.114 * rgb.2;
+          // if lum > 0.65 {
+          // cr.set_source_rgba(0.0, 0.0, 0.0, 0.9);
+          // } else {
+          // cr.set_source_rgba(1.0, 1.0, 1.0, 0.95);
+          // }
+
+        // let font_size = target_atom_cov * 0.9;
+        // cr.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Bold);
+        // cr.set_font_size(font_size);
+
+        // // FIX: Use methods with () and handle Result properly
+        // if let Ok(extents) = cr.text_extents(&atom.element) {
+        // let x_off = extents.width() / 2.0 + extents.x_bearing();
+        // let y_off = extents.height() / 2.0 + extents.y_bearing();
+
+        // cr.move_to(atom.screen_pos[0] - x_off, atom.screen_pos[1] - y_off);
+        // cr.show_text(&atom.element).ok();
+        // }
+
+        // let grad = cairo::RadialGradient::new(
+        // atom.screen_pos[0] - target_atom_cov * 0.3,
+        // atom.screen_pos[1] - target_atom_cov * 0.3,
+        // target_atom_cov * 0.1,
+        // atom.screen_pos[0],
+        // atom.screen_pos[1],
+        // target_atom_cov,
+        // );
+        // grad.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, 0.4);
+        // grad.add_color_stop_rgba(1.0, 1.0, 1.0, 1.0, 0.0);
+
+        // cr.set_source(&grad).ok();
+        // cr.arc(
+        // atom.screen_pos[0],
+        // atom.screen_pos[1],
+        // target_atom_cov,
+        // 0.0,
+        // 2.0 * PI,
+        // );
+        // cr.fill().ok();
+        // }
+    }
+} // ============================================================================
+  // COORDINATE AXES DRAWING
+  // ============================================================================
 
 pub fn draw_axes(cr: &cairo::Context, tab: &TabState, width: f64, height: f64) {
     let hud_size = (width * 0.12).clamp(60.0, 150.0);

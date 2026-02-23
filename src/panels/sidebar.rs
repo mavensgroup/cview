@@ -4,9 +4,9 @@
 use gtk4::gdk;
 use gtk4::prelude::*;
 use gtk4::{
-    Adjustment, Align, Box as GtkBox, Button, ColorButton, CssProvider, DropDown, Expander, Frame,
-    Label, Notebook, Orientation, PolicyType, Scale, ScrolledWindow, Separator, TextView,
-    STYLE_PROVIDER_PRIORITY_APPLICATION,
+    Adjustment, Align, Box as GtkBox, Button, CheckButton, ColorButton, CssProvider, DropDown,
+    Expander, Frame, Label, Notebook, Orientation, PolicyType, Scale, ScrolledWindow, Separator,
+    TextView, STYLE_PROVIDER_PRIORITY_APPLICATION,
 };
 
 use crate::config::ColorMode;
@@ -307,6 +307,22 @@ pub fn build(
         }),
     ));
 
+    // --- Show Labels Toggle ---
+    let check_labels = CheckButton::with_label("Show Atomic Symbols");
+    // Set initial state
+    check_labels.set_active(state.borrow().active_tab().style.show_labels);
+
+    let s_lbl = state.clone();
+    let nb_lbl = nb_weak.clone();
+    let cb_lbl = queue_active_draw.clone();
+
+    check_labels.connect_toggled(move |btn| {
+        let mut st = s_lbl.borrow_mut();
+        st.active_tab_mut().style.show_labels = btn.is_active();
+        drop(st);
+        cb_lbl(&nb_lbl);
+    });
+    vbox_atom.append(&check_labels);
     frame_atom.set_child(Some(&vbox_atom));
     style_box.append(&frame_atom);
 

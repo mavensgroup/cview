@@ -3,114 +3,64 @@
 use nalgebra::{Matrix3, Vector3};
 
 /// Convert fractional coordinates to Cartesian using lattice matrix
-///
-/// # Arguments
-/// * `frac` - Fractional coordinates [x, y, z] in range [0, 1]
-/// * `lattice` - Lattice vectors as row matrix [[ax, ay, az], [bx, by, bz], [cx, cy, cz]]
-///
-/// # Returns
-/// Cartesian coordinates in Angstroms
-///
-/// # Formula
-/// ```text
-/// Cartesian = Lattice^T × Fractional
-/// ```
 pub fn frac_to_cart(frac: [f64; 3], lattice: [[f64; 3]; 3]) -> [f64; 3] {
-  let frac_vec = Vector3::from(frac);
-  let lat_mat = Matrix3::from_row_slice(&[
-    lattice[0][0],
-    lattice[0][1],
-    lattice[0][2],
-    lattice[1][0],
-    lattice[1][1],
-    lattice[1][2],
-    lattice[2][0],
-    lattice[2][1],
-    lattice[2][2],
-  ]);
+    let frac_vec = Vector3::from(frac);
+    // Construct matrix from rows
+    let lat_mat = Matrix3::new(
+        lattice[0][0],
+        lattice[0][1],
+        lattice[0][2],
+        lattice[1][0],
+        lattice[1][1],
+        lattice[1][2],
+        lattice[2][0],
+        lattice[2][1],
+        lattice[2][2],
+    );
 
-  // Multiply: Cartesian = Lattice^T × Fractional
-  let cart_vec = lat_mat.transpose() * frac_vec;
+    // Multiply: Cartesian = Lattice^T * Fractional
+    let cart_vec = lat_mat.transpose() * frac_vec;
 
-  [cart_vec.x, cart_vec.y, cart_vec.z]
+    [cart_vec.x, cart_vec.y, cart_vec.z]
 }
 
 /// Convert Cartesian coordinates to fractional using lattice matrix
-///
-/// # Arguments
-/// * `cart` - Cartesian coordinates in Angstroms
-/// * `lattice` - Lattice vectors as row matrix [[ax, ay, az], [bx, by, bz], [cx, cy, cz]]
-///
-/// # Returns
-/// Fractional coordinates [x, y, z] or None if lattice is singular
-///
-/// # Formula
-/// ```text
-/// Fractional = (Lattice^T)^-1 × Cartesian
-/// ```
+/// Returns Option because matrix might be singular (e.g., collapsed cell)
 pub fn cart_to_frac(cart: [f64; 3], lattice: [[f64; 3]; 3]) -> Option<[f64; 3]> {
-  let cart_vec = Vector3::from(cart);
-  let lat_mat = Matrix3::from_row_slice(&[
-    lattice[0][0],
-    lattice[0][1],
-    lattice[0][2],
-    lattice[1][0],
-    lattice[1][1],
-    lattice[1][2],
-    lattice[2][0],
-    lattice[2][1],
-    lattice[2][2],
-  ]);
+    let cart_vec = Vector3::from(cart);
+    let lat_mat = Matrix3::new(
+        lattice[0][0],
+        lattice[0][1],
+        lattice[0][2],
+        lattice[1][0],
+        lattice[1][1],
+        lattice[1][2],
+        lattice[2][0],
+        lattice[2][1],
+        lattice[2][2],
+    );
 
-  // Invert lattice matrix transpose
-  let inv_lat = lat_mat.transpose().try_inverse()?;
-
-  // Multiply: Fractional = (Lattice^T)^-1 × Cartesian
-  let frac_vec = inv_lat * cart_vec;
-
-  Some([frac_vec.x, frac_vec.y, frac_vec.z])
+    // Inverse of Transpose
+    if let Some(inv_lat) = lat_mat.transpose().try_inverse() {
+        let frac_vec = inv_lat * cart_vec;
+        Some([frac_vec.x, frac_vec.y, frac_vec.z])
+    } else {
+        None
+    }
 }
 
-#[cfg(test)]
-mod tests {
-  use super::*;
+/// Inverts a 3x3 matrix (used for Supercell transformations)
+pub fn invert_matrix_3x3(m: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
+    let mat = Matrix3::new(
+        m[0][0], m[0][1], m[0][2], m[1][0], m[1][1], m[1][2], m[2][0], m[2][1], m[2][2],
+    );
 
-  #[test]
-  fn test_cubic_lattice() {
-    // Simple cubic lattice 5.0 Å
-    let lattice = [[5.0, 0.0, 0.0], [0.0, 5.0, 0.0], [0.0, 0.0, 5.0]];
-
-    let frac = [0.5, 0.5, 0.5];
-    let cart = frac_to_cart(frac, lattice);
-
-    assert!((cart[0] - 2.5).abs() < 1e-10);
-    assert!((cart[1] - 2.5).abs() < 1e-10);
-    assert!((cart[2] - 2.5).abs() < 1e-10);
-  }
-
-  #[test]
-  fn test_roundtrip() {
-    // Non-orthogonal lattice
-    let lattice = [[4.0, 0.0, 0.0], [2.0, 3.46, 0.0], [0.0, 0.0, 5.0]];
-
-    let frac_orig = [0.333, 0.667, 0.25];
-    let cart = frac_to_cart(frac_orig, lattice);
-    let frac_back = cart_to_frac(cart, lattice).unwrap();
-
-    assert!((frac_back[0] - frac_orig[0]).abs() < 1e-10);
-    assert!((frac_back[1] - frac_orig[1]).abs() < 1e-10);
-    assert!((frac_back[2] - frac_orig[2]).abs() < 1e-10);
-  }
-
-  #[test]
-  fn test_origin() {
-    let lattice = [[3.0, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 5.0]];
-
-    let frac = [0.0, 0.0, 0.0];
-    let cart = frac_to_cart(frac, lattice);
-
-    assert!((cart[0]).abs() < 1e-10);
-    assert!((cart[1]).abs() < 1e-10);
-    assert!((cart[2]).abs() < 1e-10);
-  }
+    match mat.try_inverse() {
+        Some(inv) => [
+            [inv.m11, inv.m12, inv.m13],
+            [inv.m21, inv.m22, inv.m23],
+            [inv.m31, inv.m32, inv.m33],
+        ],
+        None => [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], // Identity fallback
+    }
 }

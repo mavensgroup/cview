@@ -1,3 +1,4 @@
+pub mod basis;
 pub mod conversion;
 pub mod miller_algo;
 pub mod slab;
