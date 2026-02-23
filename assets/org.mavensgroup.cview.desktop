@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=CView
+Exec=cview
+Icon=org.mavensgroup.cview
+Terminal=false
+Categories=Office;
+StartupWMClass=org.mavensgroup.cview

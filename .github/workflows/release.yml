@@ -1,0 +1,302 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'test-v*'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ github.ref_name }} \
+            --title "Release ${{ github.ref_name }}" \
+            --generate-notes
+
+  build-windows:
+    needs: create-release
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-gtk4
+            mingw-w64-ucrt-x86_64-libadwaita
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-rust
+            mingw-w64-ucrt-x86_64-nsis
+
+      - name: Build
+        env:
+          PKG_CONFIG_ALLOW_CROSS: 1
+          PKG_CONFIG_PATH: /ucrt64/lib/pkgconfig
+          LIBRARY_PATH: /ucrt64/lib
+        run: |
+          cargo build --release --target x86_64-pc-windows-gnu
+
+      - name: Bundle DLLs and Assets
+        run: |
+          mkdir -p dist
+          cp target/x86_64-pc-windows-gnu/release/cview.exe dist/
+
+          # Bundle Dependencies (DLLs)
+          ldd target/x86_64-pc-windows-gnu/release/cview.exe | grep '/ucrt64' | awk '{print $3}' | xargs -I '{}' cp -u '{}' dist/
+
+          # Bundle Assets (Schemas & Icons)
+          mkdir -p dist/share/glib-2.0/schemas
+          cp /ucrt64/share/glib-2.0/schemas/* dist/share/glib-2.0/schemas/
+          glib-compile-schemas dist/share/glib-2.0/schemas/
+
+          mkdir -p dist/share/icons
+          cp -r /ucrt64/share/icons/Adwaita dist/share/icons/
+          cp -r /ucrt64/share/icons/hicolor dist/share/icons/
+
+      - name: Create Installer
+        run: |
+          makensis installer.ini
+
+      - name: Upload Installer
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release upload ${{ github.ref_name }} cview-installer.exe
+
+  build-macos:
+    needs: create-release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Dependencies
+        # Added adwaita-icon-theme specifically
+        run: brew install gtk4 libadwaita adwaita-icon-theme
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Bundle App
+        run: |
+          APP_NAME="CView"
+          APP_DIR="$APP_NAME.app"
+
+          mkdir -p "$APP_DIR/Contents/MacOS"
+          mkdir -p "$APP_DIR/Contents/Resources"
+          mkdir -p "$APP_DIR/Contents/Libs"
+
+          # Rename binary for the wrapper script
+          cp target/release/cview "$APP_DIR/Contents/MacOS/cview-bin"
+
+          # --- Manual Bundling Logic ---
+          bundle_libs() {
+            local binary="$1"
+            local deps=$(otool -L "$binary" | awk '/\t+/ {print $1}' | grep -vE "^/usr/lib|^/System/Library|^@executable_path|^@loader_path")
+            for dep in $deps; do
+              local lib_name=$(basename "$dep")
+              local target_path="$APP_DIR/Contents/Libs/$lib_name"
+              if [ ! -f "$target_path" ]; then
+                echo "Bundling $lib_name"
+                cp -L "$dep" "$target_path"
+                chmod 755 "$target_path"
+                install_name_tool -id "@executable_path/../Libs/$lib_name" "$target_path"
+                bundle_libs "$target_path"
+              fi
+              install_name_tool -change "$dep" "@executable_path/../Libs/$lib_name" "$binary"
+            done
+          }
+          echo "Starting recursive bundling..."
+          bundle_libs "$APP_DIR/Contents/MacOS/cview-bin"
+          echo "Bundling complete."
+          # --- End Bundling Logic ---
+
+          # Copy Resources
+          BREW_PREFIX=$(brew --prefix)
+          mkdir -p "$APP_DIR/Contents/Resources/share/glib-2.0/schemas"
+          cp "$BREW_PREFIX/share/glib-2.0/schemas/"* "$APP_DIR/Contents/Resources/share/glib-2.0/schemas/"
+          glib-compile-schemas "$APP_DIR/Contents/Resources/share/glib-2.0/schemas"
+
+          mkdir -p "$APP_DIR/Contents/Resources/share/icons"
+
+          # Improved Icon Copying: Check if folders exist before copying
+          if [ -d "$BREW_PREFIX/share/icons/Adwaita" ]; then
+            cp -r "$BREW_PREFIX/share/icons/Adwaita" "$APP_DIR/Contents/Resources/share/icons/"
+          else
+            echo "Warning: Adwaita icons not found at $BREW_PREFIX/share/icons/Adwaita"
+          fi
+
+          if [ -d "$BREW_PREFIX/share/icons/hicolor" ]; then
+            cp -r "$BREW_PREFIX/share/icons/hicolor" "$APP_DIR/Contents/Resources/share/icons/"
+          else
+            echo "Warning: Hicolor icons not found at $BREW_PREFIX/share/icons/hicolor"
+          fi
+
+          # Create Launcher Script
+          cat << 'EOF' > "$APP_DIR/Contents/MacOS/cview"
+          #!/bin/sh
+          DIR=$(cd "$(dirname "$0")" && pwd)
+          export GSETTINGS_SCHEMA_DIR="$DIR/../Resources/share/glib-2.0/schemas"
+          export XDG_DATA_DIRS="$DIR/../Resources/share"
+          export GTK_DATA_PREFIX="$DIR/../Resources"
+          exec "$DIR/cview-bin" "$@"
+          EOF
+          chmod +x "$APP_DIR/Contents/MacOS/cview"
+
+          # Create Info.plist
+          VERSION=${{ needs.create-release.outputs.version }}
+          cat > "$APP_DIR/Contents/Info.plist" << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>cview</string>
+              <key>CFBundleIdentifier</key>
+              <string>org.mavensgroup.cview</string>
+              <key>CFBundleName</key>
+              <string>CView</string>
+              <key>CFBundleVersion</key>
+              <string>$VERSION</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+          </dict>
+          </plist>
+          EOF
+
+          # Ad-hoc sign the bundle
+          codesign --force --deep -s - "$APP_DIR"
+
+          # Create DMG
+          hdiutil create -volname CView -srcfolder "$APP_DIR" -ov -format UDZO cview-macos.dmg
+
+      - name: Upload macOS DMG
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.ref_name }} cview-macos.dmg
+
+  build-flatpak:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder python3-pip
+          pip3 install tomlkit aiohttp
+
+          # 1. Add Flathub Remote (System-wide)
+          sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+          # 2. Pre-install GNOME 49 Runtimes (System-wide with Sudo)
+          # We use 25.08 for the rust-stable extension as it matches the GNOME 49 base.
+          sudo flatpak install -y --noninteractive flathub \
+            org.gnome.Sdk//49 \
+            org.gnome.Platform//49 \
+            org.freedesktop.Sdk.Extension.rust-stable//25.08
+
+      - name: Generate Cargo.lock
+        run: cargo generate-lockfile
+
+      - name: Generate cargo sources
+        run: |
+          curl -O https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py
+          python3 flatpak-cargo-generator.py ./Cargo.lock -o cargo-sources.json
+
+      - name: Build Flatpak
+        uses: flatpak/flatpak-github-actions/flatpak-builder@v6
+        with:
+          bundle: cview.flatpak
+          manifest-path: org.mavensgroup.cview.yml
+          cache-key: flatpak-builder-${{ github.sha }}
+          # CRITICAL FIX: Disable auto-install because we already did it with sudo above
+          install-deps-from: false
+
+      - name: Upload Flatpak
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.ref_name }} cview.flatpak
+
+  build-linux-pkg:
+    name: Build DEB & RPM
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libadwaita-1-dev librust-gdk4-sys-dev
+
+      - name: Install Packaging Tools
+        run: |
+          cargo install cargo-deb
+          cargo install cargo-generate-rpm
+
+      - name: Build Binary (Release)
+        run: cargo build --release
+
+      - name: Build DEB
+        run: |
+          cargo deb --no-build --output target/debian/cview.deb
+
+      - name: Build RPM
+        run: |
+          cargo generate-rpm
+          # Rename for clarity (optional, but nice)
+          mv target/generate-rpm/*.rpm target/generate-rpm/cview.rpm
+
+      - name: Upload Linux Packages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.ref_name }} target/debian/cview.deb
+          gh release upload ${{ github.ref_name }} target/generate-rpm/cview.rpm
