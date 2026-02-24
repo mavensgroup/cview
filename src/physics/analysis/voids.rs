@@ -1,5 +1,8 @@
+// src/physics/analysis/voids.rs
+
 use crate::model::elements::{get_atom_cov, get_atom_ionic_radius, get_atom_vdw};
 use crate::model::structure::Structure;
+use crate::utils::linalg::cart_to_frac;
 use nalgebra::{Matrix3, Vector3};
 use rayon::prelude::*;
 use std::fmt;
@@ -265,20 +268,18 @@ pub fn calculate_voids(structure: &Structure, config: VoidConfig) -> Result<Void
 
     let lat = structure.lattice;
 
-    // --- Basis Matrix Setup ---
-    // Columns = lattice vectors (a, b, c)
-    // Maps fractional -> Cartesian coordinates
-    let basis = Matrix3::new(
-        lat[0][0], lat[1][0], lat[2][0], lat[0][1], lat[1][1], lat[2][1], lat[0][2], lat[1][2],
-        lat[2][2],
-    );
+    // Basis: columns = lattice vectors — maps fractional → Cartesian
+    let basis = Matrix3::from_columns(&[
+        Vector3::from(lat[0]),
+        Vector3::from(lat[1]),
+        Vector3::from(lat[2]),
+    ]);
+    basis.try_inverse().ok_or(VoidError::SingularLattice)?; // singular check
 
-    let inv_basis = basis.try_inverse().ok_or(VoidError::SingularLattice)?;
-
-    // --- Grid Dimensions ---
-    let a_len = (lat[0][0].powi(2) + lat[0][1].powi(2) + lat[0][2].powi(2)).sqrt();
-    let b_len = (lat[1][0].powi(2) + lat[1][1].powi(2) + lat[1][2].powi(2)).sqrt();
-    let c_len = (lat[2][0].powi(2) + lat[2][1].powi(2) + lat[2][2].powi(2)).sqrt();
+    // Grid dimensions from lattice vector lengths
+    let a_len = Vector3::from(lat[0]).norm();
+    let b_len = Vector3::from(lat[1]).norm();
+    let c_len = Vector3::from(lat[2]).norm();
 
     let nx = ((a_len / config.grid_resolution).ceil() as usize).max(1);
     let ny = ((b_len / config.grid_resolution).ceil() as usize).max(1);
@@ -302,21 +303,17 @@ pub fn calculate_voids(structure: &Structure, config: VoidConfig) -> Result<Void
     let atoms_data: Vec<ProcessedAtom> = structure
         .atoms
         .iter()
-        .map(|a| {
-            let cart = Vector3::new(a.position[0], a.position[1], a.position[2]);
-            let frac = inv_basis * cart;
-
-            // Get appropriate radius
+        .filter_map(|a| {
+            let frac = cart_to_frac(a.position, lat)?;
             let raw_radius = match config.radius_type {
                 RadiusType::Ionic => get_atom_ionic_radius(&a.element),
                 RadiusType::VanDerWaals => get_atom_vdw(&a.element),
                 RadiusType::Covalent => get_atom_cov(&a.element),
             };
-
-            ProcessedAtom {
-                frac,
+            Some(ProcessedAtom {
+                frac: Vector3::from(frac),
                 radius: raw_radius * config.radii_scale,
-            }
+            })
         })
         .collect();
 

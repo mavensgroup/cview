@@ -1,6 +1,7 @@
 pub mod export;
 pub mod painter;
 pub mod polyhedra;
+pub mod polyhedra_lighting;
 pub mod primitives;
 pub mod scene;
 pub mod sprite_cache;

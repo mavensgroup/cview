@@ -1,202 +1,145 @@
-// src/ui/dialogs/basis_dlg.rs
+// src/ui/dialogs/supercell_dlg.rs
 
-use crate::physics::operations::basis;
+use crate::physics::operations::supercell;
 use crate::state::AppState;
 use gtk4::prelude::*;
-use gtk4::{
-    Align, Button, Dialog, Entry, Grid, Label, Notebook, Orientation, ResponseType, Window,
-};
+use gtk4::{Align, CheckButton, Dialog, Grid, Notebook, ResponseType, SpinButton, Window};
 use std::cell::RefCell;
 use std::rc::Rc;
 
 pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &Notebook) {
     let dialog = Dialog::builder()
-        .title("Basis Operations")
+        .title("Matrix Transformation")
         .transient_for(parent)
         .modal(true)
-        .default_width(360)
+        .default_width(340)
         .build();
 
     let content = dialog.content_area();
-    content.set_margin_top(15);
-    content.set_margin_bottom(15);
-    content.set_margin_start(15);
-    content.set_margin_end(15);
+    content.set_margin_top(20);
+    content.set_margin_bottom(20);
+    content.set_margin_start(20);
+    content.set_margin_end(20);
 
-    let tabs = Notebook::new();
+    // --- Mode Toggle (Diagonal vs General) ---
+    let box_mode = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
+    box_mode.set_halign(Align::Center);
+    box_mode.set_margin_bottom(15);
 
-    // --- TAB 1: SELECTION ---
-    let box_sel = gtk4::Box::new(Orientation::Vertical, 10);
-    box_sel.set_margin_top(15);
-    box_sel.set_halign(Align::Center);
+    let check_general = CheckButton::with_label("General Matrix (Shear/Swap)");
+    check_general.set_active(false);
 
-    let lbl_count = Label::new(Some("No atoms selected"));
+    box_mode.append(&check_general);
+    content.append(&box_mode);
 
-    let grid_edit = Grid::new();
-    grid_edit.set_column_spacing(10);
-    grid_edit.set_row_spacing(10);
+    // --- 3x3 Integer Matrix Grid ---
+    let grid = Grid::new();
+    grid.set_row_spacing(5);
+    grid.set_column_spacing(10);
+    grid.set_halign(Align::Center);
 
-    let entry_el = Entry::new();
-    entry_el.set_placeholder_text(Some("e.g. Au"));
-    entry_el.set_width_chars(6);
+    let mut spins_vec = Vec::new();
 
-    let btn_change = Button::with_label("Change Element");
-    // Removed btn_delete definition here
+    for r in 0..3 {
+        for c in 0..3 {
+            let default_val = if r == c { 1.0 } else { 0.0 };
 
-    grid_edit.attach(&Label::new(Some("New Element:")), 0, 0, 1, 1);
-    grid_edit.attach(&entry_el, 1, 0, 1, 1);
-    grid_edit.attach(&btn_change, 2, 0, 1, 1);
+            // Integer steps only — no fractional cell transformations
+            let spin = SpinButton::with_range(-20.0, 20.0, 1.0);
+            spin.set_digits(0);
+            spin.set_value(default_val);
+            spin.set_width_chars(4);
+            spin.set_snap_to_ticks(true);
 
-    box_sel.append(&lbl_count);
-    box_sel.append(&grid_edit);
-    // Removed box_sel.append(&btn_delete) here
+            // Off-diagonals disabled until general mode is enabled
+            if r != c {
+                spin.set_sensitive(false);
+            }
 
-    tabs.append_page(&box_sel, Some(&Label::new(Some("Selection"))));
-
-    // --- TAB 2: GLOBAL REPLACE ---
-    let grid_sub = Grid::new();
-    grid_sub.set_row_spacing(10);
-    grid_sub.set_column_spacing(10);
-    grid_sub.set_halign(Align::Center);
-    grid_sub.set_margin_top(15);
-
-    let entry_find = Entry::new();
-    entry_find.set_placeholder_text(Some("e.g. Si"));
-    let entry_replace = Entry::new();
-    entry_replace.set_placeholder_text(Some("e.g. Ge"));
-    let btn_sub = Button::with_label("Replace All");
-
-    grid_sub.attach(&Label::new(Some("Find:")), 0, 0, 1, 1);
-    grid_sub.attach(&entry_find, 1, 0, 1, 1);
-    grid_sub.attach(&Label::new(Some("Replace:")), 0, 1, 1, 1);
-    grid_sub.attach(&entry_replace, 1, 1, 1, 1);
-    grid_sub.attach(&btn_sub, 0, 2, 2, 1);
-
-    tabs.append_page(&grid_sub, Some(&Label::new(Some("Global"))));
-
-    // --- TAB 3: TOOLS ---
-    let box_std = gtk4::Box::new(Orientation::Vertical, 10);
-    box_std.set_halign(Align::Center);
-    box_std.set_margin_top(20);
-    let btn_wrap = Button::with_label("Standardize Positions [0, 1)");
-    box_std.append(&btn_wrap);
-    tabs.append_page(&box_std, Some(&Label::new(Some("Tools"))));
-
-    content.append(&tabs);
-
-    // --- LOGIC ---
-    let state_weak = Rc::downgrade(&state);
-    let notebook_weak = notebook.downgrade();
-
-    // Update Label on Open
-    {
-        let s = state.borrow();
-        let st = s.active_tab();
-        let n = st.interaction.selected_indices.len();
-        lbl_count.set_text(&format!("{} atoms selected", n));
-        println!("BASIS: Opened with {} atoms selected.", n);
-
-        let has_sel = n > 0;
-        btn_change.set_sensitive(has_sel);
+            grid.attach(&spin, c, r, 1, 1);
+            spins_vec.push(spin);
+        }
     }
 
-    // 2. CHANGE ELEMENT BUTTON logic
-    let entry_el_c1 = entry_el.clone();
-    let lbl_count_c1 = lbl_count.clone();
-    let btn_change_c1 = btn_change.clone();
+    let spins = Rc::new(spins_vec);
+    content.append(&grid);
 
-    // Clone weak ref specifically for this closure
-    let state_weak_c1 = state_weak.clone();
-    let nb_weak_c1 = notebook_weak.clone();
-
-    btn_change.connect_clicked(move |_| {
-        println!("BASIS: 'Change Element' clicked.");
-        if let Some(st) = state_weak_c1.upgrade() {
-            let mut s = st.borrow_mut();
-            let tab = s.active_tab_mut();
-
-            let sel_indices: Vec<usize> =
-                tab.interaction.selected_indices.iter().cloned().collect();
-            let new_el = entry_el_c1.text().trim().to_string();
-
-            println!(
-                "BASIS: Modifying {} atoms to '{}'",
-                sel_indices.len(),
-                new_el
-            );
-
-            if !sel_indices.is_empty() && !new_el.is_empty() {
-                if let Some(current_s) = &tab.structure {
-                    let ns = basis::modify_selection(current_s, &sel_indices, &new_el);
-
-                    // 1. Update structure
-                    tab.structure = Some(ns);
-
-                    // 2. Clear selection (Critical for visual update)
-                    tab.interaction.selected_indices.clear();
-
-                    // 3. Update UI
-                    lbl_count_c1.set_text("0 atoms selected");
-                    btn_change_c1.set_sensitive(false);
-
-                    // 4. Force Redraw
-                    if let Some(nb) = nb_weak_c1.upgrade() {
-                        if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
-                            da.queue_draw();
-                        }
-                    }
-                    println!("BASIS: Update applied successfully.");
+    // --- Toggle Logic ---
+    let spins_clone = spins.clone();
+    check_general.connect_toggled(move |btn| {
+        let is_general = btn.is_active();
+        for (i, spin) in spins_clone.iter().enumerate() {
+            let r = i / 3;
+            let c = i % 3;
+            if r != c {
+                spin.set_sensitive(is_general);
+                if !is_general {
+                    spin.set_value(0.0);
                 }
             }
         }
     });
 
-    // 4. GLOBAL REPLACE
-    let state_weak_sub = Rc::downgrade(&state);
-    let nb_weak_sub = notebook.downgrade();
-    btn_sub.connect_clicked(move |_| {
-        if let Some(st) = state_weak_sub.upgrade() {
+    // --- Buttons ---
+    dialog.add_button("Reset", ResponseType::Reject);
+    dialog.add_button("Transform", ResponseType::Ok);
+
+    // --- Response ---
+    let state_weak = Rc::downgrade(&state);
+    let notebook_weak = notebook.downgrade();
+    let spins_final = spins.clone();
+
+    dialog.connect_response(move |dlg, resp| {
+        if let Some(st) = state_weak.upgrade() {
             let mut s = st.borrow_mut();
             let tab = s.active_tab_mut();
 
-            let from = entry_find.text().trim().to_string();
-            let to = entry_replace.text().trim().to_string();
+            match resp {
+                ResponseType::Ok => {
+                    let mut mat = [[0i32; 3]; 3];
+                    for r in 0..3 {
+                        for c in 0..3 {
+                            // Round to nearest integer — spin already enforces step=1
+                            // but rounding makes it bulletproof
+                            mat[r][c] = spins_final[r * 3 + c].value().round() as i32;
+                        }
+                    }
 
-            if !from.is_empty() && !to.is_empty() {
-                if let Some(current_s) = &tab.structure {
-                    let ns = basis::substitute_element(current_s, &from, &to);
-                    tab.structure = Some(ns);
-                    if let Some(nb) = nb_weak_sub.upgrade() {
-                        if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
-                            da.queue_draw();
+                    if let Some(orig) = &tab.original_structure {
+                        let new_s = supercell::transform(orig, mat);
+                        tab.structure = Some(new_s);
+                        tab.interaction.selected_indices.clear();
+
+                        if let Some(nb) = notebook_weak.upgrade() {
+                            if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
+                                da.queue_draw();
+                            }
                         }
                     }
                 }
-            }
-        }
-    });
+                ResponseType::Reject => {
+                    if let Some(orig) = &tab.original_structure {
+                        tab.structure = Some(orig.clone());
+                        tab.interaction.selected_indices.clear();
 
-    // 5. STANDARDIZE
-    let state_weak_std = Rc::downgrade(&state);
-    let nb_weak_std = notebook.downgrade();
-    btn_wrap.connect_clicked(move |_| {
-        if let Some(st) = state_weak_std.upgrade() {
-            let mut s = st.borrow_mut();
-            let tab = s.active_tab_mut();
+                        for (i, spin) in spins_final.iter().enumerate() {
+                            let r = i / 3;
+                            let c = i % 3;
+                            spin.set_value(if r == c { 1.0 } else { 0.0 });
+                        }
 
-            if let Some(current_s) = &tab.structure {
-                let ns = basis::standardize_positions(current_s);
-                tab.structure = Some(ns);
-                if let Some(nb) = nb_weak_std.upgrade() {
-                    if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
-                        da.queue_draw();
+                        if let Some(nb) = notebook_weak.upgrade() {
+                            if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
+                                da.queue_draw();
+                            }
+                        }
                     }
                 }
+                _ => {}
             }
         }
+        dlg.close();
     });
 
-    dialog.add_button("Close", ResponseType::Close);
-    dialog.connect_response(|dlg, _| dlg.close());
     dialog.show();
 }

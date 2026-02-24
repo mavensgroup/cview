@@ -1,7 +1,8 @@
 // src/physics/operations/slab.rs
 
 use crate::model::structure::{Atom, Structure};
-use crate::physics::operations::miller_algo::MillerMath; // <--- CHANGED: Import the Struct
+use crate::physics::operations::miller_algo::MillerMath;
+use crate::utils::linalg::cart_to_frac;
 use nalgebra::{Matrix3, Vector3};
 
 const TOLERANCE: f64 = 1e-5;
@@ -29,18 +30,12 @@ pub fn generate_slab(
     }
 
     // ========== 1. CONSTRUCT LATTICE MATRIX ==========
-    // Convention: Lattice vectors are COLUMNS of the matrix
-    let lat_matrix = Matrix3::new(
-        structure.lattice[0][0],
-        structure.lattice[1][0],
-        structure.lattice[2][0],
-        structure.lattice[0][1],
-        structure.lattice[1][1],
-        structure.lattice[2][1],
-        structure.lattice[0][2],
-        structure.lattice[1][2],
-        structure.lattice[2][2],
-    );
+    // Lattice vectors as columns
+    let lat_matrix = Matrix3::from_columns(&[
+        Vector3::from(structure.lattice[0]),
+        Vector3::from(structure.lattice[1]),
+        Vector3::from(structure.lattice[2]),
+    ]);
 
     let det_orig = lat_matrix.determinant();
     if det_orig.abs() < TOLERANCE {
@@ -78,14 +73,9 @@ pub fn generate_slab(
         .ok_or("Failed to invert transformation matrix")?;
 
     // ========== 3. NEW PRIMITIVE LATTICE ==========
-    // New lattice vectors: A_new = A_old * M
     let lat_primitive = lat_matrix * m_transform;
 
     // ========== 4. MAP ATOMS TO PRIMITIVE CELL ==========
-    let lat_inv = lat_matrix
-        .try_inverse()
-        .ok_or("Cannot invert original lattice matrix")?;
-
     // Search range based on volume expansion
     let search_range = (det_transform.powf(1.0 / 3.0).ceil() as i32) + 2;
     let mut primitive_atoms: Vec<(String, Vector3<f64>)> = Vec::new();
@@ -96,14 +86,11 @@ pub fn generate_slab(
                 let shift = Vector3::new(i as f64, j as f64, k_idx as f64);
 
                 for atom in &structure.atoms {
-                    let cart_pos =
-                        Vector3::new(atom.position[0], atom.position[1], atom.position[2]);
-                    let frac_orig = lat_inv * cart_pos;
-
-                    // Apply supercell shift
+                    let frac_orig = match cart_to_frac(atom.position, structure.lattice) {
+                        Some(f) => Vector3::from(f),
+                        None => continue,
+                    };
                     let frac_shifted = frac_orig + shift;
-
-                    // Transform to new fractional coordinates: r_new = M_inv * r_old
                     let frac_new = m_inv * frac_shifted;
 
                     if is_in_unit_cell(frac_new) {
@@ -256,7 +243,7 @@ fn remove_duplicate_atoms(atoms: Vec<Atom>) -> Vec<Atom> {
     let mut unique_atoms = Vec::new();
     let mut seen_positions = Vec::new();
     for atom in atoms {
-        let pos = Vector3::new(atom.position[0], atom.position[1], atom.position[2]);
+        let pos = Vector3::from(atom.position);
         let mut is_duplicate = false;
         for seen_pos in &seen_positions {
             if are_positions_equal(pos, *seen_pos) {

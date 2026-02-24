@@ -10,6 +10,7 @@ use nalgebra::{Matrix3, Rotation3, Vector3};
 use std::cmp::Ordering;
 
 // This struct is used by interactions.rs for hit-testing and painter.rs
+#[derive(Clone)]
 pub struct RenderAtom {
     pub screen_pos: [f64; 3],  // x, y, z (depth) - after rotation and projection
     pub cart_pos: [f64; 3],    // Actual Cartesian position (before rotation)
@@ -17,6 +18,7 @@ pub struct RenderAtom {
     pub original_index: usize, // Base atom index from structure
     pub unique_id: usize,      // Unique ID for this specific rendered instance
     pub is_ghost: bool,
+    pub screen_radius: f64, // Rendered radius in pixels - used for accurate hit-testing
 }
 
 pub struct SceneBounds {
@@ -181,6 +183,7 @@ pub fn calculate_scene(
                             original_index: i,
                             unique_id: unique_id_counter,
                             is_ghost,
+                            screen_radius: 0.0, // filled in after scale is known
                         });
 
                         unique_id_counter += 1;
@@ -225,6 +228,11 @@ pub fn calculate_scene(
     for atom in &mut render_atoms {
         atom.screen_pos[0] = (atom.screen_pos[0] - box_cx) * final_scale + win_cx;
         atom.screen_pos[1] = (atom.screen_pos[1] - box_cy) * final_scale + win_cy;
+
+        // Compute rendered radius in pixels - mirrors painter formula: raw_r * atom_scale * scale
+        // Used by interactions.rs for accurate hit-testing instead of a fixed pixel threshold.
+        let (raw_r, _) = crate::model::elements::get_atom_properties(&atom.element);
+        atom.screen_radius = raw_r * tab.style.atom_scale * final_scale;
     }
 
     let final_corners: Vec<[f64; 2]> = rotated_corners

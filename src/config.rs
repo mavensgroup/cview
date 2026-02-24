@@ -412,6 +412,9 @@ pub struct PolyhedraSettings {
     pub min_coordination: usize,
     pub max_coordination: usize,
     pub color_mode: PolyhedraColorMode,
+    /// Hard distance cap for coordination bonds (Å). Overrides the covalent-radius
+    /// formula when set below the formula result. User-tunable via sidebar slider.
+    pub max_bond_dist: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -431,6 +434,7 @@ impl Default for PolyhedraSettings {
             min_coordination: 4,
             max_coordination: 12,
             color_mode: PolyhedraColorMode::Element,
+            max_bond_dist: 3.5,
         }
     }
 }

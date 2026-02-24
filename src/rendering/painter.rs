@@ -9,7 +9,8 @@ use crate::config::ColorMode;
 use crate::model::elements::{get_atom_cov, get_atom_properties};
 use crate::physics::bond_valence::get_ideal_oxidation_state;
 use crate::physics::operations::miller_algo::MillerMath;
-use crate::rendering::polyhedra::{self, Face};
+use crate::rendering::polyhedra;
+use crate::rendering::polyhedra_lighting;
 use crate::state::TabState;
 use gtk4::cairo;
 use std::cmp::Ordering;
@@ -92,82 +93,57 @@ pub fn draw_unit_cell(cr: &cairo::Context, corners: &[[f64; 2]], is_export: bool
 }
 
 // ============================================================================
-// POLYHEDRA RENDERING
+// POLYHEDRA RENDERING  (Lambertian shading via polyhedra_lighting module)
 // ============================================================================
 
-/// Draw a single polyhedron face
-fn draw_polyhedron_face(
-    cr: &cairo::Context,
-    face: &Face,
-    color: (f64, f64, f64),
-    alpha: f64,
-    draw_edges: bool,
-) {
-    if face.vertices.is_empty() {
-        return;
-    }
-
-    cr.move_to(face.vertices[0][0], face.vertices[0][1]);
-    for vertex in &face.vertices[1..] {
-        cr.line_to(vertex[0], vertex[1]);
-    }
-    cr.close_path();
-
-    cr.set_source_rgba(color.0, color.1, color.2, alpha);
-    if draw_edges {
-        cr.fill_preserve().expect("Failed to fill face");
-    } else {
-        cr.fill().expect("Failed to fill face");
-    }
-
-    if draw_edges {
-        cr.set_source_rgba(0.0, 0.0, 0.0, alpha * 0.5);
-        cr.set_line_width(0.5);
-        cr.stroke().expect("Failed to stroke edges");
-    }
-}
-
-/// Get polyhedron color
-fn get_polyhedron_color(element: &str) -> (f64, f64, f64) {
-    let (_, color) = get_atom_properties(element);
-    color
-}
-
-/// Draw all polyhedra
-fn draw_all_polyhedra(cr: &cairo::Context, atoms: &[RenderAtom], tab: &TabState, scale: f64) {
+/// Draw all polyhedra with Lambertian shading, globally depth-sorted.
+fn draw_all_polyhedra(cr: &cairo::Context, atoms: &[RenderAtom], tab: &TabState, _scale: f64) {
     let settings = match &tab.style.polyhedra_settings {
         Some(s) if s.show_polyhedra => s,
         _ => return,
     };
 
-    let all_polyhedra = polyhedra::build_polyhedra(
+    let built = polyhedra::build_polyhedra_for_draw(
         atoms,
         &settings.enabled_elements,
         tab.view.bond_cutoff,
-        scale,
         settings.min_coordination,
         settings.max_coordination,
+        settings.max_bond_dist,
     );
 
-    let mut all_faces: Vec<(&Face, (f64, f64, f64))> = Vec::new();
+    // Gather all faces: depth key, screen verts, cart verts, poly cart center, color
+    let mut items: Vec<(f64, [[f64; 3]; 3], [[f64; 3]; 3], [f64; 3], (f64, f64, f64))> = Vec::new();
 
-    for poly in &all_polyhedra {
-        let center_atom = &atoms[poly.center_idx];
-        let color = get_polyhedron_color(&center_atom.element);
-
+    for poly in &built {
+        let (_, base_color) = get_atom_properties(&atoms[poly.center_idx].element);
+        let center_cart = atoms[poly.center_idx].cart_pos;
         for face in &poly.faces {
-            all_faces.push((face, color));
+            let sv = face.screen_vertices(atoms);
+            let sc = face.screen_center(atoms);
+            // Cartesian vertices for lighting normal
+            let cv: [[f64; 3]; 3] = [
+                atoms[face.vertex_atom_indices[0]].cart_pos,
+                atoms[face.vertex_atom_indices[1]].cart_pos,
+                atoms[face.vertex_atom_indices[2]].cart_pos,
+            ];
+            items.push((sc[2], sv, cv, center_cart, base_color));
         }
     }
 
-    all_faces.sort_by(|a, b| {
-        b.0.center[2]
-            .partial_cmp(&a.0.center[2])
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    // Global depth sort: back to front
+    items.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal));
 
-    for (face, color) in all_faces {
-        draw_polyhedron_face(cr, face, color, settings.transparency, settings.show_edges);
+    for (_z, sv, cv, center_cart, base_color) in items {
+        polyhedra_lighting::draw_shaded_face(
+            cr,
+            &sv,
+            cv,
+            center_cart,
+            base_color,
+            settings.transparency,
+            settings.show_edges,
+        );
     }
 }
 
@@ -337,7 +313,11 @@ pub fn draw_structure(
         let target_atom_cov = raw_r * tab.style.atom_scale * scale;
 
         // Selection glow
-        if tab.interaction.selected_indices.contains(&atom.unique_id) {
+        if tab
+            .interaction
+            .selected_indices
+            .contains(&atom.original_index)
+        {
             cr.save().ok();
             let highlight_radius = target_atom_cov + 4.0;
             cr.set_source_rgba(1.0, 0.85, 0.0, 0.8);

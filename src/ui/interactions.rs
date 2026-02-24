@@ -11,7 +11,7 @@ use gtk4::{
     GestureClick, GestureDrag, PropagationPhase,
 };
 use std::cell::RefCell;
-use std::collections::HashSet;
+// use std::collections::HashSet;
 use std::rc::Rc;
 
 // Helper to append text to the TextView
@@ -155,7 +155,10 @@ pub fn setup_interactions(
                     let ay = atom.screen_pos[1];
 
                     if ax >= min_x && ax <= max_x && ay >= min_y && ay <= max_y {
-                        tab_mut.interaction.selected_indices.insert(atom.unique_id); // Changed to unique_id
+                        tab_mut
+                            .interaction
+                            .selected_indices
+                            .insert(atom.original_index);
                         count += 1;
                     }
                 }
@@ -219,56 +222,45 @@ pub fn setup_interactions(
             None,
         );
 
-        let mut clicked_index = None;
-        let mut min_dist = 40.0;
-        let mut best_z = f64::NEG_INFINITY; // Track depth for overlapping atoms
+        // Sort atoms front-to-back (highest Z = closest to camera first).
+        // The scene returns them back-to-front for painting; we need the reverse for picking.
+        let mut sorted_atoms: Vec<_> = atoms.iter().collect();
+        sorted_atoms.sort_by(|a, b| {
+            b.screen_pos[2]
+                .partial_cmp(&a.screen_pos[2])
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
 
-        for atom in &atoms {
+        // First atom whose screen_radius circle contains the click wins.
+        // No fuzzy z tie-breaking needed — front atom always wins by sort order.
+        let mut clicked_original_index: Option<usize> = None;
+        for atom in &sorted_atoms {
             let dx = atom.screen_pos[0] - x;
             let dy = atom.screen_pos[1] - y;
-
             let dist = (dx * dx + dy * dy).sqrt();
-
-            // Select closest atom in 2D, or if tied, the one nearest to camera (highest Z)
-            if dist < 30.0 {
-                if dist < min_dist - 1.0 || (dist <= min_dist + 1.0 && atom.screen_pos[2] > best_z)
-                {
-                    min_dist = dist;
-                    best_z = atom.screen_pos[2];
-                    clicked_index = Some(atom.unique_id); // Changed to unique_id
-                }
+            // Allow a small slack (4px) so clicking near the edge of a small atom still works.
+            if dist <= atom.screen_radius + 4.0 {
+                clicked_original_index = Some(atom.original_index);
+                break;
             }
         }
 
-        if let Some(idx) = clicked_index {
-            // toggle_selection is a helper on AppState
-            st.toggle_selection(idx);
+        if let Some(original_idx) = clicked_original_index {
+            // Toggle by original_index (stable, base atom identity)
+            st.toggle_selection(original_idx);
 
             // Re-borrow active tab for reporting
             let tab = st.active_tab();
-            if let Some(_structure) = &tab.structure {
-                // Collect selected atoms with their actual 3D Cartesian positions
-                let (atoms_for_analysis, _, _) =
-                    scene::calculate_scene(tab, &st.config, w, h, false, None, None);
-
-                // Build list of selected atoms: (unique_id, element, cartesian_position)
+            if let Some(structure) = &tab.structure {
+                // Collect selected atoms for geometry report.
+                // For each selected original_index, use the base atom's Cartesian position.
                 let mut selected_atoms: Vec<(usize, String, [f64; 3])> = Vec::new();
-                for selected_uid in &tab.interaction.selected_indices {
-                    if let Some(atom) = atoms_for_analysis
-                        .iter()
-                        .find(|a| a.unique_id == *selected_uid)
-                    {
-                        selected_atoms.push((
-                            atom.unique_id,
-                            atom.element.clone(),
-                            atom.cart_pos, // Use the actual Cartesian position (including shifts)
-                        ));
+                for &sel_idx in &tab.interaction.selected_indices {
+                    if let Some(atom) = structure.atoms.get(sel_idx) {
+                        selected_atoms.push((sel_idx, atom.element.clone(), atom.position));
                     }
                 }
-
-                // Sort by unique_id for consistent ordering
                 selected_atoms.sort_by_key(|a| a.0);
-
                 let text = report::geometry_analysis_from_positions(&selected_atoms);
                 append_to_console(&console, &text);
             }

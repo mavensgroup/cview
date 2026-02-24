@@ -1481,3 +1481,138 @@ pub fn get_atom_properties(element: &str) -> (f64, (f64, f64, f64)) {
 pub fn get_atom_cov(element: &str) -> f64 {
     get_atom_data(element).covalent_radius
 }
+
+// =========================================================================
+// VALENCE & BVS PROPERTIES
+// =========================================================================
+
+/// Properties of an atom required for the Brese & O'Keeffe (1991) fallback.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BvsAtomProps {
+    pub r: f64,   // Size parameter (specific to the valence state)
+    pub chi: f64, // Electronegativity (Pauling)
+    pub n: f64,   // Valence-dependent constant (|valence|)
+}
+
+/// Retrieves the BVS properties of a specific atom in a specific valence state.
+/// Combines the base electronegativity from `AtomData` with state-specific size parameters.
+pub fn get_bvs_atom_props(element: &str, valence: i32) -> Option<BvsAtomProps> {
+    // 1. Fetch base element data (electronegativity) from the central database
+    let base_data = get_atom_data(element);
+
+    // Noble gases or elements with no electronegativity don't participate natively
+    if base_data.electronegativity <= 0.0 {
+        return None;
+    }
+
+    // 2. Lookup the size parameter (r) for the specific oxidation state.
+    // Values derived from Shannon effective ionic radii.
+    let r = match (element, valence) {
+        // --- Anions ---
+        ("O", -2) => 1.40,
+        ("F", -1) => 1.33,
+        ("Cl", -1) => 1.81,
+        ("Br", -1) => 1.96,
+        ("I", -1) => 2.20,
+        ("S", -2) => 1.84,
+        ("Se", -2) => 1.98,
+        ("Te", -2) => 2.21,
+        ("N", -3) => 1.46,
+        ("P", -3) => 2.12,
+        ("As", -3) => 2.22,
+        ("C", -4) => 2.60,
+        ("H", -1) => 1.37,
+
+        // --- Cations ---
+        ("H", 1) => 0.60,
+        ("Li", 1) => 0.76,
+        ("Na", 1) => 1.02,
+        ("K", 1) => 1.38,
+        ("Rb", 1) => 1.52,
+        ("Cs", 1) => 1.67,
+        ("Ag", 1) => 1.15,
+        ("Cu", 1) => 0.77,
+
+        ("Be", 2) => 0.45,
+        ("Mg", 2) => 0.72,
+        ("Ca", 2) => 1.00,
+        ("Sr", 2) => 1.18,
+        ("Ba", 2) => 1.35,
+        ("Mn", 2) => 0.83,
+        ("Fe", 2) => 0.78,
+        ("Co", 2) => 0.745,
+        ("Ni", 2) => 0.69,
+        ("Cu", 2) => 0.73,
+        ("Zn", 2) => 0.74,
+        ("Cd", 2) => 0.95,
+        ("Sn", 2) => 1.12,
+        ("Pb", 2) => 1.19,
+
+        ("B", 3) => 0.27,
+        ("Al", 3) => 0.54,
+        ("Sc", 3) => 0.745,
+        ("Y", 3) => 0.90,
+        ("Ti", 3) => 0.67,
+        ("V", 3) => 0.64,
+        ("Cr", 3) => 0.615,
+        ("Mn", 3) => 0.645,
+        ("Fe", 3) => 0.645,
+        ("Co", 3) => 0.61,
+        ("Ga", 3) => 0.62,
+        ("As", 3) => 0.58,
+        ("Rh", 3) => 0.665,
+        ("In", 3) => 0.80,
+        ("Sb", 3) => 0.76,
+        ("Bi", 3) => 1.03,
+
+        ("C", 4) => 0.16,
+        ("Si", 4) => 0.40,
+        ("Ti", 4) => 0.605,
+        ("V", 4) => 0.58,
+        ("Mn", 4) => 0.53,
+        ("Ge", 4) => 0.53,
+        ("Zr", 4) => 0.72,
+        ("Ru", 4) => 0.62,
+        ("Pd", 4) => 0.615,
+        ("Sn", 4) => 0.69,
+        ("Te", 4) => 0.97,
+        ("Pb", 4) => 0.775,
+
+        ("N", 5) => 0.13,
+        ("P", 5) => 0.38,
+        ("V", 5) => 0.54,
+        ("As", 5) => 0.46,
+        ("Nb", 5) => 0.64,
+        ("Sb", 5) => 0.60,
+        ("I", 5) => 0.95,
+        ("Ta", 5) => 0.64,
+
+        ("S", 6) => 0.29,
+        ("Cr", 6) => 0.44,
+        ("Se", 6) => 0.42,
+        ("Mo", 6) => 0.59,
+        ("Te", 6) => 0.56,
+        ("W", 6) => 0.60,
+
+        ("Cl", 7) => 0.27,
+        ("Mn", 7) => 0.46,
+        ("Br", 7) => 0.39,
+        ("Tc", 7) => 0.56,
+        ("I", 7) => 0.53,
+        ("Re", 7) => 0.53,
+
+        // 3. Fallback: If a specific valence state isn't mapped above,
+        // fall back to the general Shannon ionic radius defined in the main AtomData.
+        _ => base_data.ionic_radius,
+    };
+
+    if r <= 0.0 {
+        return None;
+    }
+
+    Some(BvsAtomProps {
+        r,
+        chi: base_data.electronegativity,
+        n: valence.abs() as f64,
+    })
+}
