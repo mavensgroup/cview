@@ -1,355 +1,452 @@
 // src/physics/bond_valence/calculator.rs
+//
+// Bond Valence Sum (BVS) implementation.
+//
+// Formula:  BVS_i = Σ_{j,images} exp((R₀ - R_ij) / B)
+//
+// Parameters R₀ and B:
+//   1. IUCr bvparm2020.cif table  (1000+ oxidation-state-specific pairs)
+//   2. Brese & O'Keeffe (1991) empirical fallback for untabulated pairs
+//   Both live in model::bvs — no duplicate database here.
+//
+// PBC: loop over ALL periodic images within CUTOFF, not just minimum image.
+// The minimum-image trick (round()) only finds one image per neighbor and
+// is wrong for high-coordination sites like Ba in perovskite (CN=12).
+//
+// Valences: NOT hardcoded here. We try a sequence of plausible valences
+// from the IUCr table (most-specific first, falling back to the val=9
+// "average" sentinel already present in the table for 100+ element pairs).
+//
+// References:
+//   Brown & Altermatt (1985) Acta Cryst. B41, 244-247
+//   Brese & O'Keeffe (1991) Acta Cryst. B47, 192-197
 
-use super::database::get_param;
+use crate::model::bvs::get_bvs_params;
 use crate::model::structure::Structure;
 use nalgebra::{Matrix3, Vector3};
 
-/// Bond Valence Sum for a single atom
+/// Bond cutoff (Å). 6 Å covers all common bonds including heavy-element
+/// and high-CN sites. Contributions beyond 5 Å are < 0.001 v.u.
+const CUTOFF: f64 = 6.0;
+
+/// Guard against overlapping / erroneous atoms.
+const MIN_DIST: f64 = 0.5;
+
+// ─── Lattice helpers ─────────────────────────────────────────────────────────
+
+/// Build Matrix3 matching the convention in utils_linalg:
+///   rows = lattice vectors  →  cart = mat.transpose() * frac
+fn lattice_matrix(lat: [[f64; 3]; 3]) -> Matrix3<f64> {
+    Matrix3::new(
+        lat[0][0], lat[0][1], lat[0][2], lat[1][0], lat[1][1], lat[1][2], lat[2][0], lat[2][1],
+        lat[2][2],
+    )
+}
+
+/// Image search range: smallest integer R such that a sphere of radius CUTOFF
+/// is fully contained in the R-shell of periodic images.
+/// ceil(CUTOFF / shortest_cell_length) + 1 safety margin for oblique cells.
+fn image_range(lat_mat: &Matrix3<f64>) -> i32 {
+    let len_a = lat_mat.row(0).norm();
+    let len_b = lat_mat.row(1).norm();
+    let len_c = lat_mat.row(2).norm();
+    let shortest = len_a.min(len_b).min(len_c).max(0.1); // guard against zero
+    (CUTOFF / shortest).ceil() as i32 + 1
+}
+
+// ─── Valence priority lists ───────────────────────────────────────────────────
+//
+// We do NOT store valences on atoms. Instead we try valences in priority order
+// until the IUCr table (or B&OK fallback) returns a hit.
+//
+// val=9 is the IUCr "average/unspecified" sentinel — the table has 100+
+// entries with val=9 covering common bonding situations. It always reaches
+// the Brese-O'Keeffe fallback path in model::bvs for untabulated pairs.
+
+fn anion_valences(element: &str) -> &'static [i32] {
+    match element {
+        "O" | "S" | "Se" | "Te" => &[-2, 9],
+        "F" | "Cl" | "Br" | "I" => &[-1, 9],
+        "N" | "P" | "As" => &[-3, 9],
+        "H" => &[-1, 9],
+        _ => &[9],
+    }
+}
+
+fn cation_valences(element: &str) -> &'static [i32] {
+    match element {
+        "H" => &[1, 9],
+        "Li" | "Na" | "K" | "Rb" | "Cs" => &[1, 9],
+        "Ag" => &[1, 9],
+        "Cu" => &[2, 1, 9],
+        "Be" | "Mg" | "Ca" | "Sr" | "Ba" | "Ra" => &[2, 9],
+        "Zn" | "Cd" | "Hg" => &[2, 9],
+        "B" | "Al" | "Ga" | "In" => &[3, 9],
+        "Tl" => &[3, 1, 9],
+        "Si" | "Ge" => &[4, 9],
+        "Sn" => &[4, 2, 9],
+        "Pb" => &[4, 2, 9],
+        "C" => &[4, 9],
+        "Sb" | "Bi" => &[3, 5, 9],
+        "As" => &[3, 5, 9],
+        "P" => &[5, 3, 9],
+        "N" => &[5, 3, 9],
+        "La" | "Pr" | "Nd" | "Pm" | "Sm" | "Gd" | "Tb" | "Dy" | "Ho" | "Er" | "Tm" | "Lu"
+        | "Sc" | "Y" => &[3, 9],
+        "Ce" => &[4, 3, 9],
+        "Eu" => &[3, 2, 9],
+        "Yb" => &[3, 2, 9],
+        "Th" => &[4, 9],
+        "U" => &[4, 6, 5, 3, 9],
+        "Pa" => &[5, 4, 9],
+        "Np" | "Pu" | "Am" => &[4, 3, 9],
+        "Ti" | "Zr" | "Hf" => &[4, 3, 9],
+        "Nb" | "Ta" => &[5, 4, 9],
+        "Mo" | "W" => &[6, 5, 4, 9],
+        "Re" => &[7, 6, 4, 9],
+        "Mn" => &[2, 3, 4, 7, 9],
+        "Fe" => &[3, 2, 9],
+        "Co" | "Ni" => &[2, 3, 9],
+        "Cr" => &[3, 6, 9],
+        "V" => &[5, 4, 3, 2, 9],
+        "Ru" | "Os" => &[4, 3, 9],
+        "Rh" | "Ir" => &[3, 4, 9],
+        "Pd" | "Pt" => &[2, 4, 9],
+        "Au" => &[3, 1, 9],
+        _ => &[9],
+    }
+}
+
+/// Is this element primarily an anion in ionic crystals?
+fn is_anion(element: &str) -> bool {
+    anion_valences(element)[0] < 0
+}
+
+/// Find the best BVS parameters for a bond between two elements.
+/// Tries valence combinations in priority order; first hit wins.
+fn best_params(elem_a: &str, elem_b: &str) -> Option<crate::model::bvs::BvsParams> {
+    let a_anion = is_anion(elem_a);
+    let b_anion = is_anion(elem_b);
+
+    let (cation, anion) = match (a_anion, b_anion) {
+        (false, true) => (elem_a, elem_b),
+        (true, false) => (elem_b, elem_a),
+        // Both same type: try val=9 both ways
+        _ => {
+            return get_bvs_params(elem_a, 9, elem_b, 9)
+                .or_else(|| get_bvs_params(elem_b, 9, elem_a, 9));
+        }
+    };
+
+    for &val_c in cation_valences(cation) {
+        for &val_a in anion_valences(anion) {
+            if let Some(p) = get_bvs_params(cation, val_c, anion, val_a) {
+                return Some(p);
+            }
+        }
+    }
+    None
+}
+
+// ─── Core BVS calculation ─────────────────────────────────────────────────────
+
+/// Calculate BVS for atom `atom_idx` with full periodic boundary conditions.
 ///
-/// **Formula**: BVS = Σ exp((R₀ - R) / B)
-///
-/// Where:
-/// - R₀ = reference bond length (from database or ML)
-/// - R = observed bond length (from structure)
-/// - B = softness parameter (typically 0.37)
-///
-/// **Reference**: Brown & Altermatt (1985) Acta Cryst. B41, 244-247
-pub fn calculate_bvs(structure: &Structure, atom_idx: usize) -> f64 {
+/// Iterates over ALL periodic images of each neighbor within CUTOFF.
+/// This is the physically correct approach and gives consistent results
+/// between a unit cell and any supercell of the same structure.
+pub fn calculate_bvs_pbc(structure: &Structure, atom_idx: usize) -> f64 {
+    let lat_mat = lattice_matrix(structure.lattice);
+    let inv_lat_t = match lat_mat.transpose().try_inverse() {
+        Some(m) => m,
+        None => return 0.0,
+    };
+
+    let rng = image_range(&lat_mat);
     let atom = &structure.atoms[atom_idx];
-    let pos_a = Vector3::from(atom.position);
+    let pos_i = Vector3::from(atom.position);
+    let frac_i = inv_lat_t * pos_i;
+
     let mut bvs = 0.0;
 
-    // Standard cutoff for bond valence interactions
-    const CUTOFF: f64 = 4.0; // Å
+    for (j, neighbor) in structure.atoms.iter().enumerate() {
+        let params = match best_params(&atom.element, &neighbor.element) {
+            Some(p) => p,
+            None => continue,
+        };
 
-    for (i, neighbor) in structure.atoms.iter().enumerate() {
-        if i == atom_idx {
-            continue;
-        }
+        let frac_j = inv_lat_t * Vector3::from(neighbor.position);
 
-        // Calculate distance with PBC if needed
-        let pos_b = Vector3::from(neighbor.position);
-        let dist = (pos_a - pos_b).norm();
+        for nx in -rng..=rng {
+            for ny in -rng..=rng {
+                for nz in -rng..=rng {
+                    if j == atom_idx && nx == 0 && ny == 0 && nz == 0 {
+                        continue;
+                    }
+                    let img_frac = frac_j + Vector3::new(nx as f64, ny as f64, nz as f64);
+                    let dist = (lat_mat.transpose() * (img_frac - frac_i)).norm();
 
-        // Skip very close atoms (likely errors) and distant atoms
-        if dist < 0.2 || dist > CUTOFF {
-            continue;
-        }
-
-        // Get bond valence parameters
-        let param = get_param(&atom.element, &neighbor.element);
-
-        // Only count chemically reasonable bonds (R₀ > 0.5 Å)
-        if param.r0 > 0.5 {
-            // Brown-Altermatt formula: s = exp((R₀ - R) / B)
-            let s = ((param.r0 - dist) / param.b).exp();
-            bvs += s;
+                    if dist >= MIN_DIST && dist <= CUTOFF {
+                        bvs += ((params.r0 - dist) / params.b).exp();
+                    }
+                }
+            }
         }
     }
 
     bvs
 }
 
-/// Calculate BVS with periodic boundary conditions
-///
-/// For unit cells, atoms near boundaries may bond with images in neighboring cells.
-/// This function considers the minimum image convention.
-
-pub fn calculate_bvs_pbc(structure: &Structure, atom_idx: usize) -> f64 {
+/// Non-PBC BVS for isolated molecules / no meaningful lattice.
+pub fn calculate_bvs(structure: &Structure, atom_idx: usize) -> f64 {
     let atom = &structure.atoms[atom_idx];
-    let pos_a = Vector3::from(atom.position);
+    let pos_i = Vector3::from(atom.position);
     let mut bvs = 0.0;
 
-    // Build lattice matrix
-    let lat = structure.lattice;
-    let lattice_mat = Matrix3::new(
-        lat[0][0], lat[0][1], lat[0][2], lat[1][0], lat[1][1], lat[1][2], lat[2][0], lat[2][1],
-        lat[2][2],
-    );
-
-    // Inverse for Cartesian -> Fractional conversion
-    let inv_lattice = match lattice_mat.try_inverse() {
-        Some(inv) => inv,
-        None => return calculate_bvs(structure, atom_idx), // Fallback if singular
-    };
-
-    const CUTOFF: f64 = 4.0;
-
-    for (i, neighbor) in structure.atoms.iter().enumerate() {
-        let pos_b = Vector3::from(neighbor.position);
-
-        // Find minimum image distance
-        let mut min_dist = f64::MAX;
-
-        // === CRITICAL FIX: Check ±2 cells instead of ±1 ===
-        for dx in -2..=2 {
-            for dy in -2..=2 {
-                for dz in -2..=2 {
-                    // Skip self in central cell
-                    if i == atom_idx && dx == 0 && dy == 0 && dz == 0 {
-                        continue;
-                    }
-
-                    let shift = Vector3::new(dx as f64, dy as f64, dz as f64);
-                    let shifted_frac = inv_lattice.transpose() * pos_b + shift;
-                    let shifted_cart = lattice_mat.transpose() * shifted_frac;
-
-                    let dist = (pos_a - shifted_cart).norm();
-                    if dist < min_dist && dist > 0.2 {
-                        min_dist = dist;
-                    }
-                }
-            }
-        }
-
-        if min_dist > CUTOFF {
+    for (j, neighbor) in structure.atoms.iter().enumerate() {
+        if j == atom_idx {
             continue;
         }
 
-        let param = get_param(&atom.element, &neighbor.element);
+        let params = match best_params(&atom.element, &neighbor.element) {
+            Some(p) => p,
+            None => continue,
+        };
 
-        if param.r0 > 0.5 {
-            let s = ((param.r0 - min_dist) / param.b).exp();
-            bvs += s;
+        let dist = (pos_i - Vector3::from(neighbor.position)).norm();
+        if dist >= MIN_DIST && dist <= CUTOFF {
+            bvs += ((params.r0 - dist) / params.b).exp();
         }
     }
-
-    bvs * 2.0
+    bvs
 }
 
-/// Calculate BVS for all atoms (returns Vec for efficiency)
+// ─── Batch helpers ────────────────────────────────────────────────────────────
+
 pub fn calculate_bvs_all(structure: &Structure) -> Vec<f64> {
     (0..structure.atoms.len())
         .map(|i| calculate_bvs(structure, i))
         .collect()
 }
 
-/// Calculate BVS for all atoms with PBC
 pub fn calculate_bvs_all_pbc(structure: &Structure) -> Vec<f64> {
     (0..structure.atoms.len())
         .map(|i| calculate_bvs_pbc(structure, i))
         .collect()
 }
 
-/// Parallel BVS calculation for large structures (>500 atoms)
 #[cfg(feature = "parallel")]
 pub fn calculate_bvs_all_parallel(structure: &Structure) -> Vec<f64> {
     use rayon::prelude::*;
-
     (0..structure.atoms.len())
         .into_par_iter()
-        .map(|i| calculate_bvs(structure, i))
+        .map(|i| calculate_bvs_pbc(structure, i))
         .collect()
 }
 
-/// Ideal oxidation state lookup
-///
-/// Returns the most common oxidation state for an element in ionic crystals.
-/// Used for coloring and validation.
+// ─── Quality metrics ──────────────────────────────────────────────────────────
+
+/// Ideal oxidation state magnitude for coloring / quality checks.
+/// Uses the first (most common) valence from the priority lists.
+/// Returns 0.0 for elements where the state is genuinely ambiguous
+/// (those with only val=9) — they don't distort the quality metric.
 pub fn get_ideal_oxidation_state(element: &str) -> f64 {
-    match element {
-        // Anions (negative)
-        "O" | "S" | "Se" | "Te" => 2.0,
-        "F" | "Cl" | "Br" | "I" => 1.0,
-        "N" | "P" | "As" => 3.0,
-
-        // Group 1 (alkali metals)
-        "H" | "Li" | "Na" | "K" | "Rb" | "Cs" | "Fr" => 1.0,
-
-        // Group 2 (alkaline earth)
-        "Be" | "Mg" | "Ca" | "Sr" | "Ba" | "Ra" => 2.0,
-
-        // Group 13
-        "B" | "Al" | "Ga" | "In" | "Tl" => 3.0,
-
-        // Group 14
-        "C" => 4.0, // In carbides/carbonates
-        "Si" | "Ge" | "Sn" | "Pb" => 4.0,
-
-        // Transition metals (most common states)
-        "Sc" | "Y" | "La" => 3.0,
-        "Ti" | "Zr" | "Hf" => 4.0,
-        "V" | "Nb" | "Ta" => 5.0,
-        "Cr" | "Mo" | "W" => 6.0, // High oxidation state in oxides
-
-        // 3d metals (typically +2 in oxides, but Fe/Co/Ni can be +3)
-        "Mn" => 2.0, // Can be 2-7
-        "Fe" => 3.0, // Can be 2 or 3 (use higher for oxides)
-        "Co" => 2.0, // Can be 2 or 3
-        "Ni" => 2.0,
-        "Cu" => 2.0, // Can be 1 or 2
-        "Zn" => 2.0,
-
-        // Lanthanides (rare earth)
-        "Ce" | "Pr" | "Nd" | "Pm" | "Sm" | "Eu" | "Gd" | "Tb" | "Dy" | "Ho" | "Er" | "Tm"
-        | "Yb" | "Lu" => 3.0,
-
-        // Actinides
-        "Th" | "Pa" | "U" | "Np" | "Pu" | "Am" => 4.0,
-
-        // Noble metals
-        "Ag" => 1.0,
-        "Au" => 3.0,
-        "Pt" => 4.0,
-
-        // Post-transition metals
-        "Cd" | "Hg" => 2.0,
-
-        // Unknown - return 0 (will show as gray in coloring)
-        _ => 0.0,
+    // Anion?
+    let av = anion_valences(element)[0];
+    if av < 0 {
+        return av.unsigned_abs() as f64;
     }
+    // Cation?
+    let cv = cation_valences(element)[0];
+    if cv > 0 && cv != 9 {
+        return cv as f64;
+    }
+    0.0
 }
 
-/// Calculate deviation from ideal BVS
 pub fn calculate_bvs_deviation(structure: &Structure, atom_idx: usize) -> f64 {
-    let bvs_calc = calculate_bvs(structure, atom_idx);
-    let bvs_ideal = get_ideal_oxidation_state(&structure.atoms[atom_idx].element);
-
-    if bvs_ideal < 0.1 {
-        return 0.0; // Unknown ideal state
+    let ideal = get_ideal_oxidation_state(&structure.atoms[atom_idx].element);
+    if ideal < 0.1 {
+        return 0.0;
     }
-
-    (bvs_calc - bvs_ideal).abs()
+    (calculate_bvs(structure, atom_idx) - ideal).abs()
 }
 
-/// Calculate overall structure quality based on BVS
-///
-/// Returns (average_deviation, max_deviation, num_validated_atoms)
+/// (mean |ΔBVS|, max |ΔBVS|, n_atoms_with_known_state)
 pub fn calculate_structure_quality(structure: &Structure) -> (f64, f64, usize) {
-    let mut sum_dev = 0.0;
-    let mut max_dev = 0.0;
-    let mut count = 0;
+    let mut sum = 0.0_f64;
+    let mut max = 0.0_f64;
+    let mut count = 0_usize;
 
     for (i, atom) in structure.atoms.iter().enumerate() {
         let ideal = get_ideal_oxidation_state(&atom.element);
-
-        // Only count atoms with known oxidation states
-        if ideal > 0.1 {
-            let bvs = calculate_bvs_pbc(structure, i);
-            let dev = (bvs - ideal).abs();
-
-            sum_dev += dev;
-            if dev > max_dev {
-                max_dev = dev;
-            }
-            count += 1;
+        if ideal < 0.1 {
+            continue;
         }
+
+        let dev = (calculate_bvs_pbc(structure, i) - ideal).abs();
+        sum += dev;
+        if dev > max {
+            max = dev;
+        }
+        count += 1;
     }
 
-    let avg_dev = if count > 0 {
-        sum_dev / count as f64
-    } else {
-        0.0
-    };
-
-    (avg_dev, max_dev, count)
+    let avg = if count > 0 { sum / count as f64 } else { 0.0 };
+    (avg, max, count)
 }
 
-/// Quality assessment enum
+pub fn assess_structure_quality(structure: &Structure) -> BVSQuality {
+    let (avg, _, _) = calculate_structure_quality(structure);
+    BVSQuality::from_deviation(avg)
+}
+
+// ─── Quality enum ─────────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BVSQuality {
-    Excellent,  // Avg deviation < 0.15
+    Excellent,  // avg deviation < 0.15
     Good,       // < 0.25
     Acceptable, // < 0.40
-    Poor,       // >= 0.40
+    Poor,       // ≥ 0.40
 }
 
 impl BVSQuality {
-    pub fn from_deviation(deviation: f64) -> Self {
-        if deviation < 0.15 {
-            BVSQuality::Excellent
-        } else if deviation < 0.25 {
-            BVSQuality::Good
-        } else if deviation < 0.40 {
-            BVSQuality::Acceptable
+    pub fn from_deviation(d: f64) -> Self {
+        if d < 0.15 {
+            Self::Excellent
+        } else if d < 0.25 {
+            Self::Good
+        } else if d < 0.40 {
+            Self::Acceptable
         } else {
-            BVSQuality::Poor
+            Self::Poor
         }
     }
-
-    pub fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &'static str {
         match self {
-            BVSQuality::Excellent => "Excellent",
-            BVSQuality::Good => "Good",
-            BVSQuality::Acceptable => "Acceptable",
-            BVSQuality::Poor => "Poor",
+            Self::Excellent => "Excellent",
+            Self::Good => "Good",
+            Self::Acceptable => "Acceptable",
+            Self::Poor => "Poor",
         }
     }
-
-    pub fn symbol(&self) -> &str {
+    pub fn symbol(&self) -> &'static str {
         match self {
-            BVSQuality::Excellent => "✓",
-            BVSQuality::Good => "✓",
-            BVSQuality::Acceptable => "⚠",
-            BVSQuality::Poor => "✗",
+            Self::Excellent | Self::Good => "✓",
+            Self::Acceptable => "⚠",
+            Self::Poor => "✗",
         }
     }
 }
 
-/// Assess structure quality
-pub fn assess_structure_quality(structure: &Structure) -> BVSQuality {
-    let (avg_dev, _, _) = calculate_structure_quality(structure);
-    BVSQuality::from_deviation(avg_dev)
-}
+// ─── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::model::structure::Atom;
 
+    fn atom(element: &str, pos: [f64; 3]) -> Atom {
+        Atom {
+            element: element.into(),
+            position: pos,
+            original_index: 0,
+        }
+    }
+
+    /// BaTiO₃ — canonical BVS test. Ba has CN=12 requiring 4 images of each
+    /// of the 3 O atoms. If minimum-image were used, Ba BVS would be ~0.69
+    /// instead of ~2.0.
+    #[test]
+    fn test_batio3_unit_cell() {
+        let a = 4.0_f64;
+        let structure = Structure {
+            lattice: [[a, 0.0, 0.0], [0.0, a, 0.0], [0.0, 0.0, a]],
+            atoms: vec![
+                atom("Ba", [0.0, 0.0, 0.0]),
+                atom("Ti", [a / 2.0, a / 2.0, a / 2.0]),
+                atom("O", [a / 2.0, a / 2.0, 0.0]),
+                atom("O", [a / 2.0, 0.0, a / 2.0]),
+                atom("O", [0.0, a / 2.0, a / 2.0]),
+            ],
+            formula: "BaTiO3".into(),
+        };
+
+        let bvs_ba = calculate_bvs_pbc(&structure, 0);
+        let bvs_ti = calculate_bvs_pbc(&structure, 1);
+        let bvs_o = calculate_bvs_pbc(&structure, 2);
+
+        assert!(
+            bvs_ba > 1.5 && bvs_ba < 3.5,
+            "Ba BVS = {bvs_ba:.3}, expected ~2.0 (CN=12 needs all-images loop)"
+        );
+        assert!(
+            bvs_ti > 2.5 && bvs_ti < 5.5,
+            "Ti BVS = {bvs_ti:.3}, expected ~4.0 (CN=6)"
+        );
+        assert!(
+            bvs_o > 1.0 && bvs_o < 3.0,
+            "O BVS  = {bvs_o:.3}, expected ~2.0"
+        );
+    }
+
+    /// Unit cell and supercell must give identical BVS. This was the bug
+    /// visible in the screenshots: unit cell showed Ba=2.73, supercell 0.68.
+    #[test]
+    fn test_supercell_consistency() {
+        let a = 4.0_f64;
+        let uc = Structure {
+            lattice: [[a, 0.0, 0.0], [0.0, a, 0.0], [0.0, 0.0, a]],
+            atoms: vec![
+                atom("Ba", [0.0, 0.0, 0.0]),
+                atom("Ti", [a / 2.0, a / 2.0, a / 2.0]),
+                atom("O", [a / 2.0, a / 2.0, 0.0]),
+                atom("O", [a / 2.0, 0.0, a / 2.0]),
+                atom("O", [0.0, a / 2.0, a / 2.0]),
+            ],
+            formula: "BaTiO3".into(),
+        };
+        // 1×2×1 supercell
+        let sc = Structure {
+            lattice: [[a, 0.0, 0.0], [0.0, 2.0 * a, 0.0], [0.0, 0.0, a]],
+            atoms: vec![
+                atom("Ba", [0.0, 0.0, 0.0]),
+                atom("Ti", [a / 2.0, a / 2.0, a / 2.0]),
+                atom("O", [a / 2.0, a / 2.0, 0.0]),
+                atom("O", [a / 2.0, 0.0, a / 2.0]),
+                atom("O", [0.0, a / 2.0, a / 2.0]),
+                atom("Ba", [0.0, a, 0.0]),
+                atom("Ti", [a / 2.0, a + a / 2.0, a / 2.0]),
+                atom("O", [a / 2.0, a + a / 2.0, 0.0]),
+                atom("O", [a / 2.0, a, a / 2.0]),
+                atom("O", [0.0, a + a / 2.0, a / 2.0]),
+            ],
+            formula: "BaTiO3".into(),
+        };
+
+        let bvs_uc = calculate_bvs_pbc(&uc, 0);
+        let bvs_sc = calculate_bvs_pbc(&sc, 0);
+        assert!(
+            (bvs_uc - bvs_sc).abs() < 0.01,
+            "UC Ba BVS={bvs_uc:.3} != SC Ba BVS={bvs_sc:.3}"
+        );
+    }
+
     #[test]
     fn test_ideal_oxidation_states() {
-        // Common ions
         assert_eq!(get_ideal_oxidation_state("O"), 2.0);
-        assert_eq!(get_ideal_oxidation_state("Li"), 1.0);
-        assert_eq!(get_ideal_oxidation_state("Fe"), 3.0);
+        assert_eq!(get_ideal_oxidation_state("F"), 1.0);
+        assert_eq!(get_ideal_oxidation_state("Ba"), 2.0);
+        assert_eq!(get_ideal_oxidation_state("Ti"), 4.0);
         assert_eq!(get_ideal_oxidation_state("Al"), 3.0);
     }
 
     #[test]
-    fn test_bvs_simple_oxide() {
-        // Simple Li2O structure (should have good BVS)
-        let structure = Structure {
-            lattice: [[4.6, 0.0, 0.0], [0.0, 4.6, 0.0], [0.0, 0.0, 4.6]],
-            atoms: vec![
-                Atom {
-                    element: "Li".into(),
-                    position: [0.0, 0.0, 0.0],
-                    original_index: 0,
-                },
-                Atom {
-                    element: "Li".into(),
-                    position: [2.3, 2.3, 0.0],
-                    original_index: 1,
-                },
-                Atom {
-                    element: "O".into(),
-                    position: [2.3, 0.0, 2.3],
-                    original_index: 2,
-                },
-            ],
-            formula: "Li2O".into(),
-        };
-
-        // Li should be close to +1
-        let bvs_li = calculate_bvs(&structure, 0);
-        assert!(
-            bvs_li > 0.5 && bvs_li < 1.5,
-            "Li BVS out of range: {}",
-            bvs_li
-        );
-
-        // O should be close to -2 (but BVS gives magnitude)
-        let bvs_o = calculate_bvs(&structure, 2);
-        assert!(bvs_o > 1.0 && bvs_o < 3.0, "O BVS out of range: {}", bvs_o);
-    }
-
-    #[test]
-    fn test_quality_assessment() {
-        let excellent = BVSQuality::from_deviation(0.10);
-        assert_eq!(excellent, BVSQuality::Excellent);
-
-        let poor = BVSQuality::from_deviation(0.50);
-        assert_eq!(poor, BVSQuality::Poor);
+    fn test_quality_thresholds() {
+        assert_eq!(BVSQuality::from_deviation(0.10), BVSQuality::Excellent);
+        assert_eq!(BVSQuality::from_deviation(0.20), BVSQuality::Good);
+        assert_eq!(BVSQuality::from_deviation(0.35), BVSQuality::Acceptable);
+        assert_eq!(BVSQuality::from_deviation(0.55), BVSQuality::Poor);
     }
 }
