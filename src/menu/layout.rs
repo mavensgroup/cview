@@ -6,10 +6,7 @@ pub fn build_menu_model() -> gio::Menu {
     // --- FILE MENU ---
     let menu_file = gio::Menu::new();
     menu_file.append(Some("Open..."), Some("win.open"));
-
-    // NEW ITEM
     menu_file.append(Some("Save Structure As"), Some("win.save_as"));
-
     menu_file.append(Some("Export Image"), Some("win.export"));
     menu_file.append(Some("Preferences"), Some("win.preferences"));
     menu_file.append(Some("Close"), Some("win.close"));
@@ -20,7 +17,6 @@ pub fn build_menu_model() -> gio::Menu {
     menu_view.append(Some("Reset View"), Some("win.reset_view"));
     menu_view.append(Some("Rotate around Unit Cell"), Some("win.toggle_center"));
 
-    // Submenu: Alignment
     let menu_align = gio::Menu::new();
     menu_align.append(Some("Along X-Axis"), Some("win.view_x"));
     menu_align.append(Some("Along Y-Axis"), Some("win.view_y"));
@@ -33,6 +29,12 @@ pub fn build_menu_model() -> gio::Menu {
     let menu_tools = gio::Menu::new();
     menu_tools.append(Some("Geometry"), Some("win.geometry"));
     menu_bar.append_submenu(Some("Tools"), &menu_tools);
+
+    // --- ANALYSIS MENU ---
+    let menu_analysis = gio::Menu::new();
+    menu_analysis.append(Some("Analysis Tools..."), Some("app.analysis"));
+    menu_analysis.append(Some("Charge Density..."), Some("app.open_chgcar"));
+    menu_bar.append_submenu(Some("Analysis"), &menu_analysis);
 
     menu_bar
 }

@@ -5,7 +5,7 @@ use crate::rendering::export::{export_pdf, export_png};
 use crate::state::AppState;
 use crate::ui::create_tab_content;
 use crate::ui::preferences::show_preferences_window;
-use crate::utils::report; // <--- ADDED: Needed for structure_summary
+use crate::utils::report;
 use gtk4::prelude::*;
 use gtk4::{
     Application, ApplicationWindow, DrawingArea, FileChooserAction, FileChooserNative, FileFilter,
@@ -60,44 +60,80 @@ pub fn setup(
             Some("Cancel"),
         );
 
-        // --- FILTERS ---
+        // ── Filters ────────────────────────────────────────────────────────
+        // "All Supported Formats" — default filter, must be comprehensive.
+        // On Linux, GTK glob patterns are case-sensitive, so we include
+        // both upper- and lower-case variants for extensionless names.
         let filter_struct = FileFilter::new();
         filter_struct.set_name(Some("All Supported Formats"));
+        // CIF
         filter_struct.add_pattern("*.cif");
+        filter_struct.add_pattern("*.CIF");
+        // XYZ
         filter_struct.add_pattern("*.xyz");
+        // VASP: POSCAR / CONTCAR / *.vasp (case variants + suffixed)
+        filter_struct.add_pattern("POSCAR");
         filter_struct.add_pattern("POSCAR*");
+        filter_struct.add_pattern("poscar");
+        filter_struct.add_pattern("poscar*");
+        filter_struct.add_pattern("CONTCAR");
         filter_struct.add_pattern("CONTCAR*");
+        filter_struct.add_pattern("contcar");
+        filter_struct.add_pattern("contcar*");
         filter_struct.add_pattern("*.vasp");
+        filter_struct.add_pattern("*.VASP");
+        // SPR-KKR
         filter_struct.add_pattern("*.pot");
         filter_struct.add_pattern("*.sys");
+        filter_struct.add_pattern("*.inp");
+        // Quantum ESPRESSO
         filter_struct.add_pattern("*.in");
         filter_struct.add_pattern("*.pwi");
         filter_struct.add_pattern("*.qe");
         filter_struct.add_pattern("*.out");
+        filter_struct.add_pattern("*.log");
         dialog.add_filter(&filter_struct);
 
-        // Individual Filters
+        // Individual filters
         let f_cif = FileFilter::new();
         f_cif.set_name(Some("CIF (*.cif)"));
         f_cif.add_pattern("*.cif");
+        f_cif.add_pattern("*.CIF");
         dialog.add_filter(&f_cif);
 
         let f_vasp = FileFilter::new();
-        f_vasp.set_name(Some("VASP (POSCAR, *.vasp)"));
+        f_vasp.set_name(Some("VASP (POSCAR, CONTCAR, *.vasp)"));
+        f_vasp.add_pattern("POSCAR");
         f_vasp.add_pattern("POSCAR*");
+        f_vasp.add_pattern("poscar");
+        f_vasp.add_pattern("poscar*");
+        f_vasp.add_pattern("CONTCAR");
+        f_vasp.add_pattern("CONTCAR*");
+        f_vasp.add_pattern("contcar");
+        f_vasp.add_pattern("contcar*");
         f_vasp.add_pattern("*.vasp");
+        f_vasp.add_pattern("*.VASP");
         dialog.add_filter(&f_vasp);
 
+        let f_xyz = FileFilter::new();
+        f_xyz.set_name(Some("XYZ (*.xyz)"));
+        f_xyz.add_pattern("*.xyz");
+        dialog.add_filter(&f_xyz);
+
         let f_spr = FileFilter::new();
-        f_spr.set_name(Some("SPR-KKR (*.pot, *.sys)"));
+        f_spr.set_name(Some("SPR-KKR (*.pot, *.sys, *.inp)"));
         f_spr.add_pattern("*.pot");
         f_spr.add_pattern("*.sys");
+        f_spr.add_pattern("*.inp");
         dialog.add_filter(&f_spr);
 
         let f_qe = FileFilter::new();
-        f_qe.set_name(Some("Quantum Espresso (*.in, *.out)"));
+        f_qe.set_name(Some("Quantum ESPRESSO (*.in, *.pwi, *.qe, *.out)"));
         f_qe.add_pattern("*.in");
+        f_qe.add_pattern("*.pwi");
+        f_qe.add_pattern("*.qe");
         f_qe.add_pattern("*.out");
+        f_qe.add_pattern("*.log");
         dialog.add_filter(&f_qe);
 
         let filter_any = FileFilter::new();
@@ -217,10 +253,7 @@ pub fn setup(
                                     if let Some(iv) = interact_inner.upgrade() {
                                         log_msg(&iv, &format!("Loaded: {}", filename));
 
-                                        // --- ADDED: Print Structure Summary Report ---
-                                        // This ensures the table appears for Menu loads, not just CLI.
                                         let s = st_rc.borrow();
-                                        // Use active_tab() because we just set/added it above
                                         let tab = s.active_tab();
                                         if let Some(strc) = &tab.structure {
                                             let report_text =
@@ -256,7 +289,6 @@ pub fn setup(
             None => return,
         };
 
-        // Setup Save Dialog
         let dialog = FileChooserNative::new(
             Some("Save Structure As"),
             Some(&win),
@@ -265,41 +297,33 @@ pub fn setup(
             Some("Cancel"),
         );
 
-        // --- ADD SAVE FILTERS HERE ---
-
-        // 1. CIF
         let f_cif = FileFilter::new();
         f_cif.set_name(Some("CIF File (*.cif)"));
         f_cif.add_pattern("*.cif");
         dialog.add_filter(&f_cif);
 
-        // 2. VASP / POSCAR
         let f_vasp = FileFilter::new();
-        f_vasp.set_name(Some("VASP POSCAR"));
+        f_vasp.set_name(Some("VASP POSCAR (*.vasp)"));
         f_vasp.add_pattern("POSCAR");
         f_vasp.add_pattern("*.vasp");
         dialog.add_filter(&f_vasp);
 
-        // 3. SPR-KKR
         let f_pot = FileFilter::new();
         f_pot.set_name(Some("SPR-KKR Potential (*.pot)"));
         f_pot.add_pattern("*.pot");
         dialog.add_filter(&f_pot);
 
-        // 4. Quantum Espresso
         let f_qe = FileFilter::new();
-        f_qe.set_name(Some("Quantum Espresso Input (*.in)"));
+        f_qe.set_name(Some("Quantum ESPRESSO Input (*.in)"));
         f_qe.add_pattern("*.in");
         f_qe.add_pattern("*.qe");
         dialog.add_filter(&f_qe);
 
-        // 5. XYZ
         let f_xyz = FileFilter::new();
         f_xyz.set_name(Some("XYZ File (*.xyz)"));
         f_xyz.add_pattern("*.xyz");
         dialog.add_filter(&f_xyz);
 
-        // Default name suggestion
         dialog.set_current_name("structure.cif");
 
         let state_inner = state_weak_s.clone();
@@ -311,7 +335,6 @@ pub fn setup(
                             let s = st.borrow();
                             if !s.tabs.is_empty() {
                                 if let Some(strc) = &s.active_tab().structure {
-                                    // io::save_structure determines format by extension
                                     let path_str = p.to_string_lossy();
                                     match io::save_structure(&path_str, strc) {
                                         Ok(_) => println!("Saved to {}", path_str),
@@ -329,7 +352,6 @@ pub fn setup(
     });
     app.add_action(&act_save);
 
-    // // --- EXPORT ---
     // --- EXPORT ACTION (ADVANCED DIALOG) ---
     let act_export = gtk4::gio::SimpleAction::new("export", None);
     let win_weak_e = window.downgrade();
@@ -346,73 +368,13 @@ pub fn setup(
             None => return,
         };
 
-        // Check if there's a structure loaded
         if state.borrow().tabs.is_empty() {
             return;
         }
 
-        // Show the advanced export dialog
         crate::ui::export_dialog::show_export_dialog(&win, state);
     });
     app.add_action(&act_export);
-
-    // let act_export = gtk4::gio::SimpleAction::new("export", None);
-    // let win_weak_e = window.downgrade();
-    // let state_weak_e = Rc::downgrade(&state);
-
-    // act_export.connect_activate(move |_, _| {
-    // let win = match win_weak_e.upgrade() {
-    // Some(w) => w,
-    // None => return,
-    // };
-
-    // if let Some(st) = state_weak_e.upgrade() {
-    // if st.borrow().tabs.is_empty() {
-    // return;
-    // }
-    // }
-
-    // let dialog = FileChooserNative::new(
-    // Some("Export Image/PDF"),
-    // Some(&win),
-    // FileChooserAction::Save,
-    // Some("Export"),
-    // Some("Cancel"),
-    // );
-
-    // let f_png = FileFilter::new();
-    // f_png.set_name(Some("PNG Image (*.png)"));
-    // f_png.add_pattern("*.png");
-    // dialog.add_filter(&f_png);
-    // let f_pdf = FileFilter::new();
-    // f_pdf.set_name(Some("PDF Document (*.pdf)"));
-    // f_pdf.add_pattern("*.pdf");
-    // dialog.add_filter(&f_pdf);
-
-    // let state_inner = state_weak_e.clone();
-
-    // dialog.connect_response(move |d, r| {
-    // if r == ResponseType::Accept {
-    // if let Some(f) = d.file() {
-    // if let Some(p) = f.path() {
-    // let path = p.to_string_lossy().to_string();
-    // if let Some(st) = state_inner.upgrade() {
-    // if !st.borrow().tabs.is_empty() {
-    // if path.to_lowercase().ends_with(".pdf") {
-    // let _ = export_pdf(st, &path);
-    // } else {
-    // let _ = export_png(st, 2000.0, 1500.0, &path);
-    // }
-    // }
-    // }
-    // }
-    // }
-    // }
-    // d.destroy();
-    // });
-    // dialog.show();
-    // });
-    // app.add_action(&act_export);
 
     // --- PREFS & QUIT ---
     let act_pref = gtk4::gio::SimpleAction::new("preferences", None);

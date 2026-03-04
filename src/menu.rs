@@ -3,7 +3,6 @@
 use crate::state::AppState;
 use gtk4::prelude::*;
 use gtk4::{Application, ApplicationWindow, DrawingArea, Notebook, TextView};
-// Removed 'MenuBar' to fix import error
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -18,14 +17,13 @@ pub fn build_menu_and_actions(
     app: &Application,
     window: &ApplicationWindow,
     state: Rc<RefCell<AppState>>,
-    notebook: &Notebook, // Required for "New Tab" logic
+    notebook: &Notebook,
     drawing_area: &DrawingArea,
     system_log_view: &TextView,
     interactions_view: &TextView,
     atom_list_box: &gtk4::Box,
 ) -> gtk4::Box {
     // --- 1. REGISTER ACTIONS ---
-
     actions_file::setup(
         app,
         window,
@@ -36,7 +34,6 @@ pub fn build_menu_and_actions(
         interactions_view,
         atom_list_box,
     );
-
     actions_view::setup(app, window, state.clone(), notebook, drawing_area);
     actions_tools::setup(app, window, state.clone(), notebook, drawing_area);
     actions_analysis::setup(app, window, state.clone());
@@ -93,7 +90,8 @@ pub fn build_menu_and_actions(
 
     // --- ANALYSIS MENU ---
     let analysis_menu = gtk4::gio::Menu::new();
-    analysis_menu.append(Some("Symmetry Analysis"), Some("app.analysis"));
+    analysis_menu.append(Some("Analysis Tools..."), Some("app.analysis"));
+    analysis_menu.append(Some("Charge Density..."), Some("app.open_chgcar"));
     root_model.append_submenu(Some("Analysis"), &analysis_menu);
 
     // --- HELP MENU ---
