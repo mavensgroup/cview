@@ -301,11 +301,15 @@ pub fn build(state: Rc<RefCell<AppState>>) -> gtk4::Box {
 
                         match result {
                             Ok(data) => {
-                                println!("Loaded: {} with {} points", data.name, data.points.len());
+                                crate::utils::console::log_info(&format!(
+                                    "Loaded: {} with {} points", data.name, data.points.len()
+                                ));
                                 ps_exp.borrow_mut().exp_data = Some(data);
                                 da_exp.queue_draw();
                             },
-                            Err(e) => println!("Error loading experiment: {}", e),
+                            Err(e) => crate::utils::console::log_error(
+                                &format!("Error loading experiment: {}", e)
+                            ),
                         }
                     }
                 }
@@ -346,7 +350,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> gtk4::Box {
                             let root = backend.into_drawing_area();
                             draw_xrd_chart(&root, &peaks_ex, &exp_ex, &settings_ex).unwrap();
                             surf.finish();
-                            println!("PDF Saved.");
+                            crate::utils::console::log_info("XRD PDF saved.");
                         }
                     }
                 }

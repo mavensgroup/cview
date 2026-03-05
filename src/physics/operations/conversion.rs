@@ -128,5 +128,6 @@ pub fn convert_structure(structure: &Structure, cell_type: CellType) -> Result<S
         lattice: new_lattice,
         atoms: new_atoms,
         formula, // FIXED: Added missing field
+        is_periodic: structure.is_periodic,
     })
 }

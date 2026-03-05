@@ -1,28 +1,17 @@
 // src/menu/actions_file.rs
 
 use crate::io;
-use crate::rendering::export::{export_pdf, export_png};
 use crate::state::AppState;
 use crate::ui::create_tab_content;
 use crate::ui::preferences::show_preferences_window;
-use crate::utils::report;
+use crate::utils::{console, report};
 use gtk4::prelude::*;
 use gtk4::{
     Application, ApplicationWindow, DrawingArea, FileChooserAction, FileChooserNative, FileFilter,
-    Label, Notebook, ResponseType, TextView,
+    Label, Notebook, ResponseType,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
-
-// Helper log function
-fn log_msg(view: &TextView, text: &str) {
-    let buffer = view.buffer();
-    let mut end = buffer.end_iter();
-    buffer.insert(&mut end, &format!("{}\n", text));
-    let mark = buffer.create_mark(None, &buffer.end_iter(), false);
-    view.scroll_to_mark(&mark, 0.0, true, 0.0, 1.0);
-    buffer.delete_mark(&mark);
-}
 
 pub fn setup(
     app: &Application,
@@ -30,20 +19,15 @@ pub fn setup(
     state: Rc<RefCell<AppState>>,
     notebook: &Notebook,
     drawing_area: &DrawingArea,
-    system_log_view: &TextView,
-    interactions_view: &TextView,
     atom_list_box: &gtk4::Box,
 ) {
     // --- OPEN ACTION ---
     let open_action = gtk4::gio::SimpleAction::new("open", None);
 
-    // Weak references
     let win_weak = window.downgrade();
     let state_weak = Rc::downgrade(&state);
     let da_weak = drawing_area.downgrade();
     let notebook_weak = notebook.downgrade();
-    let sys_log_weak = system_log_view.downgrade();
-    let interact_weak = interactions_view.downgrade();
     let atom_box_weak = atom_list_box.downgrade();
 
     open_action.connect_activate(move |_, _| {
@@ -60,18 +44,12 @@ pub fn setup(
             Some("Cancel"),
         );
 
-        // ── Filters ────────────────────────────────────────────────────────
-        // "All Supported Formats" — default filter, must be comprehensive.
-        // On Linux, GTK glob patterns are case-sensitive, so we include
-        // both upper- and lower-case variants for extensionless names.
+        // ── Filters ──
         let filter_struct = FileFilter::new();
         filter_struct.set_name(Some("All Supported Formats"));
-        // CIF
         filter_struct.add_pattern("*.cif");
         filter_struct.add_pattern("*.CIF");
-        // XYZ
         filter_struct.add_pattern("*.xyz");
-        // VASP: POSCAR / CONTCAR / *.vasp (case variants + suffixed)
         filter_struct.add_pattern("POSCAR");
         filter_struct.add_pattern("POSCAR*");
         filter_struct.add_pattern("poscar");
@@ -82,11 +60,9 @@ pub fn setup(
         filter_struct.add_pattern("contcar*");
         filter_struct.add_pattern("*.vasp");
         filter_struct.add_pattern("*.VASP");
-        // SPR-KKR
         filter_struct.add_pattern("*.pot");
         filter_struct.add_pattern("*.sys");
         filter_struct.add_pattern("*.inp");
-        // Quantum ESPRESSO
         filter_struct.add_pattern("*.in");
         filter_struct.add_pattern("*.pwi");
         filter_struct.add_pattern("*.qe");
@@ -94,7 +70,6 @@ pub fn setup(
         filter_struct.add_pattern("*.log");
         dialog.add_filter(&filter_struct);
 
-        // Individual filters
         let f_cif = FileFilter::new();
         f_cif.set_name(Some("CIF (*.cif)"));
         f_cif.add_pattern("*.cif");
@@ -141,12 +116,9 @@ pub fn setup(
         filter_any.add_pattern("*");
         dialog.add_filter(&filter_any);
 
-        // Inner clones
         let state_inner = state_weak.clone();
         let da_inner = da_weak.clone();
         let nb_inner = notebook_weak.clone();
-        let sys_log_inner = sys_log_weak.clone();
-        let interact_inner = interact_weak.clone();
         let atom_box_inner = atom_box_weak.clone();
         let win_weak_inner = win.downgrade();
 
@@ -167,7 +139,6 @@ pub fn setup(
                                     let mut new_tab_index: Option<usize> = None;
                                     let mut replace_current_tab = false;
 
-                                    // --- 1. STATE MUTATION BLOCK ---
                                     {
                                         let mut s = st_rc.borrow_mut();
                                         let is_replace_mode = if s.tabs.is_empty() {
@@ -189,7 +160,6 @@ pub fn setup(
                                         }
                                     }
 
-                                    // --- 2. UI UPDATE BLOCK ---
                                     if let Some(nb) = nb_inner.upgrade() {
                                         if replace_current_tab {
                                             if let Some(page) = nb.nth_page(nb.current_page()) {
@@ -226,21 +196,18 @@ pub fn setup(
                                             );
                                             container.show();
 
-                                            if let (Some(w), Some(iv)) =
-                                                (win_weak_inner.upgrade(), interact_inner.upgrade())
-                                            {
+                                            if let Some(w) = win_weak_inner.upgrade() {
                                                 crate::ui::setup_interactions(
                                                     &w,
                                                     st_rc.clone(),
                                                     &new_da,
-                                                    &iv,
                                                 );
                                             }
                                             nb.set_current_page(Some(idx as u32));
                                         }
                                     }
 
-                                    // --- 3. REFRESH SIDEBAR & LOGS ---
+                                    // Refresh sidebar & log
                                     if let (Some(nb), Some(ab)) =
                                         (nb_inner.upgrade(), atom_box_inner.upgrade())
                                     {
@@ -250,22 +217,22 @@ pub fn setup(
                                             &nb,
                                         );
                                     }
-                                    if let Some(iv) = interact_inner.upgrade() {
-                                        log_msg(&iv, &format!("Loaded: {}", filename));
 
-                                        let s = st_rc.borrow();
-                                        let tab = s.active_tab();
-                                        if let Some(strc) = &tab.structure {
-                                            let report_text =
-                                                report::structure_summary(strc, &filename);
-                                            log_msg(&iv, &report_text);
-                                        }
+                                    console::log_info(&format!("Loaded: {}", filename));
+
+                                    let s = st_rc.borrow();
+                                    let tab = s.active_tab();
+                                    if let Some(strc) = &tab.structure {
+                                        let report_text =
+                                            report::structure_summary(strc, &filename);
+                                        console::info_report(&report_text);
                                     }
                                 }
                                 Err(e) => {
-                                    if let Some(lv) = sys_log_inner.upgrade() {
-                                        log_msg(&lv, &format!("Error loading file: {}", e));
-                                    }
+                                    console::log_error(&format!(
+                                        "Error loading '{}': {}",
+                                        filename, e
+                                    ));
                                 }
                             }
                         }
@@ -337,8 +304,12 @@ pub fn setup(
                                 if let Some(strc) = &s.active_tab().structure {
                                     let path_str = p.to_string_lossy();
                                     match io::save_structure(&path_str, strc) {
-                                        Ok(_) => println!("Saved to {}", path_str),
-                                        Err(e) => println!("Error saving: {}", e),
+                                        Ok(_) => {
+                                            console::log_info(&format!("Saved to {}", path_str));
+                                        }
+                                        Err(e) => {
+                                            console::log_error(&format!("Error saving: {}", e));
+                                        }
                                     }
                                 }
                             }

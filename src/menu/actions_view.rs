@@ -163,7 +163,10 @@ pub fn setup(
             let tab = st.active_tab_mut();
 
             tab.view.show_full_unit_cell = !tab.view.show_full_unit_cell;
-            println!("Tab {} Full Cell: {}", idx, tab.view.show_full_unit_cell);
+            crate::utils::console::log_debug(&format!(
+                "Tab {} Full Cell: {}",
+                idx, tab.view.show_full_unit_cell
+            ));
 
             da.queue_draw();
         }

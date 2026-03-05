@@ -134,6 +134,7 @@ pub fn to_conventional_cell(structure: &Structure) -> Result<Structure, String> 
         lattice: new_lattice,
         atoms: new_atoms,
         formula: structure.formula.clone(),
+        is_periodic: structure.is_periodic,
     })
 }
 

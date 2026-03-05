@@ -23,7 +23,7 @@
 
 use crate::model::elements::get_atomic_number;
 use crate::model::{Atom, Structure};
-use crate::utils::linalg::{cart_to_frac, frac_to_cart};
+use crate::utils::linalg::frac_to_cart;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, Write};
@@ -469,6 +469,7 @@ fn build_structure(data: SprkkrData) -> io::Result<Structure> {
         lattice,
         atoms,
         formula,
+        is_periodic: true,
     })
 }
 

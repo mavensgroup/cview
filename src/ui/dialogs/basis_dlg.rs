@@ -126,6 +126,7 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
                 if let Some(current_s) = &tab.structure {
                     let new_s = basis::modify_selection(current_s, &original_indices, &new_el);
                     tab.structure = Some(new_s);
+                    tab.invalidate_bvs_cache();
 
                     if let Some(nb) = notebook_weak.upgrade() {
                         if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
@@ -156,6 +157,7 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
                 if !from.is_empty() && !to.is_empty() {
                     let new_s = basis::substitute_element(current_s, &from, &to);
                     tab.structure = Some(new_s);
+                    tab.invalidate_bvs_cache();
 
                     if let Some(nb) = nb_weak_sub.upgrade() {
                         if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
@@ -183,6 +185,7 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
             if let Some(current_s) = &tab.structure {
                 let new_s = basis::standardize_positions(current_s);
                 tab.structure = Some(new_s);
+                tab.invalidate_bvs_cache();
 
                 if let Some(nb) = nb_weak_std.upgrade() {
                     if let Some(da) = crate::ui::get_active_drawing_area(&nb) {

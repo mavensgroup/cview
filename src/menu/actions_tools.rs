@@ -121,6 +121,7 @@ fn convert_and_update(state: &Rc<RefCell<AppState>>, da: &DrawingArea, cell_type
                 let mut st = state.borrow_mut();
                 let tab = st.active_tab_mut();
                 tab.structure = Some(new_struct);
+                tab.invalidate_bvs_cache();
 
                 da.queue_draw();
             }

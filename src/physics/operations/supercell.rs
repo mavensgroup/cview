@@ -26,7 +26,9 @@ pub fn transform(structure: &Structure, matrix: [[i32; 3]; 3]) -> Structure {
 
     let det = mat3_det(m);
     if det.abs() < 1e-6 {
-        eprintln!("Transformation matrix is singular (det ≈ 0) — returning original structure.");
+        crate::utils::console::log_warn(
+            "Transformation matrix is singular (det ≈ 0) — returning original structure.",
+        );
         return structure.clone();
     }
 
@@ -105,5 +107,6 @@ pub fn transform(structure: &Structure, matrix: [[i32; 3]; 3]) -> Structure {
         atoms: new_atoms,
         lattice: new_lattice,
         formula: structure.formula.clone(),
+        is_periodic: structure.is_periodic,
     }
 }

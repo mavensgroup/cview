@@ -190,6 +190,7 @@ pub fn generate_slab(
         lattice: new_lattice,
         atoms: final_atoms,
         formula: format!("{}x({}{}{}) Slab", thickness, h, k, l),
+        is_periodic: true,
     })
 }
 

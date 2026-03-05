@@ -17,6 +17,12 @@
 // from the IUCr table (most-specific first, falling back to the val=9
 // "average" sentinel already present in the table for 100+ element pairs).
 //
+// Known limitation: Mixed-valence systems (e.g. Fe₃O₄ with Fe²⁺/Fe³⁺)
+// will use the same parameters for all sites of a given element because
+// the first matching valence in the priority list wins. Resolving this
+// requires either user-supplied oxidation states or iterative self-consistent
+// assignment, which is outside the current scope.
+//
 // References:
 //   Brown & Altermatt (1985) Acta Cryst. B41, 244-247
 //   Brese & O'Keeffe (1991) Acta Cryst. B47, 192-197
@@ -32,6 +38,10 @@ const CUTOFF: f64 = 6.0;
 /// Guard against overlapping / erroneous atoms.
 const MIN_DIST: f64 = 0.5;
 
+/// Minimum lattice volume (ų) to consider a lattice valid for PBC.
+/// Below this, the lattice is degenerate (e.g. all-zeros from an XYZ file).
+const MIN_LATTICE_VOLUME: f64 = 0.01;
+
 // ─── Lattice helpers ─────────────────────────────────────────────────────────
 
 /// Build Matrix3 matching the convention in utils_linalg:
@@ -41,6 +51,11 @@ fn lattice_matrix(lat: [[f64; 3]; 3]) -> Matrix3<f64> {
         lat[0][0], lat[0][1], lat[0][2], lat[1][0], lat[1][1], lat[1][2], lat[2][0], lat[2][1],
         lat[2][2],
     )
+}
+
+/// Compute the signed volume of the unit cell (determinant of lattice matrix).
+fn lattice_volume(lat_mat: &Matrix3<f64>) -> f64 {
+    lat_mat.determinant().abs()
 }
 
 /// Image search range: smallest integer R such that a sphere of radius CUTOFF
@@ -124,6 +139,11 @@ fn is_anion(element: &str) -> bool {
 
 /// Find the best BVS parameters for a bond between two elements.
 /// Tries valence combinations in priority order; first hit wins.
+///
+/// BVS is defined for cation-anion bonds only. Anion-anion pairs (O-O, F-Cl, etc.)
+/// are never counted — they are not ionic bonds and would massively inflate BVS
+/// for anions (e.g., O in a perovskite would show BVS ~10 instead of ~2).
+/// Cation-cation pairs use the val=9 "average" sentinel for intermetallic bonds.
 fn best_params(elem_a: &str, elem_b: &str) -> Option<crate::model::bvs::BvsParams> {
     let a_anion = is_anion(elem_a);
     let b_anion = is_anion(elem_b);
@@ -131,8 +151,10 @@ fn best_params(elem_a: &str, elem_b: &str) -> Option<crate::model::bvs::BvsParam
     let (cation, anion) = match (a_anion, b_anion) {
         (false, true) => (elem_a, elem_b),
         (true, false) => (elem_b, elem_a),
-        // Both same type: try val=9 both ways
-        _ => {
+        // Anion-anion: never a BVS bond
+        (true, true) => return None,
+        // Cation-cation: try val=9 both ways (intermetallics)
+        (false, false) => {
             return get_bvs_params(elem_a, 9, elem_b, 9)
                 .or_else(|| get_bvs_params(elem_b, 9, elem_a, 9));
         }
@@ -157,9 +179,15 @@ fn best_params(elem_a: &str, elem_b: &str) -> Option<crate::model::bvs::BvsParam
 /// between a unit cell and any supercell of the same structure.
 pub fn calculate_bvs_pbc(structure: &Structure, atom_idx: usize) -> f64 {
     let lat_mat = lattice_matrix(structure.lattice);
+
+    // Guard: degenerate lattice → fall back to non-PBC
+    if lattice_volume(&lat_mat) < MIN_LATTICE_VOLUME {
+        return calculate_bvs(structure, atom_idx);
+    }
+
     let inv_lat_t = match lat_mat.transpose().try_inverse() {
         Some(m) => m,
-        None => return 0.0,
+        None => return calculate_bvs(structure, atom_idx), // singular lattice → non-PBC fallback
     };
 
     let rng = image_range(&lat_mat);
@@ -221,6 +249,16 @@ pub fn calculate_bvs(structure: &Structure, atom_idx: usize) -> f64 {
     bvs
 }
 
+/// Automatic dispatch: uses PBC for periodic structures, direct sum for molecules.
+/// This is the recommended entry point for all callers.
+pub fn calculate_bvs_auto(structure: &Structure, atom_idx: usize) -> f64 {
+    if structure.is_periodic {
+        calculate_bvs_pbc(structure, atom_idx)
+    } else {
+        calculate_bvs(structure, atom_idx)
+    }
+}
+
 // ─── Batch helpers ────────────────────────────────────────────────────────────
 
 pub fn calculate_bvs_all(structure: &Structure) -> Vec<f64> {
@@ -235,12 +273,19 @@ pub fn calculate_bvs_all_pbc(structure: &Structure) -> Vec<f64> {
         .collect()
 }
 
+/// Automatic dispatch batch version — recommended entry point.
+pub fn calculate_bvs_all_auto(structure: &Structure) -> Vec<f64> {
+    (0..structure.atoms.len())
+        .map(|i| calculate_bvs_auto(structure, i))
+        .collect()
+}
+
 #[cfg(feature = "parallel")]
 pub fn calculate_bvs_all_parallel(structure: &Structure) -> Vec<f64> {
     use rayon::prelude::*;
     (0..structure.atoms.len())
         .into_par_iter()
-        .map(|i| calculate_bvs_pbc(structure, i))
+        .map(|i| calculate_bvs_auto(structure, i))
         .collect()
 }
 
@@ -264,12 +309,13 @@ pub fn get_ideal_oxidation_state(element: &str) -> f64 {
     0.0
 }
 
+/// BUG FIX: Was calling calculate_bvs (non-PBC) — now uses calculate_bvs_auto.
 pub fn calculate_bvs_deviation(structure: &Structure, atom_idx: usize) -> f64 {
     let ideal = get_ideal_oxidation_state(&structure.atoms[atom_idx].element);
     if ideal < 0.1 {
         return 0.0;
     }
-    (calculate_bvs(structure, atom_idx) - ideal).abs()
+    (calculate_bvs_auto(structure, atom_idx) - ideal).abs()
 }
 
 /// (mean |ΔBVS|, max |ΔBVS|, n_atoms_with_known_state)
@@ -284,7 +330,7 @@ pub fn calculate_structure_quality(structure: &Structure) -> (f64, f64, usize) {
             continue;
         }
 
-        let dev = (calculate_bvs_pbc(structure, i) - ideal).abs();
+        let dev = (calculate_bvs_auto(structure, i) - ideal).abs();
         sum += dev;
         if dev > max {
             max = dev;
@@ -371,6 +417,7 @@ mod tests {
                 atom("O", [0.0, a / 2.0, a / 2.0]),
             ],
             formula: "BaTiO3".into(),
+            is_periodic: true,
         };
 
         let bvs_ba = calculate_bvs_pbc(&structure, 0);
@@ -406,6 +453,7 @@ mod tests {
                 atom("O", [0.0, a / 2.0, a / 2.0]),
             ],
             formula: "BaTiO3".into(),
+            is_periodic: true,
         };
         // 1×2×1 supercell
         let sc = Structure {
@@ -423,6 +471,7 @@ mod tests {
                 atom("O", [0.0, a + a / 2.0, a / 2.0]),
             ],
             formula: "BaTiO3".into(),
+            is_periodic: true,
         };
 
         let bvs_uc = calculate_bvs_pbc(&uc, 0);
@@ -430,6 +479,58 @@ mod tests {
         assert!(
             (bvs_uc - bvs_sc).abs() < 0.01,
             "UC Ba BVS={bvs_uc:.3} != SC Ba BVS={bvs_sc:.3}"
+        );
+    }
+
+    /// Auto dispatch should use PBC for periodic, non-PBC for molecular.
+    #[test]
+    fn test_auto_dispatch() {
+        let a = 4.0_f64;
+        let periodic = Structure {
+            lattice: [[a, 0.0, 0.0], [0.0, a, 0.0], [0.0, 0.0, a]],
+            atoms: vec![
+                atom("Ba", [0.0, 0.0, 0.0]),
+                atom("Ti", [a / 2.0, a / 2.0, a / 2.0]),
+                atom("O", [a / 2.0, a / 2.0, 0.0]),
+                atom("O", [a / 2.0, 0.0, a / 2.0]),
+                atom("O", [0.0, a / 2.0, a / 2.0]),
+            ],
+            formula: "BaTiO3".into(),
+            is_periodic: true,
+        };
+        let molecular = Structure {
+            lattice: [[a, 0.0, 0.0], [0.0, a, 0.0], [0.0, 0.0, a]],
+            atoms: periodic.atoms.clone(),
+            formula: "BaTiO3".into(),
+            is_periodic: false,
+        };
+
+        let bvs_periodic = calculate_bvs_auto(&periodic, 0);
+        let bvs_molecular = calculate_bvs_auto(&molecular, 0);
+
+        // Periodic Ba should have much higher BVS (CN=12 from images)
+        // than molecular Ba (only direct neighbors in the box)
+        assert!(
+            bvs_periodic > bvs_molecular,
+            "Periodic BVS ({bvs_periodic:.3}) should exceed molecular ({bvs_molecular:.3})"
+        );
+    }
+
+    /// Degenerate lattice (zero volume) should gracefully fall back to non-PBC.
+    #[test]
+    fn test_degenerate_lattice_fallback() {
+        let structure = Structure {
+            lattice: [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+            atoms: vec![atom("Na", [0.0, 0.0, 0.0]), atom("Cl", [2.82, 0.0, 0.0])],
+            formula: "NaCl".into(),
+            is_periodic: true, // claims periodic but lattice is degenerate
+        };
+
+        // Should not panic or return 0.0 — should fall back to non-PBC
+        let bvs = calculate_bvs_pbc(&structure, 0);
+        assert!(
+            bvs > 0.0,
+            "Degenerate lattice should fallback to non-PBC, got {bvs}"
         );
     }
 
@@ -448,5 +549,49 @@ mod tests {
         assert_eq!(BVSQuality::from_deviation(0.20), BVSQuality::Good);
         assert_eq!(BVSQuality::from_deviation(0.35), BVSQuality::Acceptable);
         assert_eq!(BVSQuality::from_deviation(0.55), BVSQuality::Poor);
+    }
+
+    /// Anion-anion pairs must not produce BVS parameters.
+    /// This was a critical bug: O-O bonds via the Brese-O'Keeffe fallback
+    /// inflated O BVS from ~2.0 to ~9.7 in perovskites.
+    #[test]
+    fn test_anion_anion_rejected() {
+        assert!(best_params("O", "O").is_none(), "O-O must return None");
+        assert!(best_params("F", "Cl").is_none(), "F-Cl must return None");
+        assert!(best_params("S", "O").is_none(), "S-O must return None");
+        assert!(best_params("N", "F").is_none(), "N-F must return None");
+    }
+
+    /// Cation-anion pairs must produce parameters.
+    #[test]
+    fn test_cation_anion_accepted() {
+        assert!(best_params("Ba", "O").is_some(), "Ba-O must return Some");
+        assert!(best_params("Ti", "O").is_some(), "Ti-O must return Some");
+        assert!(best_params("Na", "Cl").is_some(), "Na-Cl must return Some");
+    }
+
+    /// BaTiO3 oxygen BVS must be close to 2.0, not inflated by O-O bonds.
+    /// Before the anion-anion fix, O showed BVS ~9.7 due to spurious O-O contributions.
+    #[test]
+    fn test_oxygen_bvs_not_inflated() {
+        let a = 4.008_f64;
+        let structure = Structure {
+            lattice: [[a, 0.0, 0.0], [0.0, a, 0.0], [0.0, 0.0, a]],
+            atoms: vec![
+                atom("Ba", [a / 2.0, a / 2.0, a / 2.0]),
+                atom("Ti", [0.0, 0.0, 0.0]),
+                atom("O", [0.0, 0.0, a / 2.0]),
+                atom("O", [a / 2.0, 0.0, 0.0]),
+                atom("O", [0.0, a / 2.0, 0.0]),
+            ],
+            formula: "BaTiO3".into(),
+            is_periodic: true,
+        };
+
+        let bvs_o = calculate_bvs_pbc(&structure, 2);
+        assert!(
+            bvs_o > 1.0 && bvs_o < 3.0,
+            "O BVS = {bvs_o:.3}, expected ~2.0 (must not include O-O bonds)"
+        );
     }
 }

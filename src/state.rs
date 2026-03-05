@@ -104,8 +104,8 @@ impl TabState {
     pub fn get_bvs_values(&mut self) -> &[f64] {
         if !self.bvs_cache_valid {
             if let Some(ref structure) = self.structure {
-                use crate::physics::bond_valence::calculator::calculate_bvs_all_pbc;
-                self.bvs_cache = calculate_bvs_all_pbc(structure);
+                use crate::physics::bond_valence::calculator::calculate_bvs_all_auto;
+                self.bvs_cache = calculate_bvs_all_auto(structure);
                 self.bvs_cache_valid = true;
             }
         }
@@ -122,7 +122,7 @@ pub struct AppState {
 impl AppState {
     pub fn new() -> Self {
         let (config, msg) = Config::load();
-        println!("{}", msg);
+        crate::utils::console::log_info(&msg);
         Self {
             tabs: vec![],
             active_tab_index: 0,

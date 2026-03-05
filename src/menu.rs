@@ -1,8 +1,8 @@
-// src/menu/mod.rs
+// src/menu.rs
 
 use crate::state::AppState;
 use gtk4::prelude::*;
-use gtk4::{Application, ApplicationWindow, DrawingArea, Notebook, TextView};
+use gtk4::{Application, ApplicationWindow, DrawingArea, Notebook};
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -19,8 +19,6 @@ pub fn build_menu_and_actions(
     state: Rc<RefCell<AppState>>,
     notebook: &Notebook,
     drawing_area: &DrawingArea,
-    system_log_view: &TextView,
-    interactions_view: &TextView,
     atom_list_box: &gtk4::Box,
 ) -> gtk4::Box {
     // --- 1. REGISTER ACTIONS ---
@@ -30,8 +28,6 @@ pub fn build_menu_and_actions(
         state.clone(),
         notebook,
         drawing_area,
-        system_log_view,
-        interactions_view,
         atom_list_box,
     );
     actions_view::setup(app, window, state.clone(), notebook, drawing_area);

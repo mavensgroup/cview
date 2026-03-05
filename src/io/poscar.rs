@@ -180,6 +180,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
         lattice,
         atoms,
         formula,
+        is_periodic: true,
     })
 }
 

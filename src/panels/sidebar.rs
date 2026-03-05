@@ -1,38 +1,23 @@
 // src/panels/sidebar.rs
-// COMPLETE VERSION - All features preserved + TextView integration for BVS reports
+// All features preserved — logging via centralized utils::console
 
 use gtk4::gdk;
 use gtk4::prelude::*;
 use gtk4::{
     Adjustment, Align, Box as GtkBox, Button, CheckButton, ColorButton, CssProvider, DropDown,
     Expander, Frame, Label, Notebook, Orientation, PolicyType, Scale, ScrolledWindow, Separator,
-    TextView, STYLE_PROVIDER_PRIORITY_APPLICATION,
+    STYLE_PROVIDER_PRIORITY_APPLICATION,
 };
 
 use crate::config::ColorMode;
 use crate::model::elements::get_atom_properties;
 use crate::state::AppState;
+use crate::utils::console;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-// Helper to log to TextView (matches main.rs and actions_file.rs pattern)
-fn log_msg(view: &TextView, text: &str) {
-    let buffer = view.buffer();
-    let mut end = buffer.end_iter();
-    buffer.insert(&mut end, &format!("{}\n", text));
-    let mark = buffer.create_mark(None, &buffer.end_iter(), false);
-    view.scroll_to_mark(&mark, 0.0, true, 0.0, 1.0);
-    buffer.delete_mark(&mark);
-}
-
 /// Builds the sidebar and returns (The ScrolledWindow, The Atom List Container Box)
-/// UPDATED: Now accepts TextView references for interactions and system log
-pub fn build(
-    state: Rc<RefCell<AppState>>,
-    notebook: &Notebook,
-    interactions_view: &TextView,
-    system_log_view: &TextView,
-) -> (ScrolledWindow, GtkBox) {
+pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWindow, GtkBox) {
     // --- 0. INJECT CUSTOM CSS FOR "BOLD LINE" SLIDERS ---
     let provider = CssProvider::new();
     provider.load_from_data(
@@ -127,8 +112,6 @@ pub fn build(
     controls_box.set_margin_start(5);
 
     let nb_weak = notebook.downgrade();
-    let interact_weak = interactions_view.downgrade();
-    let _syslog_weak = system_log_view.downgrade();
 
     let queue_active_draw = move |nb_weak: &gtk4::glib::WeakRef<Notebook>| {
         if let Some(nb) = nb_weak.upgrade() {
@@ -430,7 +413,6 @@ pub fn build(
 
     let state_mode = state.clone();
     let nb_mode = nb_weak.clone();
-    let interact_mode = interact_weak.clone();
 
     mode_dropdown.connect_selected_notify(move |dd| {
         let mode = match dd.selected() {
@@ -448,14 +430,11 @@ pub fn build(
             tab.invalidate_bvs_cache();
             let _ = tab.get_bvs_values();
 
-            // Show BVS report in Interactions tab
+            // Show BVS report in Structure Info tab
             if let Some(ref structure) = tab.structure {
                 use crate::utils::report;
                 let report_text = report::bvs_analysis(structure);
-
-                if let Some(iv) = interact_mode.upgrade() {
-                    log_msg(&iv, &report_text);
-                }
+                console::info_report(&report_text);
             }
         }
 
@@ -535,21 +514,15 @@ pub fn build(
     // btn_bvs_report.set_tooltip_text(Some("Show detailed BVS analysis in Interactions tab"));
 
     // let state_btn = state.clone();
-    // let interact_btn = interact_weak.clone();
-
+    // BVS report button (disabled; reports are shown automatically on mode switch)
     // btn_bvs_report.connect_clicked(move |_| {
-    // use crate::utils::report;
-
-    // let st = state_btn.borrow();
-    // let tab = st.active_tab();
-
-    // if let Some(ref structure) = tab.structure {
-    // let report_text = report::bvs_analysis(structure);
-
-    // if let Some(iv) = interact_btn.upgrade() {
-    // log_msg(&iv, &report_text);
-    // }
-    // }
+    //     use crate::utils::report;
+    //     let st = state_btn.borrow();
+    //     let tab = st.active_tab();
+    //     if let Some(ref structure) = tab.structure {
+    //         let report_text = report::bvs_analysis(structure);
+    //         console::info_report(&report_text);
+    //     }
     // });
 
     // bvs_box.append(&btn_bvs_report);
@@ -571,14 +544,20 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
     // Gather scene atoms for CN computation (need rendered atoms, not just structure)
     // We use a dummy scene call here — same pattern as the old basis_dlg before our fix,
     // but here it's fine because it's called once on refresh, not on every click.
-    let (scene_atoms, bond_cutoff) = {
+    let (scene_atoms, bond_cutoff, poly_max_bond_dist) = {
         let st = state.borrow();
         let tab = st.active_tab();
         let cutoff = tab.view.bond_cutoff;
+        let max_dist = tab
+            .style
+            .polyhedra_settings
+            .as_ref()
+            .map(|ps| ps.max_bond_dist)
+            .unwrap_or(3.5);
         let (atoms, _, _) = crate::rendering::scene::calculate_scene(
             tab, &st.config, 800.0, 600.0, false, None, None,
         );
-        (atoms, cutoff)
+        (atoms, cutoff, max_dist)
     };
 
     let elements = if let Some(structure) = &state.borrow().active_tab().structure {
@@ -610,10 +589,12 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
     let nb_auto = nb_weak.clone();
     let scene_atoms_auto = scene_atoms.clone();
     let cutoff_auto = bond_cutoff;
+    let max_dist_auto = poly_max_bond_dist;
 
     btn_auto.connect_clicked(move |_| {
         use crate::rendering::polyhedra::auto_detect_polyhedra_elements;
-        let detected = auto_detect_polyhedra_elements(&scene_atoms_auto, cutoff_auto);
+        let detected =
+            auto_detect_polyhedra_elements(&scene_atoms_auto, cutoff_auto, max_dist_auto);
 
         let mut st = s_auto.borrow_mut();
         let tab = st.active_tab_mut();
@@ -825,7 +806,7 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
         // CN label
         let cn_label = {
             use crate::rendering::polyhedra::average_cn_for_element;
-            match average_cn_for_element(&scene_atoms, &elem, bond_cutoff) {
+            match average_cn_for_element(&scene_atoms, &elem, bond_cutoff, poly_max_bond_dist) {
                 Some(avg) => Label::new(Some(&format!("CN≈{:.0}", avg))),
                 None => Label::new(Some("CN=?")),
             }

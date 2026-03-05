@@ -1,7 +1,7 @@
 // src/rendering/painter.rs
-// STATE-OF-THE-ART VERSION
 // Publication-quality vector exports + optimized screen rendering
-// All unwraps eliminated, NaN-safe, zero functional bugs
+// Draw order: Polyhedra (background) → Bonds → Atoms (foreground)
+// All unwraps eliminated, NaN-safe
 
 use super::primitives::*;
 use super::scene::RenderAtom;
@@ -110,6 +110,7 @@ fn draw_all_polyhedra(cr: &cairo::Context, atoms: &[RenderAtom], tab: &TabState,
         settings.min_coordination,
         settings.max_coordination,
         settings.max_bond_dist,
+        tab.view.show_full_unit_cell,
     );
 
     // Gather all faces: depth key, screen verts, cart verts, poly cart center, color
@@ -164,26 +165,43 @@ pub fn draw_structure(
         tab.view.bond_cutoff
     };
 
+    // Whether to show ghost atoms visually. Ghost atoms are always present in
+    // the atoms slice (needed for polyhedra/bond detection at cell boundaries),
+    // but we skip rendering them when the user has "Show Full Unit Cell" off.
+    let show_ghosts = tab.view.show_full_unit_cell;
+
     // Separate lists for depth-sorted rendering
     let mut render_atoms: Vec<&RenderAtom> = Vec::with_capacity(atoms.len());
     let mut render_bonds: Vec<RenderBond> = Vec::with_capacity(atoms.len() * 2);
 
     // ========================================================================
-    // STEP 1: Collect Atoms
+    // STEP 1: Collect Atoms (skip coord-only ghosts and invisible ghosts)
     // ========================================================================
     for atom in atoms {
+        if atom.is_coord_only {
+            continue;
+        }
+        if atom.is_ghost && !show_ghosts {
+            continue;
+        }
         render_atoms.push(atom);
     }
 
     // ========================================================================
-    // STEP 2: Collect Bonds
+    // STEP 2: Collect Bonds (skip bonds involving coord-only or hidden ghosts)
     // ========================================================================
     if tab.view.show_bonds {
         for (i, r1) in atoms.iter().enumerate() {
+            if r1.is_coord_only || (r1.is_ghost && !show_ghosts) {
+                continue;
+            }
             let rad1 = get_atom_cov(&r1.element);
 
             for (j, r2) in atoms.iter().enumerate() {
                 if i >= j {
+                    continue;
+                }
+                if r2.is_coord_only || (r2.is_ghost && !show_ghosts) {
                     continue;
                 }
 
@@ -258,7 +276,12 @@ pub fn draw_structure(
     });
 
     // ========================================================================
-    // STEP 4: Draw Bonds
+    // STEP 4: Draw Polyhedra (background — behind bonds and atoms)
+    // ========================================================================
+    draw_all_polyhedra(cr, atoms, tab, scale);
+
+    // ========================================================================
+    // STEP 5: Draw Bonds (on top of polyhedra)
     // ========================================================================
     for bond in render_bonds {
         draw_cylinder_impostor(
@@ -274,12 +297,7 @@ pub fn draw_structure(
     }
 
     // ========================================================================
-    // STEP 4.5: Draw Polyhedra
-    // ========================================================================
-    draw_all_polyhedra(cr, atoms, tab, scale);
-
-    // ========================================================================
-    // STEP 5: Draw Atoms
+    // STEP 6: Draw Atoms (foreground — on top of everything)
     // ========================================================================
     let sprite_size = 128.0;
     let mut cache_access = tab.style.atom_cache.borrow_mut();
@@ -432,52 +450,13 @@ pub fn draw_structure(
                 2.0 * PI,
             );
             cr.fill().ok();
-        } // if tab.style.show_labels && target_atom_cov > 12.0 {
-          // let lum = 0.299 * rgb.0 + 0.587 * rgb.1 + 0.114 * rgb.2;
-          // if lum > 0.65 {
-          // cr.set_source_rgba(0.0, 0.0, 0.0, 0.9);
-          // } else {
-          // cr.set_source_rgba(1.0, 1.0, 1.0, 0.95);
-          // }
-
-        // let font_size = target_atom_cov * 0.9;
-        // cr.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Bold);
-        // cr.set_font_size(font_size);
-
-        // // FIX: Use methods with () and handle Result properly
-        // if let Ok(extents) = cr.text_extents(&atom.element) {
-        // let x_off = extents.width() / 2.0 + extents.x_bearing();
-        // let y_off = extents.height() / 2.0 + extents.y_bearing();
-
-        // cr.move_to(atom.screen_pos[0] - x_off, atom.screen_pos[1] - y_off);
-        // cr.show_text(&atom.element).ok();
-        // }
-
-        // let grad = cairo::RadialGradient::new(
-        // atom.screen_pos[0] - target_atom_cov * 0.3,
-        // atom.screen_pos[1] - target_atom_cov * 0.3,
-        // target_atom_cov * 0.1,
-        // atom.screen_pos[0],
-        // atom.screen_pos[1],
-        // target_atom_cov,
-        // );
-        // grad.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, 0.4);
-        // grad.add_color_stop_rgba(1.0, 1.0, 1.0, 1.0, 0.0);
-
-        // cr.set_source(&grad).ok();
-        // cr.arc(
-        // atom.screen_pos[0],
-        // atom.screen_pos[1],
-        // target_atom_cov,
-        // 0.0,
-        // 2.0 * PI,
-        // );
-        // cr.fill().ok();
-        // }
+        }
     }
-} // ============================================================================
-  // COORDINATE AXES DRAWING
-  // ============================================================================
+}
+
+// ============================================================================
+// COORDINATE AXES DRAWING
+// ============================================================================
 
 pub fn draw_axes(cr: &cairo::Context, tab: &TabState, width: f64, height: f64) {
     let hud_size = (width * 0.12).clamp(60.0, 150.0);

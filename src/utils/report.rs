@@ -3,7 +3,7 @@
 use crate::model::bvs::get_bvs_params;
 use crate::model::structure::Structure;
 use crate::physics::bond_valence::{
-    calculate_bvs_pbc, calculate_structure_quality, get_ideal_oxidation_state, BVSQuality,
+    calculate_bvs_auto, calculate_structure_quality, get_ideal_oxidation_state, BVSQuality,
 };
 use crate::utils::geometry;
 use std::collections::{HashMap, HashSet};
@@ -82,7 +82,7 @@ pub fn bvs_analysis(structure: &Structure) -> String {
 
     for i in 0..show_count {
         let atom = &structure.atoms[i];
-        let bvs_calc = calculate_bvs_pbc(structure, i);
+        let bvs_calc = calculate_bvs_auto(structure, i);
         let bvs_ideal = get_ideal_oxidation_state(&atom.element);
 
         let deviation = if bvs_ideal > 0.1 {

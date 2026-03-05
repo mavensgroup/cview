@@ -15,6 +15,7 @@ pub fn substitute_element(structure: &Structure, target_el: &str, new_el: &str) 
         atoms: new_atoms,
         lattice: structure.lattice,
         formula: structure.formula.clone(),
+        is_periodic: structure.is_periodic,
     }
 }
 
@@ -32,6 +33,7 @@ pub fn modify_selection(structure: &Structure, indices: &[usize], new_el: &str) 
         atoms: new_atoms,
         lattice: structure.lattice,
         formula: structure.formula.clone(),
+        is_periodic: structure.is_periodic,
     }
 }
 
@@ -54,6 +56,7 @@ pub fn remove_selection(structure: &Structure, indices: &[usize]) -> Structure {
         atoms: new_atoms,
         lattice: structure.lattice,
         formula: structure.formula.clone(),
+        is_periodic: structure.is_periodic,
     }
 }
 
@@ -69,5 +72,6 @@ pub fn standardize_positions(structure: &Structure) -> Structure {
         atoms: new_atoms,
         lattice: structure.lattice,
         formula: structure.formula.clone(),
+        is_periodic: structure.is_periodic,
     }
 }

@@ -127,6 +127,7 @@ fn parse_output(content: &str) -> io::Result<Structure> {
         lattice: final_lattice,
         formula: generate_formula(&atoms),
         atoms,
+        is_periodic: true,
     })
 }
 
@@ -273,6 +274,7 @@ fn parse_input(content: &str) -> io::Result<Structure> {
         lattice: final_lattice,
         formula: generate_formula(&atoms),
         atoms,
+        is_periodic: true,
     })
 }
 

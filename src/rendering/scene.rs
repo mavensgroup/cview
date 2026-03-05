@@ -2,6 +2,7 @@
 // OPTIMIZED VERSION - Fixes:
 // 1. String cloning in render loop (eliminated via &'static str reference)
 // 2. Float comparison unwrap (handles NaN gracefully)
+// 3. FIX: Always generate ghost atoms for correct polyhedra/bond detection
 // All features preserved, zero functional changes
 
 use crate::config::{Config, RotationCenter};
@@ -18,6 +19,9 @@ pub struct RenderAtom {
     pub original_index: usize, // Base atom index from structure
     pub unique_id: usize,      // Unique ID for this specific rendered instance
     pub is_ghost: bool,
+    /// Coordination-only ghost: participates in bond/polyhedra neighbor detection
+    /// but is NEVER drawn and NEVER affects the bounding box / zoom.
+    pub is_coord_only: bool,
     pub screen_radius: f64, // Rendered radius in pixels - used for accurate hit-testing
 }
 
@@ -53,28 +57,22 @@ pub fn calculate_scene(
     };
 
     // --- 1. Prepare Matrices (Nalgebra) ---
-
-    // Rotation Matrix: R = Rz * Ry * Rx (Using Tab View)
     let rx = Rotation3::from_axis_angle(&Vector3::x_axis(), tab.view.rot_x.to_radians());
     let ry = Rotation3::from_axis_angle(&Vector3::y_axis(), tab.view.rot_y.to_radians());
     let rz = Rotation3::from_axis_angle(&Vector3::z_axis(), tab.view.rot_z.to_radians());
     let rotation_matrix = rz * ry * rx;
 
-    // Lattice Matrix
     let lat = structure.lattice;
     let lattice_mat = Matrix3::new(
         lat[0][0], lat[0][1], lat[0][2], lat[1][0], lat[1][1], lat[1][2], lat[2][0], lat[2][1],
         lat[2][2],
     );
 
-    // Inverse Lattice
     let inv_lattice_mat = lattice_mat.try_inverse();
 
-    // Rotation Center (Requires both Tab structure and Global config)
     let center_arr = get_rotation_center(tab, config);
     let center = Vector3::new(center_arr[0], center_arr[1], center_arr[2]);
 
-    // Helper Closure to Rotate and Project 3D Point
     let transform_point = |p: Vector3<f64>| -> Vector3<f64> {
         let centered = p - center;
         rotation_matrix * centered
@@ -117,14 +115,23 @@ pub fn calculate_scene(
         }
     }
 
-    // --- 3. Determine Atom Visibility (Ghost Logic) ---
-    let shifts: Vec<f64> = if tab.view.show_full_unit_cell {
-        vec![-1.0, 0.0, 1.0]
-    } else {
-        vec![0.0]
-    };
+    // --- 3. Ghost Atom Generation ---
+    // Two-tier ghost system for correct coordination polyhedra:
+    //
+    //   VISIBLE ghosts  (narrow range [-tol, 1+tol]):
+    //     Atoms at cell boundaries, drawn when "Show Full Unit Cell" is on.
+    //
+    //   COORDINATION ghosts (wider range [-coord_tol, 1+coord_tol]):
+    //     Atoms further outside the cell, NEVER drawn and NEVER affect bounding box.
+    //     Needed so atoms at corners/edges see their full coordination shell.
+    //     Example: Ti at frac(0,0,0) in BaTiO₃ needs O images at frac(-0.5, 0, 0)
+    //     to find all 6 neighbors for a correct octahedron.
+    //
+    let shifts: Vec<f64> = vec![-1.0, 0.0, 1.0];
+    let include_ghosts_in_bounds = tab.view.show_full_unit_cell;
 
-    let tol = 0.05;
+    let tol = 0.05; // Visible boundary ghosts
+    let coord_tol = 0.55; // Coordination shell ghosts (covers half-cell images)
 
     // --- 4. Process Atoms ---
     let mut unique_id_counter = 0;
@@ -138,7 +145,6 @@ pub fn calculate_scene(
             pos_cart
         };
 
-        // OPTIMIZATION: Reference to element string, not clone
         let element_ref = &atom.element;
 
         for &sx in &shifts {
@@ -148,46 +154,66 @@ pub fn calculate_scene(
                     let ny = pos_frac.y + sy;
                     let nz = pos_frac.z + sz;
 
-                    if nx >= -tol
+                    // Check against the WIDER coordination range first
+                    if nx < -coord_tol
+                        || nx > 1.0 + coord_tol
+                        || ny < -coord_tol
+                        || ny > 1.0 + coord_tol
+                        || nz < -coord_tol
+                        || nz > 1.0 + coord_tol
+                    {
+                        continue;
+                    }
+
+                    let frac_vec = Vector3::new(nx, ny, nz);
+                    let cart_vec = lattice_mat.transpose() * frac_vec;
+                    let r_pos = transform_point(cart_vec);
+
+                    let is_shift = sx != 0.0 || sy != 0.0 || sz != 0.0;
+
+                    // Is this within the narrow visible-ghost range?
+                    let in_narrow = nx >= -tol
                         && nx <= 1.0 + tol
                         && ny >= -tol
                         && ny <= 1.0 + tol
                         && nz >= -tol
-                        && nz <= 1.0 + tol
-                    {
-                        let frac_vec = Vector3::new(nx, ny, nz);
-                        let cart_vec = lattice_mat.transpose() * frac_vec;
-                        let r_pos = transform_point(cart_vec);
+                        && nz <= 1.0 + tol;
 
-                        if r_pos.x < min_x {
-                            min_x = r_pos.x;
-                        }
-                        if r_pos.x > max_x {
-                            max_x = r_pos.x;
-                        }
-                        if r_pos.y < min_y {
-                            min_y = r_pos.y;
-                        }
-                        if r_pos.y > max_y {
-                            max_y = r_pos.y;
-                        }
+                    let is_ghost = is_shift;
+                    // Coordination-only: outside narrow range, inside wide range.
+                    // These are NEVER drawn, NEVER affect bounding box.
+                    let is_coord_only = is_shift && !in_narrow;
 
-                        let is_ghost = sx != 0.0 || sy != 0.0 || sz != 0.0;
-
-                        render_atoms.push(RenderAtom {
-                            screen_pos: [r_pos.x, r_pos.y, r_pos.z],
-                            cart_pos: [cart_vec.x, cart_vec.y, cart_vec.z],
-                            // OPTIMIZATION: Clone only once per atom, not per render instance
-                            // In future, could use Rc<str> here for zero-cost cloning
-                            element: element_ref.clone(),
-                            original_index: i,
-                            unique_id: unique_id_counter,
-                            is_ghost,
-                            screen_radius: 0.0, // filled in after scale is known
-                        });
-
-                        unique_id_counter += 1;
+                    // Bounding box: exclude coord-only ghosts entirely
+                    if !is_coord_only {
+                        if !is_ghost || include_ghosts_in_bounds {
+                            if r_pos.x < min_x {
+                                min_x = r_pos.x;
+                            }
+                            if r_pos.x > max_x {
+                                max_x = r_pos.x;
+                            }
+                            if r_pos.y < min_y {
+                                min_y = r_pos.y;
+                            }
+                            if r_pos.y > max_y {
+                                max_y = r_pos.y;
+                            }
+                        }
                     }
+
+                    render_atoms.push(RenderAtom {
+                        screen_pos: [r_pos.x, r_pos.y, r_pos.z],
+                        cart_pos: [cart_vec.x, cart_vec.y, cart_vec.z],
+                        element: element_ref.clone(),
+                        original_index: i,
+                        unique_id: unique_id_counter,
+                        is_ghost,
+                        is_coord_only,
+                        screen_radius: 0.0,
+                    });
+
+                    unique_id_counter += 1;
                 }
             }
         }
@@ -229,8 +255,6 @@ pub fn calculate_scene(
         atom.screen_pos[0] = (atom.screen_pos[0] - box_cx) * final_scale + win_cx;
         atom.screen_pos[1] = (atom.screen_pos[1] - box_cy) * final_scale + win_cy;
 
-        // Compute rendered radius in pixels - mirrors painter formula: raw_r * atom_scale * scale
-        // Used by interactions.rs for accurate hit-testing instead of a fixed pixel threshold.
         let (raw_r, _) = crate::model::elements::get_atom_properties(&atom.element);
         atom.screen_radius = raw_r * tab.style.atom_scale * final_scale;
     }
@@ -245,11 +269,10 @@ pub fn calculate_scene(
         })
         .collect();
 
-    // FIX: Handle NaN values in depth sorting (can occur with bad numerical data)
     render_atoms.sort_by(|a, b| {
         a.screen_pos[2]
             .partial_cmp(&b.screen_pos[2])
-            .unwrap_or(Ordering::Equal) // NaN values treated as equal
+            .unwrap_or(Ordering::Equal)
     });
 
     (
@@ -274,7 +297,6 @@ fn get_rotation_center(tab: &TabState, config: &Config) -> [f64; 3] {
             ];
         }
 
-        // Centroid of atoms
         let mut sum = Vector3::new(0.0, 0.0, 0.0);
         let n = s.atoms.len() as f64;
 

@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize}; // Assuming you use these for saving/loading
-// If you don't use serde yet, you can remove the #[derive(...)] parts below.
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Atom {
@@ -19,4 +18,13 @@ pub struct Structure {
     // Optional: Chemical formula string (e.g. "SiO2")
     #[serde(skip)]
     pub formula: String,
+    /// Whether this structure has periodic boundary conditions.
+    /// Set by parsers: CIF/POSCAR/QE/SPRKKR → true, XYZ → false (unless extended XYZ with Lattice=).
+    /// Operations that transform a structure (supercell, slab, etc.) inherit from the parent.
+    #[serde(default = "default_periodic")]
+    pub is_periodic: bool,
+}
+
+fn default_periodic() -> bool {
+    true
 }

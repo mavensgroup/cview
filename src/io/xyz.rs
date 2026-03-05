@@ -20,8 +20,9 @@ pub fn parse(path: &str) -> io::Result<Structure> {
     // 2. Comment Line (Try to find "Lattice=...")
     let comment = lines.next().unwrap_or(Ok(String::new()))?;
 
-    // Default Lattice (20.0 Angstrom Identity)
+    // Default Lattice (20.0 Angstrom Identity) — non-periodic
     let mut lattice = [[20.0, 0.0, 0.0], [0.0, 20.0, 0.0], [0.0, 0.0, 20.0]];
+    let mut is_periodic = false;
 
     // Parse Extended XYZ Lattice if present
     // Format: Lattice="ax ay az bx by bz cx cy cz"
@@ -40,6 +41,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
                     [parts[3], parts[4], parts[5]],
                     [parts[6], parts[7], parts[8]],
                 ];
+                is_periodic = true; // Extended XYZ with explicit lattice → periodic
             }
         }
     }
@@ -75,6 +77,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
         lattice,
         atoms,
         formula: "XYZ Import".to_string(),
+        is_periodic,
     })
 }
 

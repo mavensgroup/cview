@@ -87,6 +87,7 @@ impl PolyhedraCache {
         min_cn: usize,
         max_cn: usize,
         max_bond_dist: f64,
+        show_ghosts: bool,
     ) -> &[Polyhedron] {
         let mut sorted_elements = enabled_elements.to_vec();
         sorted_elements.sort();
@@ -108,6 +109,7 @@ impl PolyhedraCache {
                 min_cn,
                 max_cn,
                 max_bond_dist,
+                show_ghosts,
             );
             self.key = Some(new_key);
         }
@@ -120,13 +122,25 @@ impl PolyhedraCache {
     }
 }
 
+// ── Anion classification (mirrors BVS calculator) ────────────────────────────
+
+fn is_anion(element: &str) -> bool {
+    matches!(
+        element,
+        "O" | "S" | "Se" | "Te" | "F" | "Cl" | "Br" | "I" | "N" | "P" | "As"
+    )
+}
+
 // ============================================================================
 // NEIGHBOR DETECTION
 // ============================================================================
 
-/// Bonded neighbors of `center_idx`.
-/// - Standard covalent radii (same as painter.rs).
-/// - Same-element bonds suppressed for large atoms (Ba-Ba etc. never coordination).
+/// Bonded neighbors of `center_idx` for coordination polyhedra.
+///
+/// Follows the standard crystallographic convention (VESTA, Diamond, CrystalMaker):
+/// - Center atom must be a cation; neighbors must be anions (O, F, S, etc.)
+/// - This produces the expected TiO₆ octahedra, not spurious Ba₂₀ polyhedra
+/// - Same-element and cation-cation bonds are excluded
 /// - `max_dist`: hard Å cap, user-tunable via sidebar slider.
 pub fn find_coordination_neighbors(
     center_idx: usize,
@@ -135,6 +149,12 @@ pub fn find_coordination_neighbors(
     max_dist: f64,
 ) -> Vec<usize> {
     let r1 = &atoms[center_idx];
+
+    // Only cations can be polyhedra centers
+    if is_anion(&r1.element) {
+        return Vec::new();
+    }
+
     let rad1 = get_atom_cov(&r1.element);
     let p1 = v(r1.cart_pos);
     let mut neighbors = Vec::new();
@@ -143,8 +163,9 @@ pub fn find_coordination_neighbors(
         if center_idx == j {
             continue;
         }
-        if r1.element == r2.element && rad1 > 1.6 {
-            continue; // suppress Ba-Ba, Sr-Sr, etc.
+        // Only anions as vertices (cation-anion bonds only)
+        if !is_anion(&r2.element) {
+            continue;
         }
         let dist = (v(r2.cart_pos) - p1).norm();
         if dist > max_dist {
@@ -163,14 +184,22 @@ pub fn find_coordination_neighbors(
 // AUTO-DETECT & CN DISPLAY
 // ============================================================================
 
-pub fn auto_detect_polyhedra_elements(atoms: &[RenderAtom], bond_cutoff: f64) -> Vec<String> {
+pub fn auto_detect_polyhedra_elements(
+    atoms: &[RenderAtom],
+    bond_cutoff: f64,
+    max_bond_dist: f64,
+) -> Vec<String> {
     let mut element_cns: HashMap<String, Vec<usize>> = HashMap::new();
 
     for (i, atom) in atoms.iter().enumerate() {
         if atom.is_ghost {
             continue;
         }
-        let cn = find_coordination_neighbors(i, atoms, bond_cutoff, 4.5).len();
+        // Only cations can be polyhedra centers
+        if is_anion(&atom.element) {
+            continue;
+        }
+        let cn = find_coordination_neighbors(i, atoms, bond_cutoff, max_bond_dist).len();
         element_cns
             .entry(atom.element.clone())
             .or_default()
@@ -196,12 +225,17 @@ pub fn average_cn_for_element(
     atoms: &[RenderAtom],
     element: &str,
     bond_cutoff: f64,
+    max_bond_dist: f64,
 ) -> Option<f64> {
+    // Anions don't have coordination polyhedra
+    if is_anion(element) {
+        return None;
+    }
     let cns: Vec<usize> = atoms
         .iter()
         .enumerate()
         .filter(|(_, a)| a.element == element && !a.is_ghost)
-        .map(|(i, _)| find_coordination_neighbors(i, atoms, bond_cutoff, 4.5).len())
+        .map(|(i, _)| find_coordination_neighbors(i, atoms, bond_cutoff, max_bond_dist).len())
         .collect();
 
     if cns.is_empty() {
@@ -222,11 +256,18 @@ fn build_polyhedra_inner(
     min_cn: usize,
     max_cn: usize,
     max_bond_dist: f64,
+    show_ghosts: bool,
 ) -> Vec<Polyhedron> {
     let mut polyhedra = Vec::new();
 
     for (i, atom) in atoms.iter().enumerate() {
-        if atom.is_ghost || !enabled_elements.contains(&atom.element) {
+        // Skip coordination-only ghosts (invisible) always.
+        // Skip visible ghosts unless show_full_unit_cell is on — otherwise
+        // we'd draw orphan polyhedra at corners without their center atom.
+        if atom.is_coord_only || !enabled_elements.contains(&atom.element) {
+            continue;
+        }
+        if atom.is_ghost && !show_ghosts {
             continue;
         }
 
@@ -478,6 +519,7 @@ pub fn build_polyhedra_for_draw(
     min_cn: usize,
     max_cn: usize,
     max_bond_dist: f64,
+    show_ghosts: bool,
 ) -> Vec<Polyhedron> {
     build_polyhedra_inner(
         atoms,
@@ -486,6 +528,7 @@ pub fn build_polyhedra_for_draw(
         min_cn,
         max_cn,
         max_bond_dist,
+        show_ghosts,
     )
 }
 

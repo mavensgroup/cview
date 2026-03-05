@@ -215,6 +215,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
         lattice,
         atoms: final_atoms,
         formula: "CIF Import".to_string(),
+        is_periodic: true,
     })
 }
 

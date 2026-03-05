@@ -1,3 +1,4 @@
+pub mod console;
 pub mod geometry;
 pub mod linalg;
 pub mod logger;

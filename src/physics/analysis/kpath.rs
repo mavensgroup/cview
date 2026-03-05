@@ -59,7 +59,7 @@ pub fn calculate_kpath(structure: &Structure) -> Option<KPathResult> {
     .ok()?;
 
     let sg_num = dataset.number;
-    println!("[KPATH] Detected Space Group: #{}", sg_num);
+    crate::utils::console::log_debug(&format!("[KPATH] Detected Space Group: #{}", sg_num));
 
     // 3. Extract Standardized Primitive Lattice (Moyo row-major → transpose for columns)
     let std_prim_lattice = dataset.std_cell.lattice.basis.transpose();
