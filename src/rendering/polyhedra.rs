@@ -374,7 +374,21 @@ fn incremental_hull(
         }
     }
 
+    // Post-process: subdivide faces to include any coplanar points the
+    // incremental algorithm skipped (e.g. equatorial vertices of a regular
+    // octahedron).
+    ensure_all_vertices(center, pts, &mut hull);
+
+    // Filter out degenerate (zero/near-zero area) sub-triangles that arise
+    // when a coplanar vertex sits exactly on an existing edge.  These have
+    // collinear vertices, so oriented_face / face_normal produce unstable
+    // results that flicker on rotation.
     hull.into_iter()
+        .filter(|f| {
+            let a = v(pts[f[0]]);
+            let cross = (v(pts[f[1]]) - a).cross(&(v(pts[f[2]]) - a));
+            cross.norm_squared() > 1e-16
+        })
         .map(|f| make_face(center, pts, atom_indices, f[0], f[1], f[2]))
         .collect()
 }
@@ -383,6 +397,67 @@ fn face_visible_from(pts: &[[f64; 3]], f: &[usize; 3], p: [f64; 3]) -> bool {
     let v0 = v(pts[f[0]]);
     let n = (v(pts[f[1]]) - v0).cross(&(v(pts[f[2]]) - v0));
     n.dot(&(v(p) - v0)) > 1e-10
+}
+
+/// After building the convex hull, ensure every input point appears in at least
+/// one face.  Points that lie exactly in the plane of an existing face (common
+/// in regular octahedra, cubes, etc.) may be skipped by the incremental
+/// algorithm.  For each missing point we find the face it is coplanar with and
+/// subdivide that face to include it.
+fn ensure_all_vertices(center: [f64; 3], pts: &[[f64; 3]], hull: &mut Vec<[usize; 3]>) {
+    let n_pts = pts.len();
+    // Iterate until no more missing points (rare: usually one pass suffices)
+    for _round in 0..4 {
+        // Collect which point indices appear in the hull
+        let mut present = vec![false; n_pts];
+        for f in hull.iter() {
+            for &vi in f {
+                if vi < n_pts {
+                    present[vi] = true;
+                }
+            }
+        }
+
+        let missing: Vec<usize> = (0..n_pts).filter(|&i| !present[i]).collect();
+        if missing.is_empty() {
+            return;
+        }
+
+        for &mi in &missing {
+            let p = v(pts[mi]);
+            // Find the face this point is coplanar with (smallest |dot| product)
+            let mut best_fi: Option<usize> = None;
+            let mut best_dist = f64::MAX;
+
+            for (fi, f) in hull.iter().enumerate() {
+                let v0 = v(pts[f[0]]);
+                let n = (v(pts[f[1]]) - v0).cross(&(v(pts[f[2]]) - v0));
+                let len = n.norm();
+                if len < 1e-14 {
+                    continue; // degenerate face
+                }
+                let d = (n.dot(&(p - v0)) / len).abs();
+                if d < best_dist {
+                    best_dist = d;
+                    best_fi = Some(fi);
+                }
+            }
+
+            if let Some(fi) = best_fi {
+                // Subdivide the face [a, b, c] into three faces:
+                //   [a, b, mi], [b, c, mi], [c, a, mi]
+                let f = hull[fi];
+                let new_faces = [
+                    oriented_face(center, pts, [f[0], f[1], mi]),
+                    oriented_face(center, pts, [f[1], f[2], mi]),
+                    oriented_face(center, pts, [f[2], f[0], mi]),
+                ];
+                hull[fi] = new_faces[0]; // replace original
+                hull.push(new_faces[1]);
+                hull.push(new_faces[2]);
+            }
+        }
+    }
 }
 
 fn face_edges(f: [usize; 3]) -> [[usize; 2]; 3] {
@@ -586,5 +661,37 @@ mod tests {
             let n = (v1 - v0).cross(&(v2 - v0));
             assert!(n.dot(&(v0 - v(center))) > 0.0, "normal must point outward");
         }
+    }
+
+    #[test]
+    fn test_cube_all_vertices_present() {
+        // Cube: 8 vertices, many coplanar quads.
+        // All 8 points must appear in at least one face.
+        let (pts, idx) = mock(vec![
+            [1.0, 1.0, 1.0],
+            [1.0, 1.0, -1.0],
+            [1.0, -1.0, 1.0],
+            [1.0, -1.0, -1.0],
+            [-1.0, 1.0, 1.0],
+            [-1.0, 1.0, -1.0],
+            [-1.0, -1.0, 1.0],
+            [-1.0, -1.0, -1.0],
+        ]);
+        let faces = convex_hull_3d([0.0; 3], &pts, &idx);
+        let mut used = vec![false; 8];
+        for face in &faces {
+            for &vi in &face.vertex_atom_indices {
+                used[vi] = true;
+            }
+        }
+        assert!(
+            used.iter().all(|&u| u),
+            "all cube vertices must appear in hull"
+        );
+        // A cube has 6 quad faces = 12 triangles minimum
+        assert!(
+            faces.len() >= 12,
+            "cube must have at least 12 triangular faces"
+        );
     }
 }

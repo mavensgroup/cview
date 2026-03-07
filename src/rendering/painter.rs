@@ -351,7 +351,7 @@ pub fn draw_structure(
         }
 
         // Draw Atom (Vector vs Sprite)
-        if is_export || atom.is_ghost || matches!(tab.style.color_mode, ColorMode::BondValence) {
+        if is_export || matches!(tab.style.color_mode, ColorMode::BondValence) {
             draw_atom_vector(
                 cr,
                 atom.screen_pos[0],

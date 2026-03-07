@@ -579,7 +579,7 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
     let nb_weak = notebook.downgrade();
 
     // ── Auto-detect button ───────────────────────────────────────────────────
-    let btn_auto = Button::with_label("🔍 Auto-detect Polyhedra");
+    let btn_auto = Button::with_label("Auto-detect Polyhedra");
     btn_auto.set_tooltip_text(Some(
         "Automatically enable polyhedra for elements with average CN 4–8",
     ));
@@ -661,6 +661,105 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
         });
         trans_row.append(&trans_scale);
         container.append(&trans_row);
+    }
+
+    // ── Polyhedra color picker ─────────────────────────────────────────────────
+    {
+        let color_row = GtkBox::new(Orientation::Horizontal, 8);
+        color_row.append(
+            &Label::builder()
+                .label("Poly Color:")
+                .halign(Align::Start)
+                .build(),
+        );
+
+        // Current custom color (if any)
+        let current_custom = state
+            .borrow()
+            .active_tab()
+            .style
+            .polyhedra_settings
+            .as_ref()
+            .and_then(|ps| {
+                if let crate::config::PolyhedraColorMode::Custom(r, g, b) = ps.color_mode {
+                    Some((r, g, b))
+                } else {
+                    None
+                }
+            });
+
+        let is_element_mode = current_custom.is_none();
+
+        // "Use element color" checkbox
+        let check_elem_color = gtk4::CheckButton::with_label("Element");
+        check_elem_color.set_active(is_element_mode);
+
+        let btn_poly_color = ColorButton::new();
+        let default_poly = current_custom.unwrap_or((0.3, 0.6, 0.9));
+        btn_poly_color.set_rgba(&gdk::RGBA::new(
+            default_poly.0 as f32,
+            default_poly.1 as f32,
+            default_poly.2 as f32,
+            1.0,
+        ));
+        btn_poly_color.set_sensitive(!is_element_mode);
+
+        let s_pc = state.clone();
+        let nb_pc = nb_weak.clone();
+        btn_poly_color.connect_color_set(move |b| {
+            let c = b.rgba();
+            let mut st = s_pc.borrow_mut();
+            let tab = st.active_tab_mut();
+            if tab.style.polyhedra_settings.is_none() {
+                tab.style.polyhedra_settings = Some(crate::config::PolyhedraSettings::default());
+            }
+            tab.style.polyhedra_settings.as_mut().unwrap().color_mode =
+                crate::config::PolyhedraColorMode::Custom(
+                    c.red() as f64,
+                    c.green() as f64,
+                    c.blue() as f64,
+                );
+            drop(st);
+            if let Some(nb) = nb_pc.upgrade() {
+                if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
+                    da.queue_draw();
+                }
+            }
+        });
+
+        let s_ec = state.clone();
+        let nb_ec = nb_weak.clone();
+        let btn_ref_ec = btn_poly_color.clone();
+        check_elem_color.connect_toggled(move |c| {
+            let use_element = c.is_active();
+            btn_ref_ec.set_sensitive(!use_element);
+            let mut st = s_ec.borrow_mut();
+            let tab = st.active_tab_mut();
+            if tab.style.polyhedra_settings.is_none() {
+                tab.style.polyhedra_settings = Some(crate::config::PolyhedraSettings::default());
+            }
+            let settings = tab.style.polyhedra_settings.as_mut().unwrap();
+            if use_element {
+                settings.color_mode = crate::config::PolyhedraColorMode::Element;
+            } else {
+                let rgba = btn_ref_ec.rgba();
+                settings.color_mode = crate::config::PolyhedraColorMode::Custom(
+                    rgba.red() as f64,
+                    rgba.green() as f64,
+                    rgba.blue() as f64,
+                );
+            }
+            drop(st);
+            if let Some(nb) = nb_ec.upgrade() {
+                if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
+                    da.queue_draw();
+                }
+            }
+        });
+
+        color_row.append(&check_elem_color);
+        color_row.append(&btn_poly_color);
+        container.append(&color_row);
     }
 
     // ── Max bond distance slider ──────────────────────────────────────────────
@@ -824,7 +923,7 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
             .map(|ps| ps.enabled_elements.contains(&elem))
             .unwrap_or(false);
 
-        let check_poly = gtk4::CheckButton::with_label("📐 Polyhedra");
+        let check_poly = gtk4::CheckButton::with_label("Polyhedra");
         check_poly.set_active(is_poly_active);
 
         let s_poly = state.clone();

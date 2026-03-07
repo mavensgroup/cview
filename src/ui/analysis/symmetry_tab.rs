@@ -4,25 +4,10 @@ use gtk4::prelude::*;
 use gtk4::{Align, Box, Grid, Label, Orientation, PolicyType, ScrolledWindow, Separator};
 use nalgebra::{Matrix3, Vector3};
 use std::cell::RefCell;
-use std::f64::consts::PI;
 use std::rc::Rc;
 
 // Import the logic from Physics
 use crate::physics::analysis::symmetry;
-
-/// Helper: Vector Magnitude
-fn mag(v: [f64; 3]) -> f64 {
-    (v[0].powi(2) + v[1].powi(2) + v[2].powi(2)).sqrt()
-}
-
-/// Helper: Angle between two vectors (degrees)
-fn angle(v1: [f64; 3], v2: [f64; 3]) -> f64 {
-    let dot = v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2];
-    let m1 = mag(v1);
-    let m2 = mag(v2);
-    let val = (dot / (m1 * m2)).clamp(-1.0, 1.0);
-    val.acos() * 180.0 / PI
-}
 
 pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     // Root Container

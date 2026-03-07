@@ -1,5 +1,6 @@
 // src/ui/preferences.rs
-// COMPREHENSIVE PREFERENCES - All 31 settings with UI
+// COMPREHENSIVE PREFERENCES - All 29 settings with UI
+// Note: BVS thresholds intentionally excluded — tuned per-tab via sidebar.
 
 use crate::config::{AntialiasLevel, RenderQuality, RotationCenter};
 use crate::state::AppState;
@@ -178,11 +179,14 @@ fn build_general_tab(state: Rc<RefCell<AppState>>, da: gtk::DrawingArea) -> gtk:
     });
     vbox.append(&check7);
 
+    // Suppress unused variable warning for `da` (kept for API consistency)
+    let _ = da;
+
     vbox
 }
 
 // ============================================================================
-// TAB 2: APPEARANCE (9 settings)
+// TAB 2: APPEARANCE (8 settings)
 // ============================================================================
 
 fn build_appearance_tab(state: Rc<RefCell<AppState>>, da: gtk::DrawingArea) -> gtk::Box {
@@ -337,11 +341,16 @@ fn build_appearance_tab(state: Rc<RefCell<AppState>>, da: gtk::DrawingArea) -> g
     });
     vbox.append(&br_scale);
 
+    // Suppress unused variable warning for `da` clone not used beyond color buttons
+    let _ = da;
+
     vbox
 }
 
 // ============================================================================
-// TAB 3: BVS (5 settings)
+// TAB 3: BVS (3 settings)
+// Thresholds are intentionally not here — they are structure-dependent and
+// are tuned live via the sidebar sliders on a per-tab basis.
 // ============================================================================
 
 fn build_bvs_tab(state: Rc<RefCell<AppState>>) -> gtk::Box {
@@ -350,36 +359,6 @@ fn build_bvs_tab(state: Rc<RefCell<AppState>>) -> gtk::Box {
     vbox.set_margin_bottom(20);
     vbox.set_margin_start(20);
     vbox.set_margin_end(20);
-
-    let good_label = gtk::Label::new(Some("Good Threshold (Green):"));
-    good_label.set_halign(gtk::Align::Start);
-    vbox.append(&good_label);
-    let good_scale = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.05, 0.30, 0.01);
-    good_scale.set_value(state.borrow().config.bvs_threshold_good);
-    good_scale.set_draw_value(true);
-    let s_good = state.clone();
-    good_scale.connect_value_changed(move |sc| {
-        let mut st = s_good.borrow_mut();
-        st.config.bvs_threshold_good = sc.value();
-        st.save_config();
-    });
-    vbox.append(&good_scale);
-
-    let warn_label = gtk::Label::new(Some("Warning Threshold (Yellow→Red):"));
-    warn_label.set_halign(gtk::Align::Start);
-    vbox.append(&warn_label);
-    let warn_scale = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.20, 0.60, 0.01);
-    warn_scale.set_value(state.borrow().config.bvs_threshold_warn);
-    warn_scale.set_draw_value(true);
-    let s_warn = state.clone();
-    warn_scale.connect_value_changed(move |sc| {
-        let mut st = s_warn.borrow_mut();
-        st.config.bvs_threshold_warn = sc.value();
-        st.save_config();
-    });
-    vbox.append(&warn_scale);
-
-    vbox.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
 
     let check1 = gtk::CheckButton::with_label("Auto-Calculate BVS on File Load");
     check1.set_active(state.borrow().config.auto_calc_bvs);

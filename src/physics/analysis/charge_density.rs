@@ -500,7 +500,6 @@ pub fn project_atoms_hkl(
     let a_vec = lattice_vec(lat, 0);
     let b_vec = lattice_vec(lat, 1);
     let c_vec = lattice_vec(lat, 2);
-    let cell_centre = (a_vec + b_vec + c_vec) * 0.5;
 
     let corners = [
         Vector3::zeros(),
@@ -516,7 +515,6 @@ pub fn project_atoms_hkl(
     let pmin = projs.iter().cloned().fold(f64::INFINITY, f64::min);
     let pmax = projs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let plane_d = pmin + offset.clamp(0.0, 1.0) * (pmax - pmin);
-    let origin = cell_centre + n * (plane_d - cell_centre.dot(&n));
 
     // In-plane bounding box for normalisation
     let uv: Vec<(f64, f64)> = corners.iter().map(|p| (p.dot(&u), p.dot(&v))).collect();

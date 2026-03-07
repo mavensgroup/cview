@@ -2,7 +2,7 @@ name: Deploy Documentation
 on:
   push:
     tags:
-      - 'v*'
+      - 'd*'
 jobs:
   deploy:
     runs-on: ubuntu-latest

@@ -1,5 +1,6 @@
 // src/config.rs
-// COMPREHENSIVE CONFIG - All 31 settings for permanent preferences
+// COMPREHENSIVE CONFIG - All 29 settings for permanent preferences
+// Note: BVS thresholds live in RenderStyle (per-tab, sidebar-controlled), not here.
 
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
@@ -90,6 +91,8 @@ pub struct RenderStyle {
     pub transmission: f64,
     pub element_colors: HashMap<String, (f64, f64, f64)>,
     pub color_mode: ColorMode,
+    // BVS thresholds live here (per-tab, tuned live via sidebar sliders).
+    // These are NOT exposed in Preferences — they are structure-dependent.
     pub bvs_threshold_good: f64,
     pub bvs_threshold_warn: f64,
 
@@ -108,7 +111,7 @@ impl Serialize for RenderStyle {
         S: serde::Serializer,
     {
         use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("RenderStyle", 8)?;
+        let mut state = serializer.serialize_struct("RenderStyle", 10)?;
         state.serialize_field("atom_scale", &self.atom_scale)?;
         state.serialize_field("bond_radius", &self.bond_radius)?;
         state.serialize_field("bond_color", &self.bond_color)?;
@@ -195,7 +198,7 @@ impl Default for RenderStyle {
 }
 
 // ============================================================================
-// MAIN CONFIG - All 31 Settings
+// MAIN CONFIG - 29 Settings
 // ============================================================================
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -216,7 +219,7 @@ pub struct Config {
     #[serde(default)]
     pub remember_last_view: bool,
 
-    // APPEARANCE (6 settings) - Colors are in style
+    // APPEARANCE (6) - Colors are in style
     #[serde(default)]
     pub render_quality: RenderQuality,
     #[serde(default = "d_true")]
@@ -230,11 +233,9 @@ pub struct Config {
     #[serde(default = "d_bond_rad")]
     pub default_bond_radius: f64,
 
-    // BVS (5)
-    #[serde(default = "d_bvs_good")]
-    pub bvs_threshold_good: f64,
-    #[serde(default = "d_bvs_warn")]
-    pub bvs_threshold_warn: f64,
+    // BVS (3)
+    // bvs_threshold_good/warn are intentionally absent — they live in RenderStyle
+    // and are tuned per-tab via the sidebar. Only app-level behavioral defaults here.
     #[serde(default)]
     pub auto_calc_bvs: bool,
     #[serde(default = "d_true")]
@@ -289,23 +290,11 @@ fn d_atom_scale() -> f64 {
 fn d_bond_rad() -> f64 {
     0.12
 }
-fn d_bvs_good() -> f64 {
-    0.10
-}
-fn d_bvs_warn() -> f64 {
-    0.30
-}
 fn d_max_atoms() -> usize {
     10000
 }
 fn d_cache() -> usize {
     200
-}
-fn d_bg() -> (f64, f64, f64) {
-    (0.95, 0.95, 0.95)
-}
-fn d_gray() -> (f64, f64, f64) {
-    (0.5, 0.5, 0.5)
 }
 
 impl Default for Config {
@@ -326,8 +315,6 @@ impl Default for Config {
             default_atom_scale: 0.4,
             default_bond_radius: 0.12,
 
-            bvs_threshold_good: 0.10,
-            bvs_threshold_warn: 0.30,
             auto_calc_bvs: false,
             show_bvs_report: true,
             warn_poor_bvs: true,
