@@ -185,8 +185,8 @@ pub fn calculate_scene(
                     let is_coord_only = is_shift && !in_narrow;
 
                     // Bounding box: exclude coord-only ghosts entirely
-                    if !is_coord_only {
-                        if !is_ghost || include_ghosts_in_bounds {
+                    if !is_coord_only
+                        && (!is_ghost || include_ghosts_in_bounds) {
                             if r_pos.x < min_x {
                                 min_x = r_pos.x;
                             }
@@ -200,7 +200,6 @@ pub fn calculate_scene(
                                 max_y = r_pos.y;
                             }
                         }
-                    }
 
                     render_atoms.push(RenderAtom {
                         screen_pos: [r_pos.x, r_pos.y, r_pos.z],

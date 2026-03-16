@@ -233,7 +233,69 @@ fn lerp_stops(t: f64, stops: &[(f64, (f64, f64, f64))]) -> (f64, f64, f64) {
 
 // ---------------------------------------------------------------------------
 // Cairo drawing — consolidated single renderer
+// Screen vs export modes: on-screen uses light text on dark bg;
+// export uses dark text on white bg with larger fonts for publication quality.
 // ---------------------------------------------------------------------------
+
+/// Rendering parameters that differ between screen (dark bg) and export (white bg)
+struct PlotStyle {
+    font_axis_label: f64,
+    font_tick_label: f64,
+    font_annotation: f64,
+    font_colorbar: f64,
+    font_atom_label: f64,
+    isoline_width: f64,
+    border_width: f64,
+    tick_length: f64,
+    /// Text/line color for axes, ticks, borders
+    fg_color: (f64, f64, f64),
+    /// Slightly lighter color for secondary text (tick values)
+    fg_secondary: (f64, f64, f64),
+    /// Whether to draw a halo behind the plane annotation for visibility
+    annotation_halo: bool,
+}
+
+impl PlotStyle {
+    /// On-screen rendering: light text on dark background
+    fn screen() -> Self {
+        Self {
+            font_axis_label: 10.0,
+            font_tick_label: 8.0,
+            font_annotation: 10.0,
+            font_colorbar: 9.0,
+            font_atom_label: 9.0,
+            isoline_width: 1.2,
+            border_width: 1.0,
+            tick_length: 4.0,
+            fg_color: (0.85, 0.85, 0.85),
+            fg_secondary: (0.7, 0.7, 0.7),
+            annotation_halo: false,
+        }
+    }
+
+    /// Publication-quality export: dark text on white background,
+    /// with user-customisable font sizes from ExportPlotSettings.
+    fn export(cfg: &crate::config::ExportPlotSettings) -> Self {
+        Self {
+            font_axis_label: cfg.font_size_axis_label,
+            font_tick_label: cfg.font_size_tick_label,
+            font_annotation: cfg.font_size_annotation,
+            font_colorbar: cfg.font_size_colorbar,
+            font_atom_label: 10.0,
+            isoline_width: cfg.isoline_line_width,
+            border_width: 1.5,
+            tick_length: 6.0,
+            fg_color: (0.1, 0.1, 0.1),
+            fg_secondary: (0.25, 0.25, 0.25),
+            annotation_halo: true,
+        }
+    }
+
+    /// Hardcoded export defaults (used when no config is available)
+    fn export_default() -> Self {
+        Self::export(&crate::config::ExportPlotSettings::default())
+    }
+}
 
 struct PlotLayout {
     plot_x: f64,
@@ -245,12 +307,17 @@ struct PlotLayout {
 }
 
 impl PlotLayout {
-    fn compute(width: f64, height: f64) -> Self {
-        let margin = 12.0;
-        let cb_w = 22.0;
-        let label_w = 55.0;
-        let axis_margin_left = 40.0;
-        let axis_margin_bottom = 28.0;
+    fn compute(width: f64, height: f64, ps: &PlotStyle) -> Self {
+        // Scale margins proportionally for larger export fonts
+        let margin = if ps.font_axis_label > 12.0 {
+            16.0
+        } else {
+            12.0
+        };
+        let cb_w = if ps.font_colorbar > 10.0 { 28.0 } else { 22.0 };
+        let label_w = if ps.font_colorbar > 10.0 { 70.0 } else { 55.0 };
+        let axis_margin_left = if ps.font_tick_label > 9.0 { 52.0 } else { 40.0 };
+        let axis_margin_bottom = if ps.font_tick_label > 9.0 { 40.0 } else { 28.0 };
         let plot_x = margin + axis_margin_left;
         let plot_y = margin;
         let plot_w = (width - cb_w - label_w - margin * 2.0 - axis_margin_left - 6.0).max(10.0);
@@ -275,8 +342,18 @@ fn draw_scene(
     isolines: &[Isoline],
     atoms: &[ProjectedAtom],
     colormap: ColormapChoice,
+    is_export: bool,
+    export_settings: Option<&crate::config::ExportPlotSettings>,
 ) {
-    let ly = PlotLayout::compute(width, height);
+    let ps = if is_export {
+        match export_settings {
+            Some(cfg) => PlotStyle::export(cfg),
+            None => PlotStyle::export_default(),
+        }
+    } else {
+        PlotStyle::screen()
+    };
+    let ly = PlotLayout::compute(width, height, &ps);
     let n_rows = slice.n_rows;
     let n_cols = slice.n_cols;
     let range = slice.data_max - slice.data_min;
@@ -343,11 +420,13 @@ fn draw_scene(
         (1.0, 0.0, 0.0),
         (0.0, 0.5, 1.0),
     ];
-    cr.set_line_width(1.2);
+    cr.set_line_width(ps.isoline_width);
+    let dash_len = if is_export { 8.0 } else { 6.0 };
+    let dash_gap = if is_export { 4.0 } else { 3.0 };
     for (i, iso) in isolines.iter().enumerate() {
         let (r, g, b) = palette[i % palette.len()];
         cr.set_source_rgba(r, g, b, 0.85);
-        cr.set_dash(&[6.0, 3.0], (i as f64) * 2.0);
+        cr.set_dash(&[dash_len, dash_gap], (i as f64) * 2.0);
         for &((x1, y1), (x2, y2)) in &iso.segments {
             cr.move_to(ly.plot_x + x1 * ly.plot_w, ly.plot_y + y1 * ly.plot_h);
             cr.line_to(ly.plot_x + x2 * ly.plot_w, ly.plot_y + y2 * ly.plot_h);
@@ -358,7 +437,8 @@ fn draw_scene(
 
     // ── Atom overlay ──
     if !atoms.is_empty() {
-        cr.set_font_size(9.0);
+        cr.set_font_size(ps.font_atom_label);
+        let atom_radius = if is_export { 8.0 } else { 6.0 };
         for atom in atoms {
             let ax = ly.plot_x + atom.x * ly.plot_w;
             let ay = ly.plot_y + atom.y * ly.plot_h;
@@ -372,66 +452,101 @@ fn draw_scene(
                 continue;
             }
 
-            let radius = 6.0;
             let alpha = (1.0 - atom.distance_ang * 2.0).clamp(0.3, 1.0);
             let (er, eg, eb) = get_cpk_color(&atom.element);
 
             // Filled circle with dark outline
-            cr.arc(ax, ay, radius, 0.0, 2.0 * std::f64::consts::PI);
+            cr.arc(ax, ay, atom_radius, 0.0, 2.0 * std::f64::consts::PI);
             cr.set_source_rgba(er, eg, eb, alpha);
             let _ = cr.fill_preserve();
             cr.set_source_rgba(0.0, 0.0, 0.0, alpha);
-            cr.set_line_width(1.0);
+            cr.set_line_width(if is_export { 1.5 } else { 1.0 });
             let _ = cr.stroke();
 
-            // Label
+            // Label — with contrast outline on export for readability
+            if is_export {
+                cr.set_source_rgba(0.0, 0.0, 0.0, alpha * 0.7);
+                for &(dx, dy) in &[(-0.8, 0.0), (0.8, 0.0), (0.0, -0.8), (0.0, 0.8)] {
+                    cr.move_to(ax + atom_radius + 2.0 + dx, ay + 3.0 + dy);
+                    let _ = cr.show_text(&atom.element);
+                }
+            }
             cr.set_source_rgba(1.0, 1.0, 1.0, alpha);
-            cr.move_to(ax + radius + 2.0, ay + 3.0);
+            cr.move_to(ax + atom_radius + 2.0, ay + 3.0);
             let _ = cr.show_text(&atom.element);
         }
     }
 
     // ── Plot border ──
-    cr.set_source_rgb(0.4, 0.4, 0.4);
-    cr.set_line_width(1.0);
+    cr.set_source_rgb(ps.fg_color.0, ps.fg_color.1, ps.fg_color.2);
+    cr.set_line_width(ps.border_width);
     cr.rectangle(ly.plot_x, ly.plot_y, ly.plot_w, ly.plot_h);
     let _ = cr.stroke();
 
     // ── Axis labels and ticks ──
-    draw_axis_labels(cr, &ly, slice);
+    draw_axis_labels(cr, &ly, slice, &ps);
 
     // ── Colourbar ──
-    draw_colorbar(cr, &ly, slice, colormap);
+    draw_colorbar(cr, &ly, slice, colormap, &ps);
 
     // ── Plane annotation (top-left inside plot) ──
-    cr.set_source_rgba(1.0, 1.0, 1.0, 0.8);
-    cr.set_font_size(10.0);
-    cr.move_to(ly.plot_x + 6.0, ly.plot_y + 14.0);
+    cr.set_font_size(ps.font_annotation);
+    if ps.annotation_halo {
+        // White halo for readability on varying heatmap backgrounds
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.9);
+        for &(dx, dy) in &[
+            (-1.0, 0.0),
+            (1.0, 0.0),
+            (0.0, -1.0),
+            (0.0, 1.0),
+            (-1.0, -1.0),
+            (1.0, -1.0),
+            (-1.0, 1.0),
+            (1.0, 1.0),
+        ] {
+            cr.move_to(ly.plot_x + 8.0 + dx, ly.plot_y + 18.0 + dy);
+            let _ = cr.show_text(&slice.plane_annotation);
+        }
+        cr.set_source_rgb(0.0, 0.0, 0.0);
+    } else {
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.8);
+    }
+    cr.move_to(ly.plot_x + 8.0, ly.plot_y + 18.0);
     let _ = cr.show_text(&slice.plane_annotation);
 }
 
-fn draw_axis_labels(cr: &cairo::Context, ly: &PlotLayout, slice: &DensitySlice) {
-    cr.set_source_rgb(0.85, 0.85, 0.85);
-    cr.set_font_size(10.0);
+fn draw_axis_labels(cr: &cairo::Context, ly: &PlotLayout, slice: &DensitySlice, ps: &PlotStyle) {
+    let (r, g, b) = ps.fg_color;
+    cr.set_source_rgb(r, g, b);
+    cr.set_font_size(ps.font_axis_label);
 
-    // X-axis label
-    let x_label_x = ly.plot_x + ly.plot_w * 0.5 - 15.0;
-    let x_label_y = ly.plot_y + ly.plot_h + 24.0;
+    // X-axis label — centered below ticks
+    let x_label_w = cr
+        .text_extents(&slice.x_label)
+        .map(|te| te.width())
+        .unwrap_or(0.0);
+    let x_label_x = ly.plot_x + ly.plot_w * 0.5 - x_label_w * 0.5;
+    let x_label_y = ly.plot_y + ly.plot_h + ps.tick_length + ps.font_tick_label + 16.0;
     cr.move_to(x_label_x, x_label_y);
     let _ = cr.show_text(&slice.x_label);
 
-    // Y-axis label (rotated)
+    // Y-axis label (rotated) — centered alongside ticks
     cr.save().ok();
-    let y_label_x = ly.plot_x - 32.0;
-    let y_label_y = ly.plot_y + ly.plot_h * 0.5 + 15.0;
+    let y_label_w = cr
+        .text_extents(&slice.y_label)
+        .map(|te| te.width())
+        .unwrap_or(0.0);
+    let y_label_x = ly.plot_x - ps.tick_length - 30.0 - ps.font_tick_label * 0.3;
+    let y_label_y = ly.plot_y + ly.plot_h * 0.5 + y_label_w * 0.5;
     cr.move_to(y_label_x, y_label_y);
     cr.rotate(-std::f64::consts::FRAC_PI_2);
     let _ = cr.show_text(&slice.y_label);
     cr.restore().ok();
 
     // Tick marks — 5 ticks along each axis
-    cr.set_font_size(8.0);
-    cr.set_source_rgb(0.7, 0.7, 0.7);
+    let (sr, sg, sb) = ps.fg_secondary;
+    cr.set_font_size(ps.font_tick_label);
+    cr.set_source_rgb(sr, sg, sb);
     let n_ticks = 5usize;
     for i in 0..=n_ticks {
         let frac = i as f64 / n_ticks as f64;
@@ -440,19 +555,32 @@ fn draw_axis_labels(cr: &cairo::Context, ly: &PlotLayout, slice: &DensitySlice) 
         let tx = ly.plot_x + frac * ly.plot_w;
         let val_x = frac * slice.x_extent_ang;
         cr.move_to(tx, ly.plot_y + ly.plot_h);
-        cr.line_to(tx, ly.plot_y + ly.plot_h + 4.0);
+        cr.line_to(tx, ly.plot_y + ly.plot_h + ps.tick_length);
         let _ = cr.stroke();
-        cr.move_to(tx - 8.0, ly.plot_y + ly.plot_h + 13.0);
-        let _ = cr.show_text(&format!("{:.1}", val_x));
+        let tick_str = format!("{:.1}", val_x);
+        let tick_w = cr
+            .text_extents(&tick_str)
+            .map(|te| te.width())
+            .unwrap_or(0.0);
+        cr.move_to(
+            tx - tick_w * 0.5,
+            ly.plot_y + ly.plot_h + ps.tick_length + ps.font_tick_label + 2.0,
+        );
+        let _ = cr.show_text(&tick_str);
 
         // Y-axis ticks
         let ty = ly.plot_y + frac * ly.plot_h;
         let val_y = frac * slice.y_extent_ang;
-        cr.move_to(ly.plot_x - 4.0, ty);
+        cr.move_to(ly.plot_x - ps.tick_length, ty);
         cr.line_to(ly.plot_x, ty);
         let _ = cr.stroke();
-        cr.move_to(ly.plot_x - 28.0, ty + 3.0);
-        let _ = cr.show_text(&format!("{:.1}", val_y));
+        let tick_str_y = format!("{:.1}", val_y);
+        let (tw_y, th_y) = cr
+            .text_extents(&tick_str_y)
+            .map(|te| (te.width(), te.height()))
+            .unwrap_or((0.0, 0.0));
+        cr.move_to(ly.plot_x - ps.tick_length - tw_y - 3.0, ty + th_y * 0.4);
+        let _ = cr.show_text(&tick_str_y);
     }
 }
 
@@ -461,6 +589,7 @@ fn draw_colorbar(
     ly: &PlotLayout,
     slice: &DensitySlice,
     colormap: ColormapChoice,
+    ps: &PlotStyle,
 ) {
     let steps = 256usize;
     let step_h = ly.plot_h / steps as f64;
@@ -476,13 +605,15 @@ fn draw_colorbar(
         );
         let _ = cr.fill();
     }
-    cr.set_source_rgb(0.4, 0.4, 0.4);
+    let (br, bg, bb) = ps.fg_secondary;
+    cr.set_source_rgb(br, bg, bb);
     cr.set_line_width(0.8);
     cr.rectangle(ly.cb_x, ly.plot_y, ly.cb_w, ly.plot_h);
     let _ = cr.stroke();
 
-    cr.set_source_rgb(0.85, 0.85, 0.85);
-    cr.set_font_size(9.0);
+    let (fr, fg, fb) = ps.fg_color;
+    cr.set_source_rgb(fr, fg, fb);
+    cr.set_font_size(ps.font_colorbar);
     for (frac, value) in &[
         (0.0f64, slice.data_max),
         (0.5, (slice.data_min + slice.data_max) * 0.5),
@@ -498,7 +629,7 @@ fn fmt_val(v: f64) -> String {
     let abs = v.abs();
     if abs == 0.0 {
         "0".into()
-    } else if abs >= 100.0 || abs < 0.01 {
+    } else if !(0.01..100.0).contains(&abs) {
         format!("{:.2e}", v)
     } else {
         format!("{:.4}", v)
@@ -526,8 +657,26 @@ fn show_error_dialog(parent: Option<&gtk4::Window>, title: &str, message: &str) 
 // Public builder
 // ---------------------------------------------------------------------------
 
-pub fn build() -> Box {
+pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
     let state = Rc::new(RefCell::new(ChargeDensityState::default()));
+
+    // Capture export_plot config for use in export closure
+    let export_cfg = app_state
+        .as_ref()
+        .map(|s| s.borrow().config.export_plot.clone())
+        .unwrap_or_default();
+
+    // Apply default colormap from preferences
+    {
+        let mut s = state.borrow_mut();
+        s.colormap = match export_cfg.default_colormap {
+            0 => ColormapChoice::Viridis,
+            1 => ColormapChoice::Plasma,
+            2 => ColormapChoice::BlueWhiteRed,
+            3 => ColormapChoice::Grayscale,
+            _ => ColormapChoice::Viridis,
+        };
+    }
 
     let root = Box::new(Orientation::Horizontal, 10);
     root.set_margin_top(10);
@@ -779,7 +928,7 @@ pub fn build() -> Box {
     cmap_combo.append_text("Plasma");
     cmap_combo.append_text("Blue–White–Red");
     cmap_combo.append_text("Grayscale");
-    cmap_combo.set_active(Some(0));
+    cmap_combo.set_active(Some(export_cfg.default_colormap as u32));
     right_pane.append(&cmap_combo);
 
     right_pane.append(&Separator::new(Orientation::Horizontal));
@@ -816,6 +965,8 @@ pub fn build() -> Box {
                     &st.cached_isolines,
                     &st.cached_atoms,
                     st.colormap,
+                    false,
+                    None,
                 );
             } else {
                 cr.set_source_rgb(0.55, 0.55, 0.55);
@@ -1192,6 +1343,9 @@ pub fn build() -> Box {
             let colormap = s.colormap;
             drop(s);
 
+            // Read export settings from app config (captured at build time)
+            let export_cfg = export_cfg.clone();
+
             let native = FileChooserNative::new(
                 Some("Export PNG / PDF"),
                 btn.root()
@@ -1228,27 +1382,45 @@ pub fn build() -> Box {
                                     ctx.set_source_rgb(1.0, 1.0, 1.0);
                                     ctx.rectangle(0.0, 0.0, w, h);
                                     let _ = ctx.fill();
-                                    draw_scene(&ctx, w, h, &slice, &isolines, &atoms, colormap);
+                                    draw_scene(
+                                        &ctx,
+                                        w,
+                                        h,
+                                        &slice,
+                                        &isolines,
+                                        &atoms,
+                                        colormap,
+                                        true,
+                                        Some(&export_cfg),
+                                    );
                                 }
                                 surf.finish();
                                 println!("Exported PDF: {}", path.display());
                             }
-                        } else {
-                            if let Ok(mut surf) = cairo::ImageSurface::create(
-                                cairo::Format::ARgb32,
-                                w as i32,
-                                h as i32,
-                            ) {
-                                if let Ok(ctx) = cairo::Context::new(&surf) {
-                                    ctx.set_source_rgb(1.0, 1.0, 1.0);
-                                    ctx.rectangle(0.0, 0.0, w, h);
-                                    let _ = ctx.fill();
-                                    draw_scene(&ctx, w, h, &slice, &isolines, &atoms, colormap);
-                                }
-                                if let Ok(mut file) = std::fs::File::create(&path) {
-                                    let _ = surf.write_to_png(&mut file);
-                                    println!("Exported PNG: {}", path.display());
-                                }
+                        } else if let Ok(surf) = cairo::ImageSurface::create(
+                            cairo::Format::ARgb32,
+                            w as i32,
+                            h as i32,
+                        ) {
+                            if let Ok(ctx) = cairo::Context::new(&surf) {
+                                ctx.set_source_rgb(1.0, 1.0, 1.0);
+                                ctx.rectangle(0.0, 0.0, w, h);
+                                let _ = ctx.fill();
+                                draw_scene(
+                                    &ctx,
+                                    w,
+                                    h,
+                                    &slice,
+                                    &isolines,
+                                    &atoms,
+                                    colormap,
+                                    true,
+                                    Some(&export_cfg),
+                                );
+                            }
+                            if let Ok(mut file) = std::fs::File::create(&path) {
+                                let _ = surf.write_to_png(&mut file);
+                                println!("Exported PNG: {}", path.display());
                             }
                         }
                     }

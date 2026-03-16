@@ -401,7 +401,7 @@ fn clean_and_parse_first_number(raw: &str) -> Option<f64> {
     let no_comma = pre_comment.replace(',', " ");
 
     // 3. Find first token
-    let token = no_comma.trim().split_whitespace().next()?;
+    let token = no_comma.split_whitespace().next()?;
 
     // 4. Replace Fortran 'd'/'D' with 'e' (e.g. 1.0d-8 -> 1.0e-8)
     let float_str = token.to_lowercase().replace('d', "e");

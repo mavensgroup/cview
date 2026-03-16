@@ -117,7 +117,13 @@ fn draw_all_polyhedra(cr: &cairo::Context, atoms: &[RenderAtom], tab: &TabState,
     let mut items: Vec<(f64, [[f64; 3]; 3], [[f64; 3]; 3], [f64; 3], (f64, f64, f64))> = Vec::new();
 
     for poly in &built {
-        let (_, base_color) = get_atom_properties(&atoms[poly.center_idx].element);
+        let base_color = match &settings.color_mode {
+            crate::config::PolyhedraColorMode::Custom(r, g, b) => (*r, *g, *b),
+            _ => {
+                let (_, c) = get_atom_properties(&atoms[poly.center_idx].element);
+                c
+            }
+        };
         let center_cart = atoms[poly.center_idx].cart_pos;
         for face in &poly.faces {
             let sv = face.screen_vertices(atoms);

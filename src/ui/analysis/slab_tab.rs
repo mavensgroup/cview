@@ -162,12 +162,9 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
                                 let nx = frac.x + dx as f64;
                                 let ny = frac.y + dy as f64;
                                 let nz = frac.z + dz as f64;
-                                if nx >= -0.05
-                                    && nx <= 1.05
-                                    && ny >= -0.05
-                                    && ny <= 1.05
-                                    && nz >= -0.05
-                                    && nz <= 1.05
+                                if (-0.05..=1.05).contains(&nx)
+                                    && (-0.05..=1.05).contains(&ny)
+                                    && (-0.05..=1.05).contains(&nz)
                                 {
                                     let bx = nx * 2.0 - 1.0;
                                     let by = ny * 2.0 - 1.0;

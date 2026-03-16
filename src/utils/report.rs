@@ -175,7 +175,7 @@ fn neighbor_param_source(structure: &Structure, atom_idx: usize) -> &'static str
     let dy = pos_b[1] - pos_a[1];
     let dz = pos_b[2] - pos_a[2];
     let dist_sq = dx * dx + dy * dy + dz * dz;
-    if dist_sq > CUTOFF_SQ || dist_sq < 0.25 {
+    if !(0.25..=CUTOFF_SQ).contains(&dist_sq) {
       continue;
     }
 

@@ -124,7 +124,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
     // Zoom
     let s_z = state.clone();
     let nb_z = nb_weak.clone();
-    let cb_z = queue_active_draw.clone();
+    let cb_z = queue_active_draw;
     controls_box.append(&create_slider(
         "Zoom",
         0.1,
@@ -140,7 +140,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
     // Rotation X
     let s_rx = state.clone();
     let nb_rx = nb_weak.clone();
-    let cb_rx = queue_active_draw.clone();
+    let cb_rx = queue_active_draw;
     controls_box.append(&create_slider(
         "Rotation X",
         0.0,
@@ -156,7 +156,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
     // Rotation Y
     let s_ry = state.clone();
     let nb_ry = nb_weak.clone();
-    let cb_ry = queue_active_draw.clone();
+    let cb_ry = queue_active_draw;
     controls_box.append(&create_slider(
         "Rotation Y",
         0.0,
@@ -172,7 +172,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
     // Rotation Z
     let s_rz = state.clone();
     let nb_rz = nb_weak.clone();
-    let cb_rz = queue_active_draw.clone();
+    let cb_rz = queue_active_draw;
     controls_box.append(&create_slider(
         "Rotation Z",
         0.0,
@@ -210,7 +210,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
     // Metallic
     let s_met = state.clone();
     let nb_met = nb_weak.clone();
-    let cb_met = queue_active_draw.clone();
+    let cb_met = queue_active_draw;
     vbox_mat.append(&create_slider(
         "Metallic",
         0.0,
@@ -229,7 +229,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
     // Roughness
     let s_rgh = state.clone();
     let nb_rgh = nb_weak.clone();
-    let cb_rgh = queue_active_draw.clone();
+    let cb_rgh = queue_active_draw;
     vbox_mat.append(&create_slider(
         "Roughness",
         0.0,
@@ -248,7 +248,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
     // Transmission
     let s_tr = state.clone();
     let nb_tr = nb_weak.clone();
-    let cb_tr = queue_active_draw.clone();
+    let cb_tr = queue_active_draw;
     vbox_mat.append(&create_slider(
         "Transmission",
         0.0,
@@ -277,7 +277,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
 
     let s_as = state.clone();
     let nb_as = nb_weak.clone();
-    let cb_as = queue_active_draw.clone();
+    let cb_as = queue_active_draw;
     vbox_atom.append(&create_slider(
         "Scale",
         0.1,
@@ -297,7 +297,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
 
     let s_lbl = state.clone();
     let nb_lbl = nb_weak.clone();
-    let cb_lbl = queue_active_draw.clone();
+    let cb_lbl = queue_active_draw;
 
     check_labels.connect_toggled(move |btn| {
         let mut st = s_lbl.borrow_mut();
@@ -325,7 +325,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
     // Bond Radius
     let s_br = state.clone();
     let nb_br = nb_weak.clone();
-    let cb_br = queue_active_draw.clone();
+    let cb_br = queue_active_draw;
     vbox_bonds.append(&create_slider(
         "Radius",
         0.01,
@@ -341,7 +341,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
     // Bond Tolerance ← RESTORED
     let s_tol = state.clone();
     let nb_tol = nb_weak.clone();
-    let cb_tol = queue_active_draw.clone();
+    let cb_tol = queue_active_draw;
     vbox_bonds.append(&create_slider(
         "Tolerance",
         0.6,
@@ -368,7 +368,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
 
     let s_bc = state.clone();
     let nb_bc = nb_weak.clone();
-    let cb_bc = queue_active_draw.clone();
+    let cb_bc = queue_active_draw;
     btn_bcol.connect_color_set(move |b| {
         let c = b.rgba();
         s_bc.borrow_mut().active_tab_mut().style.bond_color =
@@ -454,7 +454,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
     // Good Threshold Slider
     let s_good = state.clone();
     let nb_good = nb_weak.clone();
-    let cb_good = queue_active_draw.clone();
+    let cb_good = queue_active_draw;
     bvs_box.append(&create_slider(
         "Good Threshold",
         0.05,
@@ -474,7 +474,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
     // Warning Threshold Slider
     let s_warn = state.clone();
     let nb_warn = nb_weak.clone();
-    let cb_warn = queue_active_draw.clone();
+    let cb_warn = queue_active_draw;
     bvs_box.append(&create_slider(
         "Warning Threshold",
         0.20,

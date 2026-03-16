@@ -3,6 +3,7 @@
 use crate::physics::operations::conversion::{convert_structure, CellType};
 use crate::state::AppState;
 use crate::ui::dialogs::{basis_dlg, miller_dlg, supercell_dlg};
+use crate::utils::console;
 use gtk4::prelude::*;
 use gtk4::{Application, ApplicationWindow, DrawingArea, Notebook};
 use std::cell::RefCell;
@@ -13,7 +14,7 @@ pub fn setup(
     window: &ApplicationWindow,
     state: Rc<RefCell<AppState>>,
     notebook: &Notebook,
-    _drawing_area: &DrawingArea, // FIX: Prefixed with underscore
+    _drawing_area: &DrawingArea,
 ) {
     // --- SUPERCELL ---
     let sc_action = gtk4::gio::SimpleAction::new("supercell", None);
@@ -66,7 +67,7 @@ pub fn setup(
     });
     app.add_action(&mil_action);
 
-    // --- TOGGLE CELL VIEW ---
+    // --- TOGGLE CELL VIEW (Ctrl+T) ---
     let toggle_action = gtk4::gio::SimpleAction::new("toggle_cell_view", None);
     let st_weak_t = Rc::downgrade(&state);
     let nb_weak_t = notebook.downgrade();
@@ -97,9 +98,11 @@ pub fn setup(
 
 // --- HELPER FUNCTION ---
 fn convert_and_update(state: &Rc<RefCell<AppState>>, da: &DrawingArea, cell_type: CellType) {
+    // Read the source structure (original if available, else current).
+    // Use shared borrow — we only need to read here.
     let source = {
-        let mut st = state.borrow_mut();
-        let tab = st.active_tab_mut();
+        let st = state.borrow();
+        let tab = st.active_tab();
         tab.original_structure
             .as_ref()
             .or(tab.structure.as_ref())
@@ -113,10 +116,12 @@ fn convert_and_update(state: &Rc<RefCell<AppState>>, da: &DrawingArea, cell_type
                     CellType::Primitive => "Primitive",
                     CellType::Conventional => "Conventional",
                 };
-                println!(
-                    "Switched to {} View. Formula: {}",
-                    view_name, new_struct.formula
-                );
+                console::log_info(&format!(
+                    "Switched to {} cell — {} ({} atoms)",
+                    view_name,
+                    new_struct.formula,
+                    new_struct.atoms.len()
+                ));
 
                 let mut st = state.borrow_mut();
                 let tab = st.active_tab_mut();
@@ -125,7 +130,9 @@ fn convert_and_update(state: &Rc<RefCell<AppState>>, da: &DrawingArea, cell_type
 
                 da.queue_draw();
             }
-            Err(e) => eprintln!("Conversion error: {}", e),
+            Err(e) => {
+                console::log_error(&format!("Cell conversion failed: {}", e));
+            }
         }
     }
 }

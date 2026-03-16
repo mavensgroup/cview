@@ -1,11 +1,17 @@
 // src/physics/analysis/symmetry.rs
+//
+// Space group detection via the Moyo symmetry library.
+// Read-only analysis — does NOT modify the Structure.
+//
+// Cell conversion (Primitive ↔ Conventional) lives in
+// physics::operations::conversion to avoid duplication.
+
 use crate::model::elements::get_atomic_number;
-use crate::model::{Atom, Structure};
-use crate::utils::linalg::{cart_to_frac, frac_to_cart};
+use crate::model::Structure;
+use crate::utils::linalg::{cart_to_frac, lattice_to_matrix3};
 use moyo::base::{AngleTolerance, Cell, Lattice};
 use moyo::data::Setting;
 use moyo::MoyoDataset;
-use nalgebra::Matrix3;
 
 pub struct SymmetryInfo {
     pub number: i32,
@@ -13,33 +19,11 @@ pub struct SymmetryInfo {
     pub system: String,
 }
 
-fn lattice_to_moyo(lattice: [[f64; 3]; 3]) -> Matrix3<f64> {
-    Matrix3::new(
-        lattice[0][0],
-        lattice[0][1],
-        lattice[0][2],
-        lattice[1][0],
-        lattice[1][1],
-        lattice[1][2],
-        lattice[2][0],
-        lattice[2][1],
-        lattice[2][2],
-    )
-}
-
-fn matrix3_to_lattice(m: Matrix3<f64>) -> [[f64; 3]; 3] {
-    [
-        [m.m11, m.m12, m.m13],
-        [m.m21, m.m22, m.m23],
-        [m.m31, m.m32, m.m33],
-    ]
-}
-
 // =========================================================================
-// 1. ANALYSIS: Read-only check of the Space Group (Used by UI)
+// ANALYSIS: Read-only check of the Space Group (Used by UI)
 // =========================================================================
 pub fn analyze(structure: &Structure) -> Result<SymmetryInfo, String> {
-    let lattice_mat = lattice_to_moyo(structure.lattice);
+    let lattice_mat = lattice_to_matrix3(structure.lattice);
 
     let mut positions = Vec::new();
     let mut numbers = Vec::new();
@@ -48,7 +32,7 @@ pub fn analyze(structure: &Structure) -> Result<SymmetryInfo, String> {
         let frac = cart_to_frac(atom.position, structure.lattice).ok_or("Invalid lattice")?;
         positions.push(nalgebra::Vector3::from(frac));
         let z = get_atomic_number(&atom.element);
-        numbers.push(if z == 0 { 1 } else { z as i32 });
+        numbers.push(if z == 0 { 1 } else { z });
     }
 
     let cell = Cell::new(Lattice::new(lattice_mat), positions, numbers);
@@ -76,65 +60,6 @@ pub fn analyze(structure: &Structure) -> Result<SymmetryInfo, String> {
         number: dataset.number,
         symbol,
         system: sys_name.to_string(),
-    })
-}
-
-// =========================================================================
-// 2. TRANSFORMATION: Returns a NEW Standardized Structure
-// =========================================================================
-pub fn to_conventional_cell(structure: &Structure) -> Result<Structure, String> {
-    let lattice_mat = lattice_to_moyo(structure.lattice);
-
-    let mut positions = Vec::new();
-    let mut numbers = Vec::new();
-    let mut unique_elements = Vec::new();
-
-    for atom in &structure.atoms {
-        let frac = cart_to_frac(atom.position, structure.lattice)
-            .ok_or("Invalid lattice (determinant is zero)")?;
-        positions.push(nalgebra::Vector3::from(frac));
-
-        if !unique_elements.contains(&atom.element) {
-            unique_elements.push(atom.element.clone());
-        }
-        let id = unique_elements
-            .iter()
-            .position(|e| *e == atom.element)
-            .unwrap() as i32;
-        numbers.push(id + 1);
-    }
-
-    let cell = Cell::new(Lattice::new(lattice_mat), positions, numbers);
-    let dataset = MoyoDataset::new(&cell, 1e-4, AngleTolerance::Default, Setting::Spglib, true)
-        .map_err(|e| format!("Moyo symmetry search failed: {:?}", e))?;
-
-    let std_cell = dataset.std_cell;
-    let new_lattice = matrix3_to_lattice(std_cell.lattice.basis);
-
-    let mut new_atoms = Vec::new();
-    for (i, pos_frac) in std_cell.positions.iter().enumerate() {
-        let type_id = std_cell.numbers[i];
-        let element = if (type_id - 1) < unique_elements.len() as i32 {
-            unique_elements[(type_id - 1) as usize].clone()
-        } else {
-            "X".to_string()
-        };
-
-        let frac = [pos_frac.x, pos_frac.y, pos_frac.z];
-        let position = frac_to_cart(frac, new_lattice);
-
-        new_atoms.push(Atom {
-            element,
-            position,
-            original_index: i,
-        });
-    }
-
-    Ok(Structure {
-        lattice: new_lattice,
-        atoms: new_atoms,
-        formula: structure.formula.clone(),
-        is_periodic: structure.is_periodic,
     })
 }
 

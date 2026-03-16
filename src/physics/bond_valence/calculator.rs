@@ -214,7 +214,7 @@ pub fn calculate_bvs_pbc(structure: &Structure, atom_idx: usize) -> f64 {
                     let img_frac = frac_j + Vector3::new(nx as f64, ny as f64, nz as f64);
                     let dist = (lat_mat.transpose() * (img_frac - frac_i)).norm();
 
-                    if dist >= MIN_DIST && dist <= CUTOFF {
+                    if (MIN_DIST..=CUTOFF).contains(&dist) {
                         bvs += ((params.r0 - dist) / params.b).exp();
                     }
                 }
@@ -242,7 +242,7 @@ pub fn calculate_bvs(structure: &Structure, atom_idx: usize) -> f64 {
         };
 
         let dist = (pos_i - Vector3::from(neighbor.position)).norm();
-        if dist >= MIN_DIST && dist <= CUTOFF {
+        if (MIN_DIST..=CUTOFF).contains(&dist) {
             bvs += ((params.r0 - dist) / params.b).exp();
         }
     }

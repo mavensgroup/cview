@@ -1,8 +1,15 @@
 // src/ui/preferences.rs
-// COMPREHENSIVE PREFERENCES - All 29 settings with UI
-// Note: BVS thresholds intentionally excluded — tuned per-tab via sidebar.
+// Preferences window — 3 tabs:
+//   1. General      — 7 settings (file load defaults, zoom, rotation)
+//   2. Appearance   — 8 settings (colors, toggles, scales)
+//   3. Export/Plot  — 6 settings (charge density export font sizes, colormap)
+//
+// Removed tabs (settings kept in Config for serde backward-compat):
+//   - Bond Valence  (3 settings — none were wired to runtime behavior)
+//   - Performance   (5 settings — none were wired to runtime behavior)
+//   - Advanced      (5 settings — none were wired to runtime behavior)
 
-use crate::config::{AntialiasLevel, RenderQuality, RotationCenter};
+use crate::config::RotationCenter;
 use crate::state::AppState;
 use gtk4::{self as gtk, gdk, prelude::*};
 use std::cell::RefCell;
@@ -34,17 +41,9 @@ pub fn show_preferences_window(
     let appearance_tab = build_appearance_tab(state.clone(), drawing_area.clone());
     notebook.append_page(&appearance_tab, Some(&gtk::Label::new(Some("Appearance"))));
 
-    // TAB 3: BVS
-    let bvs_tab = build_bvs_tab(state.clone());
-    notebook.append_page(&bvs_tab, Some(&gtk::Label::new(Some("Bond Valence"))));
-
-    // TAB 4: Performance
-    let perf_tab = build_performance_tab(state.clone());
-    notebook.append_page(&perf_tab, Some(&gtk::Label::new(Some("Performance"))));
-
-    // TAB 5: Advanced
-    let adv_tab = build_advanced_tab(state.clone());
-    notebook.append_page(&adv_tab, Some(&gtk::Label::new(Some("Advanced"))));
+    // TAB 3: Export / Plot
+    let export_tab = build_export_plot_tab(state.clone());
+    notebook.append_page(&export_tab, Some(&gtk::Label::new(Some("Export / Plot"))));
 
     main_vbox.append(&notebook);
 
@@ -262,19 +261,22 @@ fn build_appearance_tab(state: Rc<RefCell<AppState>>, da: gtk::DrawingArea) -> g
     vbox.append(&rq_label);
 
     let rq_dropdown = gtk::DropDown::from_strings(&["Fast (Sprites)", "High (Vector)"]);
-    rq_dropdown.set_selected(match state.borrow().config.render_quality {
-        RenderQuality::Fast => 0,
-        RenderQuality::High => 1,
-    });
-    let s_rq = state.clone();
-    rq_dropdown.connect_selected_notify(move |d| {
-        let mut st = s_rq.borrow_mut();
-        st.config.render_quality = match d.selected() {
-            1 => RenderQuality::High,
-            _ => RenderQuality::Fast,
-        };
-        st.save_config();
-    });
+    {
+        use crate::config::RenderQuality;
+        rq_dropdown.set_selected(match state.borrow().config.render_quality {
+            RenderQuality::Fast => 0,
+            RenderQuality::High => 1,
+        });
+        let s_rq = state.clone();
+        rq_dropdown.connect_selected_notify(move |d| {
+            let mut st = s_rq.borrow_mut();
+            st.config.render_quality = match d.selected() {
+                1 => RenderQuality::High,
+                _ => RenderQuality::Fast,
+            };
+            st.save_config();
+        });
+    }
     vbox.append(&rq_dropdown);
 
     // 4-6. Checkboxes
@@ -348,186 +350,155 @@ fn build_appearance_tab(state: Rc<RefCell<AppState>>, da: gtk::DrawingArea) -> g
 }
 
 // ============================================================================
-// TAB 3: BVS (3 settings)
-// Thresholds are intentionally not here — they are structure-dependent and
-// are tuned live via the sidebar sliders on a per-tab basis.
+// TAB 3: EXPORT / PLOT (6 settings)
 // ============================================================================
 
-fn build_bvs_tab(state: Rc<RefCell<AppState>>) -> gtk::Box {
-    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 15);
+fn build_export_plot_tab(state: Rc<RefCell<AppState>>) -> gtk::Box {
+    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 12);
     vbox.set_margin_top(20);
     vbox.set_margin_bottom(20);
     vbox.set_margin_start(20);
     vbox.set_margin_end(20);
 
-    let check1 = gtk::CheckButton::with_label("Auto-Calculate BVS on File Load");
-    check1.set_active(state.borrow().config.auto_calc_bvs);
+    let heading = gtk::Label::new(Some("Charge Density Export Defaults"));
+    heading.add_css_class("title-4");
+    heading.set_halign(gtk::Align::Start);
+    vbox.append(&heading);
+
+    let note = gtk::Label::new(Some(
+        "Font sizes and line widths for PNG / PDF export.\n\
+         Changes take effect on the next export.",
+    ));
+    note.set_halign(gtk::Align::Start);
+    note.add_css_class("dim-label");
+    note.set_wrap(true);
+    vbox.append(&note);
+
+    vbox.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
+
+    // --- Axis Label Font Size ---
+    let row1 = labeled_spin(
+        "Axis Label Font Size (pt):",
+        8.0,
+        24.0,
+        1.0,
+        state.borrow().config.export_plot.font_size_axis_label,
+    );
     let s1 = state.clone();
-    check1.connect_toggled(move |c| {
-        s1.borrow_mut().config.auto_calc_bvs = c.is_active();
-        s1.borrow_mut().save_config();
-    });
-    vbox.append(&check1);
-
-    let check2 = gtk::CheckButton::with_label("Show BVS Report When Switching Modes");
-    check2.set_active(state.borrow().config.show_bvs_report);
-    let s2 = state.clone();
-    check2.connect_toggled(move |c| {
-        s2.borrow_mut().config.show_bvs_report = c.is_active();
-        s2.borrow_mut().save_config();
-    });
-    vbox.append(&check2);
-
-    let check3 = gtk::CheckButton::with_label("Warn on Poor BVS Match");
-    check3.set_active(state.borrow().config.warn_poor_bvs);
-    let s3 = state.clone();
-    check3.connect_toggled(move |c| {
-        s3.borrow_mut().config.warn_poor_bvs = c.is_active();
-        s3.borrow_mut().save_config();
-    });
-    vbox.append(&check3);
-
-    vbox
-}
-
-// ============================================================================
-// TAB 4: PERFORMANCE (5 settings)
-// ============================================================================
-
-fn build_performance_tab(state: Rc<RefCell<AppState>>) -> gtk::Box {
-    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 15);
-    vbox.set_margin_top(20);
-    vbox.set_margin_bottom(20);
-    vbox.set_margin_start(20);
-    vbox.set_margin_end(20);
-
-    let aa_label = gtk::Label::new(Some("Antialiasing Level:"));
-    aa_label.set_halign(gtk::Align::Start);
-    vbox.append(&aa_label);
-    let aa_dropdown = gtk::DropDown::from_strings(&["None", "Fast", "Good", "Best"]);
-    aa_dropdown.set_selected(match state.borrow().config.antialias_level {
-        AntialiasLevel::None => 0,
-        AntialiasLevel::Fast => 1,
-        AntialiasLevel::Good => 2,
-        AntialiasLevel::Best => 3,
-    });
-    let s_aa = state.clone();
-    aa_dropdown.connect_selected_notify(move |d| {
-        let mut st = s_aa.borrow_mut();
-        st.config.antialias_level = match d.selected() {
-            0 => AntialiasLevel::None,
-            1 => AntialiasLevel::Fast,
-            3 => AntialiasLevel::Best,
-            _ => AntialiasLevel::Good,
-        };
+    row1.1.connect_value_changed(move |sp| {
+        let mut st = s1.borrow_mut();
+        st.config.export_plot.font_size_axis_label = sp.value();
         st.save_config();
     });
-    vbox.append(&aa_dropdown);
+    vbox.append(&row1.0);
 
-    vbox.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
-
-    let max_label = gtk::Label::new(Some("Maximum Atoms to Display:"));
-    max_label.set_halign(gtk::Align::Start);
-    vbox.append(&max_label);
-    let max_spin = gtk::SpinButton::with_range(100.0, 50000.0, 100.0);
-    max_spin.set_value(state.borrow().config.max_atoms_display as f64);
-    let s_max = state.clone();
-    max_spin.connect_value_changed(move |sp| {
-        s_max.borrow_mut().config.max_atoms_display = sp.value() as usize;
-        s_max.borrow_mut().save_config();
-    });
-    vbox.append(&max_spin);
-
-    vbox.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
-
-    let check1 = gtk::CheckButton::with_label("Use Hardware Acceleration");
-    check1.set_active(state.borrow().config.use_hardware_acceleration);
-    let s1 = state.clone();
-    check1.connect_toggled(move |c| {
-        s1.borrow_mut().config.use_hardware_acceleration = c.is_active();
-        s1.borrow_mut().save_config();
-    });
-    vbox.append(&check1);
-
-    let check2 = gtk::CheckButton::with_label("Enable Sprite Caching");
-    check2.set_active(state.borrow().config.enable_sprite_cache);
+    // --- Tick Label Font Size ---
+    let row2 = labeled_spin(
+        "Tick Label Font Size (pt):",
+        6.0,
+        18.0,
+        1.0,
+        state.borrow().config.export_plot.font_size_tick_label,
+    );
     let s2 = state.clone();
-    check2.connect_toggled(move |c| {
-        s2.borrow_mut().config.enable_sprite_cache = c.is_active();
-        s2.borrow_mut().save_config();
+    row2.1.connect_value_changed(move |sp| {
+        let mut st = s2.borrow_mut();
+        st.config.export_plot.font_size_tick_label = sp.value();
+        st.save_config();
     });
-    vbox.append(&check2);
+    vbox.append(&row2.0);
 
-    let cache_label = gtk::Label::new(Some("Cache Size (MB):"));
-    cache_label.set_halign(gtk::Align::Start);
-    vbox.append(&cache_label);
-    let cache_spin = gtk::SpinButton::with_range(50.0, 500.0, 10.0);
-    cache_spin.set_value(state.borrow().config.cache_size_mb as f64);
-    let s_cache = state.clone();
-    cache_spin.connect_value_changed(move |sp| {
-        s_cache.borrow_mut().config.cache_size_mb = sp.value() as usize;
-        s_cache.borrow_mut().save_config();
+    // --- Annotation Font Size ---
+    let row3 = labeled_spin(
+        "Plane Annotation Font Size (pt):",
+        8.0,
+        20.0,
+        1.0,
+        state.borrow().config.export_plot.font_size_annotation,
+    );
+    let s3 = state.clone();
+    row3.1.connect_value_changed(move |sp| {
+        let mut st = s3.borrow_mut();
+        st.config.export_plot.font_size_annotation = sp.value();
+        st.save_config();
     });
-    vbox.append(&cache_spin);
+    vbox.append(&row3.0);
+
+    // --- Colorbar Font Size ---
+    let row4 = labeled_spin(
+        "Colorbar Label Font Size (pt):",
+        6.0,
+        18.0,
+        1.0,
+        state.borrow().config.export_plot.font_size_colorbar,
+    );
+    let s4 = state.clone();
+    row4.1.connect_value_changed(move |sp| {
+        let mut st = s4.borrow_mut();
+        st.config.export_plot.font_size_colorbar = sp.value();
+        st.save_config();
+    });
+    vbox.append(&row4.0);
+
+    vbox.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
+
+    // --- Isoline Line Width ---
+    let lbl5 = gtk::Label::new(Some("Isoline Line Width (export):"));
+    lbl5.set_halign(gtk::Align::Start);
+    vbox.append(&lbl5);
+    let scale_iso = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.5, 4.0, 0.1);
+    scale_iso.set_value(state.borrow().config.export_plot.isoline_line_width);
+    scale_iso.set_draw_value(true);
+    scale_iso.set_value_pos(gtk::PositionType::Right);
+    let s5 = state.clone();
+    scale_iso.connect_value_changed(move |sc| {
+        let mut st = s5.borrow_mut();
+        st.config.export_plot.isoline_line_width = sc.value();
+        st.save_config();
+    });
+    vbox.append(&scale_iso);
+
+    vbox.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
+
+    // --- Default Colormap ---
+    let lbl6 = gtk::Label::new(Some("Default Colormap:"));
+    lbl6.set_halign(gtk::Align::Start);
+    vbox.append(&lbl6);
+    let cmap_dropdown =
+        gtk::DropDown::from_strings(&["Viridis", "Plasma", "Blue–White–Red", "Grayscale"]);
+    cmap_dropdown.set_selected(state.borrow().config.export_plot.default_colormap as u32);
+    let s6 = state.clone();
+    cmap_dropdown.connect_selected_notify(move |d| {
+        let mut st = s6.borrow_mut();
+        st.config.export_plot.default_colormap = d.selected() as usize;
+        st.save_config();
+    });
+    vbox.append(&cmap_dropdown);
 
     vbox
 }
 
 // ============================================================================
-// TAB 5: ADVANCED (5 settings)
+// Helpers
 // ============================================================================
 
-fn build_advanced_tab(state: Rc<RefCell<AppState>>) -> gtk::Box {
-    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 15);
-    vbox.set_margin_top(20);
-    vbox.set_margin_bottom(20);
-    vbox.set_margin_start(20);
-    vbox.set_margin_end(20);
-
-    let check1 = gtk::CheckButton::with_label("Show FPS Counter");
-    check1.set_active(state.borrow().config.show_fps);
-    let s1 = state.clone();
-    check1.connect_toggled(move |c| {
-        s1.borrow_mut().config.show_fps = c.is_active();
-        s1.borrow_mut().save_config();
-    });
-    vbox.append(&check1);
-
-    let check2 = gtk::CheckButton::with_label("Verbose Console Logging");
-    check2.set_active(state.borrow().config.verbose_logging);
-    let s2 = state.clone();
-    check2.connect_toggled(move |c| {
-        s2.borrow_mut().config.verbose_logging = c.is_active();
-        s2.borrow_mut().save_config();
-    });
-    vbox.append(&check2);
-
-    let check3 = gtk::CheckButton::with_label("Enable Experimental Features");
-    check3.set_active(state.borrow().config.enable_experimental);
-    let s3 = state.clone();
-    check3.connect_toggled(move |c| {
-        s3.borrow_mut().config.enable_experimental = c.is_active();
-        s3.borrow_mut().save_config();
-    });
-    vbox.append(&check3);
-
-    let check4 = gtk::CheckButton::with_label("Show Measurement Labels");
-    check4.set_active(state.borrow().config.show_measurement_labels);
-    let s4 = state.clone();
-    check4.connect_toggled(move |c| {
-        s4.borrow_mut().config.show_measurement_labels = c.is_active();
-        s4.borrow_mut().save_config();
-    });
-    vbox.append(&check4);
-
-    let check5 = gtk::CheckButton::with_label("Auto-Detect File Format");
-    check5.set_active(state.borrow().config.auto_detect_format);
-    let s5 = state.clone();
-    check5.connect_toggled(move |c| {
-        s5.borrow_mut().config.auto_detect_format = c.is_active();
-        s5.borrow_mut().save_config();
-    });
-    vbox.append(&check5);
-
-    vbox
+/// Create a horizontal row with a label and a SpinButton.
+/// Returns (container Box, SpinButton) so caller can connect signals.
+fn labeled_spin(
+    label: &str,
+    min: f64,
+    max: f64,
+    step: f64,
+    value: f64,
+) -> (gtk::Box, gtk::SpinButton) {
+    let row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    let lbl = gtk::Label::new(Some(label));
+    lbl.set_halign(gtk::Align::Start);
+    lbl.set_hexpand(true);
+    row.append(&lbl);
+    let spin = gtk::SpinButton::with_range(min, max, step);
+    spin.set_value(value);
+    spin.set_width_chars(5);
+    row.append(&spin);
+    (row, spin)
 }

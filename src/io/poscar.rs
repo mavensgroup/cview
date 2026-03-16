@@ -58,7 +58,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
     let mut counts = Vec::new();
 
     // Check if line A contains letters (Elements) or numbers (Counts)
-    let first_char = parts_a.get(0).unwrap_or(&"").chars().next().unwrap_or(' ');
+    let first_char = parts_a.first().unwrap_or(&"").chars().next().unwrap_or(' ');
 
     if first_char.is_alphabetic() {
         // Line A is Symbols

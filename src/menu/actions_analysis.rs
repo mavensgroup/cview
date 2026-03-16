@@ -23,10 +23,11 @@ pub fn setup(app: &Application, window: &ApplicationWindow, state: Rc<RefCell<Ap
     // --- Charge Density — opens its own dedicated window ---
     let chgcar_action = gtk4::gio::SimpleAction::new("open_chgcar", None);
     let win_weak2 = window.downgrade();
+    let state_c2 = state.clone();
 
     chgcar_action.connect_activate(move |_, _| {
         if let Some(win) = win_weak2.upgrade() {
-            show_charge_density_window(&win);
+            show_charge_density_window(&win, state_c2.clone());
         }
     });
     app.add_action(&chgcar_action);

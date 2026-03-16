@@ -54,7 +54,7 @@ impl MillerMath {
         }
 
         // FIX: Use dot product for integer squared magnitude
-        candidates.sort_by(|a, b| a.dot(a).cmp(&b.dot(b)));
+        candidates.sort_by_key(|a| a.dot(a));
 
         if candidates.is_empty() {
             return Err("Could not find surface vectors. Indices might be too high.".to_string());
@@ -98,7 +98,7 @@ impl MillerMath {
         }
 
         // FIX: Use dot product for integer squared magnitude
-        w_candidates.sort_by(|a, b| a.dot(a).cmp(&b.dot(b)));
+        w_candidates.sort_by_key(|a| a.dot(a));
 
         if !w_candidates.is_empty() {
             w_vec = w_candidates[0];
@@ -147,7 +147,7 @@ impl MillerMath {
 
             if dir_val.abs() > 1e-6 {
                 let t = (1.0 - start_val) / dir_val;
-                if t >= -0.0001 && t <= 1.0001 {
+                if (-0.0001..=1.0001).contains(&t) {
                     points.push([
                         start[0] + t * dir[0],
                         start[1] + t * dir[1],

@@ -212,7 +212,7 @@ pub fn auto_detect_polyhedra_elements(
             continue;
         }
         let avg_cn = cns.iter().sum::<usize>() as f64 / cns.len() as f64;
-        if avg_cn >= 3.5 && avg_cn <= 8.5 {
+        if (3.5..=8.5).contains(&avg_cn) {
             result.push(element.clone());
         }
     }
@@ -303,7 +303,7 @@ fn build_polyhedra_inner(
 fn convex_hull_3d(center: [f64; 3], pts: &[[f64; 3]], atom_indices: &[usize]) -> Vec<Face> {
     let n = pts.len();
     match n {
-        0 | 1 | 2 => vec![],
+        0..=2 => vec![],
         3 => vec![make_face(center, pts, atom_indices, 0, 1, 2)],
         4 => vec![
             make_face(center, pts, atom_indices, 0, 1, 2),

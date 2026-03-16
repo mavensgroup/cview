@@ -4,7 +4,8 @@ use crate::physics::analysis::kpath;
 use crate::state::AppState;
 use gtk4::prelude::*;
 use gtk4::{
-    Align, Box, DrawingArea, Frame, GestureDrag, Label, Orientation, ScrolledWindow, TextView,
+    Align, Box, DrawingArea, EventControllerScroll, EventControllerScrollFlags, Frame, GestureDrag,
+    Label, Orientation, ScrolledWindow, TextView,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -12,6 +13,7 @@ use std::rc::Rc;
 struct ViewerState {
     rot_x: f64,
     rot_y: f64,
+    zoom: f64,
 }
 
 pub fn build(state: Rc<RefCell<AppState>>) -> Box {
@@ -42,9 +44,10 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         let view_state = Rc::new(RefCell::new(ViewerState {
             rot_x: 0.2,
             rot_y: 0.2,
+            zoom: 1.0,
         }));
 
-        // Mouse Drag
+        // Mouse Drag (rotation)
         let gesture = GestureDrag::new();
         let vs_clone = view_state.clone();
         let da_clone = da.clone();
@@ -56,12 +59,47 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         });
         da.add_controller(gesture);
 
+        // Scroll Wheel (zoom)
+        let scroll_ctl = EventControllerScroll::new(EventControllerScrollFlags::VERTICAL);
+        let vs_scroll = view_state.clone();
+        let da_scroll = da.clone();
+        scroll_ctl.connect_scroll(move |_, _, dy| {
+            let mut vs = vs_scroll.borrow_mut();
+            let factor = if dy < 0.0 { 1.1 } else { 1.0 / 1.1 };
+            vs.zoom = (vs.zoom * factor).clamp(0.1, 20.0);
+            da_scroll.queue_draw();
+            gtk4::glib::Propagation::Stop
+        });
+        da.add_controller(scroll_ctl);
+
+        // Pre-compute the bounding radius of all geometry for auto-scaling
+        let mut max_extent: f64 = 0.0;
+        for (start, end) in &res.bz_lines {
+            for p in [start, end] {
+                let r = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt();
+                if r > max_extent {
+                    max_extent = r;
+                }
+            }
+        }
+        for kp in &res.kpoints {
+            let p = kp.coords_cart;
+            let r = (p[0] * p[0] + p[1] * p[1] + p[2] * p[2]).sqrt();
+            if r > max_extent {
+                max_extent = r;
+            }
+        }
+        // Ensure we don't divide by zero
+        if max_extent < 1e-12 {
+            max_extent = 1.0;
+        }
+
         // Drawing
         let res_rc = Rc::new(res.clone());
         let res_draw = res_rc.clone();
 
         da.set_draw_func(move |_, cr, w, h| {
-            // 1. White Background (Coherence with XRD tab)
+            // 1. White Background
             cr.set_source_rgb(1.0, 1.0, 1.0);
             cr.paint().unwrap();
 
@@ -69,9 +107,10 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
             let center_x = w as f64 / 2.0;
             let center_y = h as f64 / 2.0;
 
-            // 2. Adjusted Zoom (Reduced from 0.35 to 0.25)
-            // This prevents the BZ from clipping edges during rotation
-            let scale = (w as f64).min(h as f64) * 0.15;
+            // 2. Auto-scale: fit the bounding sphere into ~35% of the widget,
+            //    then apply user zoom on top.
+            let base_scale = (w as f64).min(h as f64) * 0.35 / max_extent;
+            let scale = base_scale * vs.zoom;
 
             // Simple 3D projection
             let project = |p: [f64; 3]| -> (f64, f64) {
@@ -88,7 +127,6 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
             };
 
             // 3. Draw Wireframe (BZ)
-            // Use dark grey for lines on white background
             cr.set_source_rgba(0.2, 0.2, 0.2, 1.0);
             cr.set_line_width(1.5);
             for (start, end) in &res_draw.bz_lines {
@@ -100,7 +138,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
             cr.stroke().unwrap();
 
             // 4. Draw Path Segments
-            cr.set_source_rgba(0.84, 0.0, 0.0, 1.0); // Red path
+            cr.set_source_rgba(0.84, 0.0, 0.0, 1.0);
             cr.set_line_width(2.5);
 
             for segment in &res_draw.path_segments {
@@ -118,13 +156,12 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
             cr.stroke().unwrap();
 
             // 5. Draw Labels
-            cr.set_source_rgba(0.0, 0.84, 0.84, 1.0); // Blue dots/text
+            cr.set_source_rgba(0.0, 0.84, 0.84, 1.0);
             for pt in &res_draw.kpoints {
                 let (px, py) = project(pt.coords_cart);
                 cr.arc(px, py, 4.0, 0.0, 2.0 * std::f64::consts::PI);
                 cr.fill().unwrap();
 
-                // Draw Label Text
                 cr.move_to(px + 6.0, py - 6.0);
                 cr.set_font_size(16.0);
                 cr.show_text(&pt.label).unwrap();

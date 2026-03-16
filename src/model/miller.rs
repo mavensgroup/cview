@@ -37,25 +37,25 @@ impl MillerPlane {
         if h.abs() > 1e-6 {
             // y=0, z=0 => hx = d
             let x = d / h;
-            if x >= -1e-5 && x <= 1.00001 {
+            if (-1e-5..=1.00001).contains(&x) {
                 add_point([x, 0.0, 0.0]);
             }
 
             // y=1, z=0 => hx + k = d
             let x = (d - k) / h;
-            if x >= -1e-5 && x <= 1.00001 {
+            if (-1e-5..=1.00001).contains(&x) {
                 add_point([x, 1.0, 0.0]);
             }
 
             // y=0, z=1 => hx + l = d
             let x = (d - l) / h;
-            if x >= -1e-5 && x <= 1.00001 {
+            if (-1e-5..=1.00001).contains(&x) {
                 add_point([x, 0.0, 1.0]);
             }
 
             // y=1, z=1 => hx + k + l = d
             let x = (d - k - l) / h;
-            if x >= -1e-5 && x <= 1.00001 {
+            if (-1e-5..=1.00001).contains(&x) {
                 add_point([x, 1.0, 1.0]);
             }
         }
@@ -64,25 +64,25 @@ impl MillerPlane {
         if k.abs() > 1e-6 {
             // x=0, z=0 => ky = d
             let y = d / k;
-            if y >= -1e-5 && y <= 1.00001 {
+            if (-1e-5..=1.00001).contains(&y) {
                 add_point([0.0, y, 0.0]);
             }
 
             // x=1, z=0 => h + ky = d
             let y = (d - h) / k;
-            if y >= -1e-5 && y <= 1.00001 {
+            if (-1e-5..=1.00001).contains(&y) {
                 add_point([1.0, y, 0.0]);
             }
 
             // x=0, z=1 => ky + l = d
             let y = (d - l) / k;
-            if y >= -1e-5 && y <= 1.00001 {
+            if (-1e-5..=1.00001).contains(&y) {
                 add_point([0.0, y, 1.0]);
             }
 
             // x=1, z=1 => h + ky + l = d
             let y = (d - h - l) / k;
-            if y >= -1e-5 && y <= 1.00001 {
+            if (-1e-5..=1.00001).contains(&y) {
                 add_point([1.0, y, 1.0]);
             }
         }
@@ -91,25 +91,25 @@ impl MillerPlane {
         if l.abs() > 1e-6 {
             // x=0, y=0 => lz = d
             let z = d / l;
-            if z >= -1e-5 && z <= 1.00001 {
+            if (-1e-5..=1.00001).contains(&z) {
                 add_point([0.0, 0.0, z]);
             }
 
             // x=1, y=0 => h + lz = d
             let z = (d - h) / l;
-            if z >= -1e-5 && z <= 1.00001 {
+            if (-1e-5..=1.00001).contains(&z) {
                 add_point([1.0, 0.0, z]);
             }
 
             // x=0, y=1 => k + lz = d
             let z = (d - k) / l;
-            if z >= -1e-5 && z <= 1.00001 {
+            if (-1e-5..=1.00001).contains(&z) {
                 add_point([0.0, 1.0, z]);
             }
 
             // x=1, y=1 => h + k + lz = d
             let z = (d - h - k) / l;
-            if z >= -1e-5 && z <= 1.00001 {
+            if (-1e-5..=1.00001).contains(&z) {
                 add_point([1.0, 1.0, z]);
             }
         }

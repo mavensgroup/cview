@@ -256,7 +256,7 @@ fn parse_lattice_line(line: &str, data: &mut SprkkrData, found: &mut [bool; 3]) 
     if line.starts_with("A(")
         || (line.starts_with('A')
             && line.len() > 1
-            && line.chars().nth(1).map_or(false, |c| c.is_numeric()))
+            && line.chars().nth(1).is_some_and(|c| c.is_numeric()))
     {
         let idx = if line.starts_with("A(1)") || line.starts_with("A1") {
             0

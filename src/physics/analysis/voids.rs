@@ -94,8 +94,10 @@ impl std::error::Error for VoidError {}
 /// - VanDerWaals: For molecular crystals and MOFs
 /// - Covalent: Generally not recommended (underestimates atomic size)
 #[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Default)]
 pub enum RadiusType {
     /// Ionic radii (Shannon 1976) - DEFAULT for crystalline solids
+    #[default]
     Ionic,
     /// Van der Waals radii - use for molecular crystals
     VanDerWaals,
@@ -103,11 +105,6 @@ pub enum RadiusType {
     Covalent,
 }
 
-impl Default for RadiusType {
-    fn default() -> Self {
-        RadiusType::Ionic // Scientifically appropriate for most crystals
-    }
-}
 
 #[derive(Clone, Copy, Debug)]
 pub struct VoidConfig {

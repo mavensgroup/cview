@@ -1,6 +1,17 @@
 // src/config.rs
-// COMPREHENSIVE CONFIG - All 29 settings for permanent preferences
-// Note: BVS thresholds live in RenderStyle (per-tab, sidebar-controlled), not here.
+// Persistent preferences — serialized to ~/.config/cview/settings.json
+//
+// Settings are grouped into:
+//   GENERAL     — loaded into ViewState on tab creation (all effective)
+//   APPEARANCE  — colors in RenderStyle, display toggles
+//   EXPORT/PLOT — font sizes, line widths, default colormap for charge density export
+//
+// Legacy/aspirational fields are retained for backward-compatible JSON deserialization
+// but are NOT exposed in the Preferences UI.  They carry `#[serde(default)]` so
+// missing keys in old config files won't cause parse failures.
+//
+// TODO: Wire default_atom_scale / default_bond_radius into TabState::new()
+// TODO: Wire cache_size_mb into RenderStyle::create_session_copy()
 
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
@@ -19,16 +30,13 @@ use crate::rendering::sprite_cache::SpriteCache;
 // ============================================================================
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum RotationCenter {
+    #[default]
     Centroid,
     UnitCell,
 }
 
-impl Default for RotationCenter {
-    fn default() -> Self {
-        RotationCenter::Centroid
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ExportFormat {
@@ -37,42 +45,93 @@ pub enum ExportFormat {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum ColorMode {
+    #[default]
     Element,
     BondValence,
     Coordination,
     Charge,
 }
 
-impl Default for ColorMode {
-    fn default() -> Self {
-        ColorMode::Element
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum RenderQuality {
+    #[default]
     Fast,
     High,
 }
 
-impl Default for RenderQuality {
-    fn default() -> Self {
-        RenderQuality::Fast
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum AntialiasLevel {
     None,
     Fast,
+    #[default]
     Good,
     Best,
 }
 
-impl Default for AntialiasLevel {
+
+// ============================================================================
+// EXPORT / PLOT SETTINGS
+// ============================================================================
+
+/// Settings for charge density plot export (font sizes, line widths, default colormap).
+/// All values are user-tunable via the Preferences → Export / Plot tab.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ExportPlotSettings {
+    /// Axis label font size in pt (e.g. "a (Å)")
+    #[serde(default = "d_font_axis")]
+    pub font_size_axis_label: f64,
+    /// Tick number font size in pt
+    #[serde(default = "d_font_tick")]
+    pub font_size_tick_label: f64,
+    /// Plane annotation font size in pt (e.g. "(001) z = 0.500")
+    #[serde(default = "d_font_annotation")]
+    pub font_size_annotation: f64,
+    /// Colorbar value font size in pt
+    #[serde(default = "d_font_colorbar")]
+    pub font_size_colorbar: f64,
+    /// Isoline line width for export
+    #[serde(default = "d_isoline_width")]
+    pub isoline_line_width: f64,
+    /// Default colormap index: 0=Viridis, 1=Plasma, 2=BlueWhiteRed, 3=Grayscale
+    #[serde(default = "d_colormap_idx")]
+    pub default_colormap: usize,
+}
+
+fn d_font_axis() -> f64 {
+    14.0
+}
+fn d_font_tick() -> f64 {
+    11.0
+}
+fn d_font_annotation() -> f64 {
+    12.0
+}
+fn d_font_colorbar() -> f64 {
+    11.0
+}
+fn d_isoline_width() -> f64 {
+    1.8
+}
+fn d_colormap_idx() -> usize {
+    0
+}
+
+impl Default for ExportPlotSettings {
     fn default() -> Self {
-        AntialiasLevel::Good
+        Self {
+            font_size_axis_label: 14.0,
+            font_size_tick_label: 11.0,
+            font_size_annotation: 12.0,
+            font_size_colorbar: 11.0,
+            isoline_line_width: 1.8,
+            default_colormap: 0,
+        }
     }
 }
 
@@ -170,7 +229,7 @@ impl RenderStyle {
     pub fn create_session_copy(&self) -> Self {
         let mut copy = self.clone();
         // Create fresh cache for new session
-        let cache_size_mb = 200.0; // TODO: Get from config
+        let cache_size_mb = 200.0; // TODO: Wire config.cache_size_mb here
         copy.atom_cache = Rc::new(RefCell::new(SpriteCache::new(cache_size_mb)));
         copy
     }
@@ -198,12 +257,12 @@ impl Default for RenderStyle {
 }
 
 // ============================================================================
-// MAIN CONFIG - 29 Settings
+// MAIN CONFIG
 // ============================================================================
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Config {
-    // GENERAL (7)
+    // ── GENERAL (7) — all effective via ViewState::from_config ──
     #[serde(default = "d_true")]
     pub default_show_full_cell: bool,
     #[serde(default = "d_true")]
@@ -219,7 +278,7 @@ pub struct Config {
     #[serde(default)]
     pub remember_last_view: bool,
 
-    // APPEARANCE (6) - Colors are in style
+    // ── APPEARANCE (6) — colors live in style, toggles via ViewState ──
     #[serde(default)]
     pub render_quality: RenderQuality,
     #[serde(default = "d_true")]
@@ -229,21 +288,22 @@ pub struct Config {
     #[serde(default = "d_true")]
     pub show_ghost_atoms: bool,
     #[serde(default = "d_atom_scale")]
-    pub default_atom_scale: f64,
+    pub default_atom_scale: f64, // TODO: wire into TabState::new()
     #[serde(default = "d_bond_rad")]
-    pub default_bond_radius: f64,
+    pub default_bond_radius: f64, // TODO: wire into TabState::new()
 
-    // BVS (3)
-    // bvs_threshold_good/warn are intentionally absent — they live in RenderStyle
-    // and are tuned per-tab via the sidebar. Only app-level behavioral defaults here.
+    // ── EXPORT / PLOT — charge density export defaults ──
+    #[serde(default)]
+    pub export_plot: ExportPlotSettings,
+
+    // ── LEGACY — retained for backward-compat JSON deserialization only ──
+    // These fields are NOT exposed in the Preferences UI.
     #[serde(default)]
     pub auto_calc_bvs: bool,
     #[serde(default = "d_true")]
     pub show_bvs_report: bool,
     #[serde(default = "d_true")]
     pub warn_poor_bvs: bool,
-
-    // PERFORMANCE (5)
     #[serde(default)]
     pub antialias_level: AntialiasLevel,
     #[serde(default = "d_max_atoms")]
@@ -254,8 +314,6 @@ pub struct Config {
     pub enable_sprite_cache: bool,
     #[serde(default = "d_cache")]
     pub cache_size_mb: usize,
-
-    // ADVANCED (5)
     #[serde(default)]
     pub show_fps: bool,
     #[serde(default)]
@@ -266,8 +324,6 @@ pub struct Config {
     pub show_measurement_labels: bool,
     #[serde(default)]
     pub auto_detect_format: bool,
-
-    // LEGACY
     #[serde(default)]
     pub style: RenderStyle,
     #[serde(default)]
@@ -315,16 +371,17 @@ impl Default for Config {
             default_atom_scale: 0.4,
             default_bond_radius: 0.12,
 
+            export_plot: ExportPlotSettings::default(),
+
+            // Legacy — kept for serde compat
             auto_calc_bvs: false,
             show_bvs_report: true,
             warn_poor_bvs: true,
-
             antialias_level: AntialiasLevel::Good,
             max_atoms_display: 10000,
             use_hardware_acceleration: true,
             enable_sprite_cache: true,
             cache_size_mb: 200,
-
             show_fps: false,
             verbose_logging: false,
             enable_experimental: false,

@@ -94,14 +94,14 @@ where
                 &GREY,
             ))?
             .label(label_name)
-            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &GREY));
+            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], GREY));
     }
 
     // 6. Draw Simulation
     chart
         .draw_series(LineSeries::new(sim_curve, RED.stroke_width(2)))?
         .label("Simulation")
-        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RED));
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], RED));
 
     // 7. Draw Peak Labels
     let visible_peaks: Vec<&XRDPattern> = peaks
@@ -125,8 +125,8 @@ where
     chart
         .configure_series_labels()
         .label_font(("sans-serif", 16).into_font())
-        .background_style(&WHITE.mix(0.8))
-        .border_style(&BLACK)
+        .background_style(WHITE.mix(0.8))
+        .border_style(BLACK)
         .draw()?;
 
     Ok(())
@@ -230,7 +230,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> gtk4::Box {
             root.draw_text(
                 "Click 'Recalculate' to Simulate",
                 &style,
-                (w as i32 / 2 - 140, h as i32 / 2),
+                (w / 2 - 140, h / 2),
             )
             .unwrap();
         }

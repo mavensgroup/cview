@@ -23,9 +23,9 @@ pub fn parse(path: &str) -> io::Result<Structure> {
     let mut in_loop = false;
     let mut current_loop_headers = Vec::new();
 
-    let mut lines = reader.lines().peekable();
+    let lines = reader.lines().peekable();
 
-    while let Some(line_res) = lines.next() {
+    for line_res in lines {
         let line = line_res?;
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
@@ -279,9 +279,9 @@ fn evaluate_term(term: &str, p: [f64; 3]) -> f64 {
     if let Some(idx) = t.find('/') {
         let num: f64 = t[..idx].parse().unwrap_or(0.0);
         let den: f64 = t[idx + 1..].parse().unwrap_or(1.0);
-        return sign * (num / den);
+        sign * (num / den)
     } else {
-        return sign * t.parse::<f64>().unwrap_or(0.0);
+        sign * t.parse::<f64>().unwrap_or(0.0)
     }
 }
 

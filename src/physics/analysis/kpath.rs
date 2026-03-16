@@ -1,9 +1,20 @@
 // src/physics/analysis/kpath.rs
+//
+// Orchestrates k-path calculation:
+//   1. Symmetry detection via moyo → space group + standardized cell
+//   2. Bravais classification + k-point computation (bravais submodule)
+//   3. Brillouin zone wireframe via Voronoi construction (voronoi submodule)
+//
+// Convention (Setyawan-Curtarolo 2010):
+//   - Reciprocal lattice is built from the PRIMITIVE standardized cell
+//   - Bravais classification uses the CONVENTIONAL standardized cell parameters
+//   - K-point fractional coordinates are in the primitive reciprocal basis
 
-use crate::model::bs_data::{self, BrillouinZoneData};
+use super::bravais;
+use super::voronoi;
 use crate::model::elements::get_atomic_number;
 use crate::model::structure::Structure;
-use crate::utils::linalg::cart_to_frac;
+use crate::utils::linalg::{cart_to_frac, lattice_to_matrix3};
 use moyo::base::{AngleTolerance, Cell, Lattice};
 use moyo::data::Setting;
 use moyo::MoyoDataset;
@@ -30,12 +41,10 @@ pub struct KPathResult {
 }
 
 pub fn calculate_kpath(structure: &Structure) -> Option<KPathResult> {
-    // 1. Convert Input Structure to Moyo Cell
-    let input_lattice = Matrix3::from_columns(&[
-        Vector3::from(structure.lattice[0]),
-        Vector3::from(structure.lattice[1]),
-        Vector3::from(structure.lattice[2]),
-    ]);
+    // 1. Convert input structure to Moyo cell
+    //    lattice_to_matrix3 produces rows = lattice vectors;
+    //    Moyo's Lattice::new expects the same convention.
+    let lat_mat = lattice_to_matrix3(structure.lattice);
 
     let mut positions = Vec::new();
     let mut numbers = Vec::new();
@@ -43,12 +52,12 @@ pub fn calculate_kpath(structure: &Structure) -> Option<KPathResult> {
     for atom in &structure.atoms {
         let frac = cart_to_frac(atom.position, structure.lattice)?;
         positions.push(Vector3::from(frac));
-        numbers.push(get_atomic_number(&atom.element) as i32);
+        numbers.push(get_atomic_number(&atom.element));
     }
 
-    let moyo_cell = Cell::new(Lattice::new(input_lattice.transpose()), positions, numbers);
+    let moyo_cell = Cell::new(Lattice::new(lat_mat), positions, numbers);
 
-    // 2. Get Symmetry Dataset
+    // 2. Symmetry detection
     let dataset = MoyoDataset::new(
         &moyo_cell,
         SYMPREC,
@@ -61,21 +70,46 @@ pub fn calculate_kpath(structure: &Structure) -> Option<KPathResult> {
     let sg_num = dataset.number;
     crate::utils::console::log_debug(&format!("[KPATH] Detected Space Group: #{}", sg_num));
 
-    // 3. Extract Standardized Primitive Lattice (Moyo row-major → transpose for columns)
-    let std_prim_lattice = dataset.std_cell.lattice.basis.transpose();
-
-    // 4. Reciprocal Lattice: B = 2π * (A⁻¹)ᵀ
+    // 3. Reciprocal lattice from the PRIMITIVE standardized cell
+    //    Moyo basis has rows = lattice vectors, so transpose gives columns = lattice vectors.
+    //    Reciprocal lattice: B = 2π (A^T)^{-1}  where A has columns = direct lattice vectors.
+    //    Equivalently: B = 2π (A^{-1})^T
+    let std_prim_col = dataset.prim_std_cell.lattice.basis.transpose();
     let two_pi = 2.0 * std::f64::consts::PI;
-    let rec_lattice = std_prim_lattice.try_inverse()?.transpose() * two_pi;
+    let rec_lattice = std_prim_col.try_inverse()?.transpose() * two_pi;
 
-    // 5. Lookup K-points
-    let data = bs_data::get_sc_data(sg_num)?;
+    // 4. Lattice parameters from the CONVENTIONAL standardized cell
+    //    Bravais classification requires a, b, c, α, β, γ of the conventional cell.
+    let std_conv_col = dataset.std_cell.lattice.basis.transpose();
+    let params = bravais::extract_lattice_params(&std_conv_col);
 
+    crate::utils::console::log_debug(&format!(
+        "[KPATH] Lattice params: a={:.4}, b={:.4}, c={:.4}, α={:.2}°, β={:.2}°, γ={:.2}°",
+        params.a,
+        params.b,
+        params.c,
+        params.alpha.to_degrees(),
+        params.beta.to_degrees(),
+        params.gamma.to_degrees()
+    ));
+
+    // 5. Classify Bravais type and compute k-points at runtime
+    let bravais_type = bravais::classify(sg_num, &params);
+    let kdata = bravais::compute_kdata(bravais_type, &params);
+
+    crate::utils::console::log_debug(&format!(
+        "[KPATH] Bravais type: {:?} ({})",
+        bravais_type, kdata.label
+    ));
+
+    // 6. Build k-point list and path segments
+    //    Fractional coords are in the primitive reciprocal basis;
+    //    Cartesian = rec_lattice * frac (columns of rec_lattice are b1, b2, b3).
     let mut linear_kpoints = Vec::new();
     let mut path_segments = Vec::new();
 
     let make_kp = |label: &str| -> Option<KPoint> {
-        let frac = data.special_points.get(label)?;
+        let frac = kdata.special_points.get(label)?;
         let c_vec = rec_lattice * Vector3::from(*frac);
         Some(KPoint {
             label: label.to_string(),
@@ -84,7 +118,7 @@ pub fn calculate_kpath(structure: &Structure) -> Option<KPathResult> {
         })
     };
 
-    for segment_labels in &data.path {
+    for segment_labels in &kdata.path {
         let mut segment_pts = Vec::new();
         for label in segment_labels {
             if let Some(kp) = make_kp(label) {
@@ -95,24 +129,22 @@ pub fn calculate_kpath(structure: &Structure) -> Option<KPathResult> {
         path_segments.push(segment_pts);
     }
 
-    // 6. Transform Wireframe frac → cart
-    let cart_lines = data
-        .wireframe
-        .iter()
-        .map(|(start_f, end_f)| {
-            let s = rec_lattice * Vector3::from(*start_f);
-            let e = rec_lattice * Vector3::from(*end_f);
-            ([s.x, s.y, s.z], [e.x, e.y, e.z])
-        })
-        .collect();
+    // 7. Compute BZ wireframe via Voronoi construction
+    let bz_lines = voronoi::compute_bz_wireframe(&rec_lattice);
+
+    crate::utils::console::log_debug(&format!(
+        "[KPATH] BZ wireframe: {} edges, {} k-points on path",
+        bz_lines.len(),
+        linear_kpoints.len()
+    ));
 
     Some(KPathResult {
         spacegroup_str: format!("{} ({})", sg_num, dataset.hall_number),
         number: sg_num,
-        lattice_type: data.lattice_type,
+        lattice_type: kdata.label,
         kpoints: linear_kpoints,
         path_segments,
-        bz_lines: cart_lines,
+        bz_lines,
         rec_lattice,
     })
 }
