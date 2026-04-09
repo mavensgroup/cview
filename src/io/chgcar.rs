@@ -1,7 +1,6 @@
 // src/io/chgcar.rs
 // VASP CHGCAR file parser
 // Supports: non-spin-polarized, spin-polarized (two grids), charge density difference
-// Parses atom positions and species for overlay on density slices
 
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
@@ -68,6 +67,26 @@ impl ChgcarData {
     /// Flat index from (ix, iy, iz) — Fortran column-major order (x fastest)
     pub fn index(&self, ix: usize, iy: usize, iz: usize) -> usize {
         ix + self.grid[0] * (iy + self.grid[1] * iz)
+    }
+
+    /// Convert CHGCAR header data to a CView `Structure` for 3D visualization.
+    pub fn to_structure(&self) -> crate::model::structure::Structure {
+        let atoms = self
+            .atoms
+            .iter()
+            .enumerate()
+            .map(|(i, a)| crate::model::structure::Atom {
+                element: a.element.clone(),
+                position: a.frac_coords,
+                original_index: i,
+            })
+            .collect();
+        crate::model::structure::Structure {
+            lattice: self.lattice,
+            atoms,
+            formula: String::new(),
+            is_periodic: true,
+        }
     }
 
     /// Volume of the unit cell in ų

@@ -1,6 +1,5 @@
 // src/ui/analysis/charge_density_tab.rs
 // 2D charge density visualization tab
-// Self-contained: heatmap + isolines + atom overlay rendered via Cairo
 // All rendering consolidated here — no separate rendering_charge_density module
 
 use crate::io::chgcar::{self, ChgcarData};

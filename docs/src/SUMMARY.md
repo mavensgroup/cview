@@ -12,6 +12,8 @@
     - [Reciprocal Space (K-Path)](guide/kpath.md)
     - [Void & Intercalation](guide/voids.md)
     - [Miller Plane](guide/miller.md)
+    - [Bond Valence Sum](guide/bvs.md)
+    - [Charge Density](guide/charge_density.md)
 
 - [Building Structures](guide/building.md)
     - [Supercells](guide/supercells.md)

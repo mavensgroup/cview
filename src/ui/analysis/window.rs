@@ -1,4 +1,5 @@
 // src/ui/analysis/window.rs
+
 use super::charge_density_tab;
 use super::kpath_tab;
 use super::slab_tab;

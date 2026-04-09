@@ -4,12 +4,8 @@ authors = ["Rudra Banerjee"]
 language = "en"
 src = "src"
 
-[preprocessor.admonish]
-command = "mdbook-admonish"
-assets_version = "3.1.0"
-
 [output.html]
-additional-css = ["src/mdbook-admonish.css", "src/custom.css"]
+additional-css = ["src/custom.css"]
 additional-js  = ["src/custom.js"]
 git-repository-url = "https://github.com/mavensgroup/cview"
 site-url = "/cview/"

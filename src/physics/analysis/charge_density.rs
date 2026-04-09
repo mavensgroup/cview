@@ -6,9 +6,7 @@ use crate::io::chgcar::ChgcarData;
 use nalgebra::{Matrix3, Vector3};
 use std::borrow::Cow;
 
-// ---------------------------------------------------------------------------
 // Public types
-// ---------------------------------------------------------------------------
 
 /// Which density channel to visualize
 #[derive(Clone, Copy, Debug, PartialEq)]
