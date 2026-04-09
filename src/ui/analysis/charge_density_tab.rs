@@ -44,6 +44,11 @@ pub struct ChargeDensityState {
     pub cached_slice: Option<DensitySlice>,
     pub cached_isolines: Vec<Isoline>,
     pub cached_atoms: Vec<ProjectedAtom>,
+    // 3D crystal preview
+    pub show_3d_atoms: bool,
+    pub show_3d_cell: bool,
+    pub rot_3d_x: f64,
+    pub rot_3d_y: f64,
 }
 
 impl Default for ChargeDensityState {
@@ -68,6 +73,10 @@ impl Default for ChargeDensityState {
             cached_slice: None,
             cached_isolines: Vec::new(),
             cached_atoms: Vec::new(),
+            show_3d_atoms: false,
+            show_3d_cell: false,
+            rot_3d_x: 0.45, // ~25° tilt for good initial view
+            rot_3d_y: -0.60,
         }
     }
 }
@@ -344,6 +353,7 @@ fn draw_scene(
     colormap: ColormapChoice,
     is_export: bool,
     export_settings: Option<&crate::config::ExportPlotSettings>,
+    clip_to_cell: bool,
 ) {
     let ps = if is_export {
         match export_settings {
@@ -357,6 +367,23 @@ fn draw_scene(
     let n_rows = slice.n_rows;
     let n_cols = slice.n_cols;
     let range = slice.data_max - slice.data_min;
+
+    // ── Cell boundary clipping for HKL slices ──
+    let use_clip = clip_to_cell && slice.cell_boundary_uv.len() >= 3;
+    if use_clip {
+        cr.save().ok();
+        cr.new_path();
+        let (px, py) = (
+            ly.plot_x + slice.cell_boundary_uv[0].0 * ly.plot_w,
+            ly.plot_y + slice.cell_boundary_uv[0].1 * ly.plot_h,
+        );
+        cr.move_to(px, py);
+        for p in &slice.cell_boundary_uv[1..] {
+            cr.line_to(ly.plot_x + p.0 * ly.plot_w, ly.plot_y + p.1 * ly.plot_h);
+        }
+        cr.close_path();
+        cr.clip();
+    }
 
     // ── Heatmap via bilinear-interpolated ImageSurface ──
     let pw = ly.plot_w as i32;
@@ -475,6 +502,24 @@ fn draw_scene(
             cr.move_to(ax + atom_radius + 2.0, ay + 3.0);
             let _ = cr.show_text(&atom.element);
         }
+    }
+
+    // ── Restore clip and draw cell boundary outline ──
+    if use_clip {
+        cr.restore().ok();
+        // Draw the cell boundary polygon outline
+        cr.set_source_rgba(1.0, 1.0, 1.0, 0.85);
+        cr.set_line_width(if is_export { 2.0 } else { 1.5 });
+        let (px, py) = (
+            ly.plot_x + slice.cell_boundary_uv[0].0 * ly.plot_w,
+            ly.plot_y + slice.cell_boundary_uv[0].1 * ly.plot_h,
+        );
+        cr.move_to(px, py);
+        for p in &slice.cell_boundary_uv[1..] {
+            cr.line_to(ly.plot_x + p.0 * ly.plot_w, ly.plot_y + p.1 * ly.plot_h);
+        }
+        cr.close_path();
+        let _ = cr.stroke();
     }
 
     // ── Plot border ──
@@ -637,6 +682,239 @@ fn fmt_val(v: f64) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// 3D crystal preview renderer (orthographic projection via Cairo)
+// ---------------------------------------------------------------------------
+
+fn draw_3d_preview(cr: &cairo::Context, width: f64, height: f64, state: &ChargeDensityState) {
+    // Dark background
+    cr.set_source_rgb(0.10, 0.10, 0.13);
+    cr.rectangle(0.0, 0.0, width, height);
+    let _ = cr.fill();
+
+    let chgcar = match &state.chgcar_a {
+        Some(c) => c,
+        None => {
+            cr.set_source_rgb(0.45, 0.45, 0.45);
+            cr.set_font_size(13.0);
+            cr.move_to(width / 2.0 - 90.0, height / 2.0);
+            let _ = cr.show_text("Load CHGCAR for 3D preview");
+            return;
+        }
+    };
+
+    if !state.show_3d_atoms && !state.show_3d_cell {
+        cr.set_source_rgb(0.40, 0.40, 0.40);
+        cr.set_font_size(11.0);
+        cr.move_to(width / 2.0 - 100.0, height / 2.0);
+        let _ = cr.show_text("Enable \'Show Atoms\' or \'Show Cell\'");
+        return;
+    }
+
+    let lat = &chgcar.lattice;
+
+    // Rotation matrix from Euler angles (Y then X)
+    let (sx, cx) = state.rot_3d_x.sin_cos();
+    let (sy, cy) = state.rot_3d_y.sin_cos();
+
+    let frac_to_cart = |f: [f64; 3]| -> [f64; 3] {
+        [
+            f[0] * lat[0][0] + f[1] * lat[1][0] + f[2] * lat[2][0],
+            f[0] * lat[0][1] + f[1] * lat[1][1] + f[2] * lat[2][1],
+            f[0] * lat[0][2] + f[1] * lat[1][2] + f[2] * lat[2][2],
+        ]
+    };
+
+    let center = frac_to_cart([0.5, 0.5, 0.5]);
+
+    let rotate_project = |cart: [f64; 3]| -> (f64, f64, f64) {
+        let c = [
+            cart[0] - center[0],
+            cart[1] - center[1],
+            cart[2] - center[2],
+        ];
+        // Rotate around Y then X
+        let x1 = c[0] * cy + c[2] * sy;
+        let y1 = c[1];
+        let z1 = -c[0] * sy + c[2] * cy;
+        let x2 = x1;
+        let y2 = y1 * cx - z1 * sx;
+        let z2 = y1 * sx + z1 * cx;
+        (x2, y2, z2)
+    };
+
+    // Bounding box from all 8 cell corners
+    let corners_frac: [[f64; 3]; 8] = [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [1.0, 1.0, 0.0],
+        [1.0, 0.0, 1.0],
+        [0.0, 1.0, 1.0],
+        [1.0, 1.0, 1.0],
+    ];
+    let corners_cart: Vec<[f64; 3]> = corners_frac.iter().map(|f| frac_to_cart(*f)).collect();
+
+    let mut min_x = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    for c in &corners_cart {
+        let (rx, ry, _) = rotate_project(*c);
+        min_x = min_x.min(rx);
+        max_x = max_x.max(rx);
+        min_y = min_y.min(ry);
+        max_y = max_y.max(ry);
+    }
+
+    let margin = 24.0;
+    let range_x = (max_x - min_x).max(1e-6);
+    let range_y = (max_y - min_y).max(1e-6);
+    let scale = ((width - 2.0 * margin) / range_x).min((height - 2.0 * margin) / range_y);
+
+    let project = |cart: [f64; 3]| -> (f64, f64) {
+        let (rx, ry, _) = rotate_project(cart);
+        (width / 2.0 + rx * scale, height / 2.0 + ry * scale)
+    };
+
+    // ── Draw cell wireframe ──
+    if state.show_3d_cell {
+        let edges: [(usize, usize); 12] = [
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (1, 4),
+            (1, 5),
+            (2, 4),
+            (2, 6),
+            (3, 5),
+            (3, 6),
+            (4, 7),
+            (5, 7),
+            (6, 7),
+        ];
+        cr.set_source_rgba(0.55, 0.65, 0.75, 0.6);
+        cr.set_line_width(1.2);
+        for &(i, j) in &edges {
+            let (x1, y1) = project(corners_cart[i]);
+            let (x2, y2) = project(corners_cart[j]);
+            cr.move_to(x1, y1);
+            cr.line_to(x2, y2);
+            let _ = cr.stroke();
+        }
+
+        // Axis labels at the ends of a, b, c
+        cr.set_font_size(11.0);
+        for (idx, label) in [(1, "a"), (2, "b"), (3, "c")] {
+            let (px, py) = project(corners_cart[idx]);
+            let (ox, oy) = project(corners_cart[0]);
+            let dx = px - ox;
+            let dy = py - oy;
+            let len = (dx * dx + dy * dy).sqrt().max(1.0);
+            cr.set_source_rgba(0.9, 0.9, 0.4, 0.9);
+            cr.move_to(px + dx / len * 10.0, py + dy / len * 10.0);
+            let _ = cr.show_text(label);
+        }
+    }
+
+    // ── Draw slice plane ──
+    let plane_poly = compute_slice_plane_polygon(state, lat);
+    if plane_poly.len() >= 3 {
+        let projected: Vec<(f64, f64)> = plane_poly
+            .iter()
+            .map(|f| project(frac_to_cart(*f)))
+            .collect();
+        cr.move_to(projected[0].0, projected[0].1);
+        for p in &projected[1..] {
+            cr.line_to(p.0, p.1);
+        }
+        cr.close_path();
+        cr.set_source_rgba(0.3, 0.7, 1.0, 0.22);
+        let _ = cr.fill_preserve();
+        cr.set_source_rgba(0.4, 0.8, 1.0, 0.65);
+        cr.set_line_width(1.5);
+        let _ = cr.stroke();
+    }
+
+    // ── Draw atoms (painter's algorithm — sort by depth, far first) ──
+    if state.show_3d_atoms {
+        let mut atom_draw_list: Vec<(f64, f64, f64, String)> = chgcar
+            .atoms
+            .iter()
+            .map(|a| {
+                let cart = frac_to_cart(a.frac_coords);
+                let (px, py, pz) = rotate_project(cart);
+                let sx = width / 2.0 + px * scale;
+                let sy = height / 2.0 + py * scale;
+                (sx, sy, pz, a.element.clone())
+            })
+            .collect();
+        // Sort far-to-near (larger z = farther in our convention)
+        atom_draw_list.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal));
+
+        let atom_r = 5.0;
+        for (ax, ay, _, elem) in &atom_draw_list {
+            let (r, g, b) = get_cpk_color(elem);
+            cr.arc(*ax, *ay, atom_r, 0.0, 2.0 * std::f64::consts::PI);
+            cr.set_source_rgb(r, g, b);
+            let _ = cr.fill_preserve();
+            cr.set_source_rgba(0.0, 0.0, 0.0, 0.6);
+            cr.set_line_width(0.8);
+            let _ = cr.stroke();
+        }
+    }
+
+    // ── Drag hint ──
+    cr.set_source_rgba(0.5, 0.5, 0.5, 0.4);
+    cr.set_font_size(9.0);
+    cr.move_to(4.0, height - 4.0);
+    let _ = cr.show_text("Drag to rotate");
+}
+
+/// Compute the intersection polygon of the current slice plane with the unit cell.
+/// Returns fractional coordinates of the polygon vertices, angularly sorted.
+fn compute_slice_plane_polygon(state: &ChargeDensityState, lat: &[[f64; 3]; 3]) -> Vec<[f64; 3]> {
+    if state.use_hkl {
+        // Use the MillerPlane intersection logic for HKL planes
+        use crate::model::miller::MillerPlane;
+        let h = state.hkl[0];
+        let k = state.hkl[1];
+        let l = state.hkl[2];
+        if h == 0 && k == 0 && l == 0 {
+            return Vec::new();
+        }
+        // Map offset [0,1] to the MillerPlane shift convention: h*fx + k*fy + l*fz = d
+        // Cell corners give d in range [d_min, d_max]
+        let hf = h as f64;
+        let kf = k as f64;
+        let lf = l as f64;
+        let corner_ds: [f64; 8] = [0.0, hf, kf, lf, hf + kf, hf + lf, kf + lf, hf + kf + lf];
+        let d_min = corner_ds.iter().cloned().fold(f64::INFINITY, f64::min);
+        let d_max = corner_ds.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        let shift = d_min + state.hkl_offset.clamp(0.0, 1.0) * (d_max - d_min);
+        let plane = MillerPlane::new(h, k, l, shift);
+        plane.get_intersection_points()
+    } else {
+        // Fractional axis planes: XY/XZ/YZ — always a parallelogram
+        let p = state.slice_pos.clamp(0.0, 1.0);
+        match state.plane {
+            SlicePlane::XY => {
+                // z = p: corners (0,0,p) (1,0,p) (1,1,p) (0,1,p)
+                vec![[0.0, 0.0, p], [1.0, 0.0, p], [1.0, 1.0, p], [0.0, 1.0, p]]
+            }
+            SlicePlane::XZ => {
+                // y = p: corners (0,p,0) (1,p,0) (1,p,1) (0,p,1)
+                vec![[0.0, p, 0.0], [1.0, p, 0.0], [1.0, p, 1.0], [0.0, p, 1.0]]
+            }
+            SlicePlane::YZ => {
+                // x = p: corners (p,0,0) (p,1,0) (p,1,1) (p,0,1)
+                vec![[p, 0.0, 0.0], [p, 1.0, 0.0], [p, 1.0, 1.0], [p, 0.0, 1.0]]
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // GTK error dialog helper
 // ---------------------------------------------------------------------------
 
@@ -689,6 +967,17 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
     left_pane.set_hexpand(true);
     left_pane.set_vexpand(true);
 
+    // 3D crystal structure preview
+    let frame_3d = Frame::new(Some(" Crystal Structure "));
+    let drawing_area_3d = DrawingArea::new();
+    drawing_area_3d.set_hexpand(true);
+    drawing_area_3d.set_content_width(600);
+    drawing_area_3d.set_content_height(220);
+    frame_3d.set_child(Some(&drawing_area_3d));
+    frame_3d.set_visible(false); // shown when Show Atoms or Show Cell is toggled
+    left_pane.append(&frame_3d);
+
+    // 2D charge density plot
     let frame_plot = Frame::new(Some(" Charge Density Slice "));
     let drawing_area = DrawingArea::new();
     drawing_area.set_hexpand(true);
@@ -740,6 +1029,20 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
     label_file_b.set_halign(Align::Start);
     label_file_b.add_css_class("dim-label");
     right_pane.append(&label_file_b);
+
+    right_pane.append(&Separator::new(Orientation::Horizontal));
+
+    // ── 3D Preview controls ──
+    let lbl_3d = Label::new(Some("3D Preview"));
+    lbl_3d.add_css_class("title-4");
+    lbl_3d.set_halign(Align::Start);
+    right_pane.append(&lbl_3d);
+
+    let check_3d_atoms = CheckButton::with_label("Show Atoms");
+    right_pane.append(&check_3d_atoms);
+
+    let check_3d_cell = CheckButton::with_label("Show Cell Box");
+    right_pane.append(&check_3d_cell);
 
     right_pane.append(&Separator::new(Orientation::Horizontal));
 
@@ -967,6 +1270,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                     st.colormap,
                     false,
                     None,
+                    st.show_3d_cell,
                 );
             } else {
                 cr.set_source_rgb(0.55, 0.55, 0.55);
@@ -986,6 +1290,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
         let rd = radio_down.clone();
         let rm = radio_mag.clone();
         let da = drawing_area.clone();
+        let da3d = drawing_area_3d.clone();
         Rc::new(move |data: ChgcarData, filename: String| {
             let spin = data.spin_polarized;
             let n_atoms = data.atoms.len();
@@ -1014,6 +1319,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                 s.recompute();
             }
             da.queue_draw();
+            da3d.queue_draw();
         })
     };
 
@@ -1113,10 +1419,77 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
         });
     }
 
+    // ── 3D preview: draw function ──
+    {
+        let st = state.clone();
+        drawing_area_3d.set_draw_func(move |_, cr, w, h| {
+            let st = st.borrow();
+            draw_3d_preview(cr, w as f64, h as f64, &st);
+        });
+    }
+
+    // ── 3D preview: mouse drag to rotate ──
+    {
+        let st = state.clone();
+        let da3d = drawing_area_3d.clone();
+        let drag = gtk4::GestureDrag::new();
+        let drag_start_rot = Rc::new(RefCell::new((0.0f64, 0.0f64)));
+
+        let ds = drag_start_rot.clone();
+        let st2 = st.clone();
+        drag.connect_drag_begin(move |_, _x, _y| {
+            let s = st2.borrow();
+            *ds.borrow_mut() = (s.rot_3d_y, s.rot_3d_x);
+        });
+
+        let ds2 = drag_start_rot.clone();
+        drag.connect_drag_update(move |_, dx, dy| {
+            let start = *ds2.borrow();
+            let mut s = st.borrow_mut();
+            s.rot_3d_y = start.0 + dx * 0.008;
+            s.rot_3d_x = start.1 + dy * 0.008;
+            drop(s);
+            da3d.queue_draw();
+        });
+
+        drawing_area_3d.add_controller(drag);
+    }
+
+    // ── 3D preview: checkbox toggles ──
+    {
+        let st = state.clone();
+        let da3d = drawing_area_3d.clone();
+        let da2d = drawing_area.clone();
+        let frame = frame_3d.clone();
+        check_3d_atoms.connect_toggled(move |cb| {
+            let mut s = st.borrow_mut();
+            s.show_3d_atoms = cb.is_active();
+            frame.set_visible(s.show_3d_atoms || s.show_3d_cell);
+            drop(s);
+            da3d.queue_draw();
+            da2d.queue_draw();
+        });
+    }
+    {
+        let st = state.clone();
+        let da3d = drawing_area_3d.clone();
+        let da2d = drawing_area.clone();
+        let frame = frame_3d.clone();
+        check_3d_cell.connect_toggled(move |cb| {
+            let mut s = st.borrow_mut();
+            s.show_3d_cell = cb.is_active();
+            frame.set_visible(s.show_3d_atoms || s.show_3d_cell);
+            drop(s);
+            da3d.queue_draw();
+            da2d.queue_draw(); // cell clip changes the 2D plot
+        });
+    }
+
     // Live update: position slider
     {
         let st = state.clone();
         let da = drawing_area.clone();
+        let da3d = drawing_area_3d.clone();
         let status = status_label.clone();
         let lbl = pos_label.clone();
         pos_adj.connect_value_changed(move |adj| {
@@ -1136,6 +1509,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                     ));
                 }
                 da.queue_draw();
+                da3d.queue_draw();
             }
         });
     }
@@ -1144,6 +1518,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
     {
         let st = state.clone();
         let da = drawing_area.clone();
+        let da3d = drawing_area_3d.clone();
         let status = status_label.clone();
         let lbl = off_label.clone();
         off_adj.connect_value_changed(move |adj| {
@@ -1162,6 +1537,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                     ));
                 }
                 da.queue_draw();
+                da3d.queue_draw();
             }
         });
     }
@@ -1234,6 +1610,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
     {
         let st = state.clone();
         let da = drawing_area.clone();
+        let da3d = drawing_area_3d.clone();
         let status = status_label.clone();
         let plane_combo = plane_combo.clone();
         let pos_adj = pos_adj.clone();
@@ -1326,6 +1703,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                 status.set_text("No data — load a CHGCAR first.");
             }
             da.queue_draw();
+            da3d.queue_draw();
         });
     }
 
@@ -1341,6 +1719,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
             let isolines = s.cached_isolines.clone();
             let atoms = s.cached_atoms.clone();
             let colormap = s.colormap;
+            let clip_cell = s.show_3d_cell;
             drop(s);
 
             // Read export settings from app config (captured at build time)
@@ -1392,16 +1771,15 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                                         colormap,
                                         true,
                                         Some(&export_cfg),
+                                        clip_cell,
                                     );
                                 }
                                 surf.finish();
                                 println!("Exported PDF: {}", path.display());
                             }
-                        } else if let Ok(surf) = cairo::ImageSurface::create(
-                            cairo::Format::ARgb32,
-                            w as i32,
-                            h as i32,
-                        ) {
+                        } else if let Ok(surf) =
+                            cairo::ImageSurface::create(cairo::Format::ARgb32, w as i32, h as i32)
+                        {
                             if let Ok(ctx) = cairo::Context::new(&surf) {
                                 ctx.set_source_rgb(1.0, 1.0, 1.0);
                                 ctx.rectangle(0.0, 0.0, w, h);
@@ -1416,6 +1794,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                                     colormap,
                                     true,
                                     Some(&export_cfg),
+                                    clip_cell,
                                 );
                             }
                             if let Ok(mut file) = std::fs::File::create(&path) {

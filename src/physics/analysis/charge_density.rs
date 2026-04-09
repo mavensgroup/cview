@@ -71,6 +71,10 @@ pub struct DensitySlice {
     pub y_extent_ang: f64,
     /// Plane description for annotation (e.g. "(001) z=0.50")
     pub plane_annotation: String,
+    /// Cell boundary polygon in normalised [0,1] plot coordinates.
+    /// Non-empty only for HKL slices — used to clip the heatmap to the
+    /// actual plane–cell intersection shape (triangle, hexagon, etc.).
+    pub cell_boundary_uv: Vec<(f64, f64)>,
 }
 
 /// A projected atom position for overlay on a 2D slice
@@ -274,6 +278,7 @@ pub fn extract_slice(
         x_extent_ang: x_ext,
         y_extent_ang: y_ext,
         plane_annotation: annotation,
+        cell_boundary_uv: Vec::new(),
     })
 }
 
@@ -442,6 +447,56 @@ pub fn extract_slice_hkl(
     let (data_min, data_max) = compute_min_max(&grid);
     let annotation = format!("({}{}{}) offset = {:.3}", hkl[0], hkl[1], hkl[2], offset);
 
+    // ── Cell boundary polygon: intersect the plane with the 12 cell edges ──
+    let cell_boundary_uv = {
+        let cell_edges: [(usize, usize); 12] = [
+            (0, 1),
+            (0, 2),
+            (0, 3), // from origin
+            (1, 4),
+            (1, 5), // from a
+            (2, 4),
+            (2, 6), // from b
+            (3, 5),
+            (3, 6), // from c
+            (4, 7),
+            (5, 7),
+            (6, 7), // to a+b+c
+        ];
+        let mut pts: Vec<(f64, f64)> = Vec::new();
+        for &(i0, i1) in &cell_edges {
+            let p0 = corners[i0];
+            let p1 = corners[i1];
+            let d = p1 - p0;
+            let dn = d.dot(&n);
+            if dn.abs() < 1e-12 {
+                continue;
+            }
+            let t = (plane_d - p0.dot(&n)) / dn;
+            if t >= -1e-6 && t <= 1.0 + 1e-6 {
+                let pt = p0 + d * t.clamp(0.0, 1.0);
+                let pu = (pt.dot(&u) - umin) / u_range;
+                let pv = (pt.dot(&v) - vmin) / v_range;
+                pts.push((pu, pv));
+            }
+        }
+        // Remove near-duplicates
+        pts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        pts.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-4 && (a.1 - b.1).abs() < 1e-4);
+        // Sort angularly around centroid
+        if pts.len() >= 3 {
+            let n_pts = pts.len() as f64;
+            let cx = pts.iter().map(|p| p.0).sum::<f64>() / n_pts;
+            let cy = pts.iter().map(|p| p.1).sum::<f64>() / n_pts;
+            pts.sort_by(|a, b| {
+                let aa = (a.1 - cy).atan2(a.0 - cx);
+                let ab = (b.1 - cy).atan2(b.0 - cx);
+                aa.partial_cmp(&ab).unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
+        pts
+    };
+
     Some(DensitySlice {
         data: grid,
         n_rows,
@@ -455,6 +510,7 @@ pub fn extract_slice_hkl(
         x_extent_ang: u_range,
         y_extent_ang: v_range,
         plane_annotation: annotation,
+        cell_boundary_uv,
     })
 }
 
