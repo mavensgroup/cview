@@ -300,3 +300,121 @@ const SG_SYMBOLS: [&str; 232] = [
     "Im-3m",
     "Ia-3d",
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::structure::Atom;
+
+    fn make_structure(lat: [[f64; 3]; 3], atoms: Vec<(&str, [f64; 3])>) -> Structure {
+        // Inputs are FRACTIONAL coords; convert to Cartesian for the Structure.
+        let a = nalgebra::Vector3::from(lat[0]);
+        let b = nalgebra::Vector3::from(lat[1]);
+        let c = nalgebra::Vector3::from(lat[2]);
+        Structure {
+            lattice: lat,
+            atoms: atoms
+                .into_iter()
+                .enumerate()
+                .map(|(i, (e, f))| {
+                    let r = a * f[0] + b * f[1] + c * f[2];
+                    Atom {
+                        element: e.to_string(),
+                        position: [r.x, r.y, r.z],
+                        original_index: i,
+                    }
+                })
+                .collect(),
+            formula: String::new(),
+            is_periodic: true,
+        }
+    }
+
+    /// NaCl, Fm-3m → space group 225.
+    #[test]
+    fn test_spacegroup_nacl() {
+        let a = 5.6402;
+        let lat = [[a, 0.0, 0.0], [0.0, a, 0.0], [0.0, 0.0, a]];
+        let s = make_structure(
+            lat,
+            vec![
+                ("Na", [0.0, 0.0, 0.0]),
+                ("Na", [0.5, 0.5, 0.0]),
+                ("Na", [0.5, 0.0, 0.5]),
+                ("Na", [0.0, 0.5, 0.5]),
+                ("Cl", [0.5, 0.5, 0.5]),
+                ("Cl", [0.0, 0.0, 0.5]),
+                ("Cl", [0.0, 0.5, 0.0]),
+                ("Cl", [0.5, 0.0, 0.0]),
+            ],
+        );
+        let info = analyze(&s).expect("symmetry analysis failed");
+        assert_eq!(
+            info.number, 225,
+            "NaCl should be Fm-3m (225), got {}",
+            info.number
+        );
+        assert_eq!(info.system, "Cubic");
+    }
+
+    /// Cubic BaTiO₃ (high-T phase), Pm-3m → space group 221.
+    #[test]
+    fn test_spacegroup_batio3_cubic() {
+        let a = 4.0;
+        let lat = [[a, 0.0, 0.0], [0.0, a, 0.0], [0.0, 0.0, a]];
+        let s = make_structure(
+            lat,
+            vec![
+                ("Ba", [0.0, 0.0, 0.0]),
+                ("Ti", [0.5, 0.5, 0.5]),
+                ("O", [0.5, 0.5, 0.0]),
+                ("O", [0.5, 0.0, 0.5]),
+                ("O", [0.0, 0.5, 0.5]),
+            ],
+        );
+        let info = analyze(&s).expect("symmetry analysis failed");
+        assert_eq!(
+            info.number, 221,
+            "Cubic BaTiO3 should be Pm-3m (221), got {}",
+            info.number
+        );
+        assert_eq!(info.system, "Cubic");
+    }
+
+    /// α-quartz, P3₁21 → space group 152 (or its enantiomorph 154 = P3₂21
+    /// depending on handedness of the input coordinates).
+    #[test]
+    fn test_spacegroup_quartz() {
+        let a = 4.9133;
+        let c = 5.4053;
+        let lat = [
+            [a, 0.0, 0.0],
+            [-a / 2.0, a * (3.0_f64).sqrt() / 2.0, 0.0],
+            [0.0, 0.0, c],
+        ];
+        // Si on 3a Wyckoff (u, 0, 1/3) and equivalents; O on 6c (x, y, z).
+        let u = 0.4697;
+        let (ox, oy, oz) = (0.4133, 0.2672, 0.2144);
+        let s = make_structure(
+            lat,
+            vec![
+                ("Si", [u, 0.0, 1.0 / 3.0]),
+                ("Si", [0.0, u, 2.0 / 3.0]),
+                ("Si", [-u, -u, 0.0]),
+                ("O", [ox, oy, oz]),
+                ("O", [-oy, ox - oy, oz + 1.0 / 3.0]),
+                ("O", [oy - ox, -ox, oz + 2.0 / 3.0]),
+                ("O", [oy, ox, -oz]),
+                ("O", [-ox, oy - ox, 1.0 / 3.0 - oz]),
+                ("O", [ox - oy, -oy, 2.0 / 3.0 - oz]),
+            ],
+        );
+        let info = analyze(&s).expect("symmetry analysis failed");
+        assert!(
+            info.number == 152 || info.number == 154,
+            "Quartz should be P3_121 (152) or P3_221 (154), got {}",
+            info.number
+        );
+        assert_eq!(info.system, "Trigonal");
+    }
+}

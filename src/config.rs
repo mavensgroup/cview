@@ -29,14 +29,12 @@ use crate::rendering::sprite_cache::SpriteCache;
 // ENUMS
 // ============================================================================
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub enum RotationCenter {
     #[default]
     Centroid,
     UnitCell,
 }
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ExportFormat {
@@ -44,8 +42,7 @@ pub enum ExportFormat {
     Pdf,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub enum ColorMode {
     #[default]
     Element,
@@ -54,18 +51,14 @@ pub enum ColorMode {
     Charge,
 }
 
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub enum RenderQuality {
     #[default]
     Fast,
     High,
 }
 
-
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub enum AntialiasLevel {
     None,
     Fast,
@@ -73,7 +66,6 @@ pub enum AntialiasLevel {
     Good,
     Best,
 }
-
 
 // ============================================================================
 // EXPORT / PLOT SETTINGS
@@ -104,16 +96,16 @@ pub struct ExportPlotSettings {
 }
 
 fn d_font_axis() -> f64 {
-    14.0
+    18.0
 }
 fn d_font_tick() -> f64 {
-    11.0
+    14.0
 }
 fn d_font_annotation() -> f64 {
-    12.0
+    16.0
 }
 fn d_font_colorbar() -> f64 {
-    11.0
+    13.0
 }
 fn d_isoline_width() -> f64 {
     1.8
@@ -125,10 +117,10 @@ fn d_colormap_idx() -> usize {
 impl Default for ExportPlotSettings {
     fn default() -> Self {
         Self {
-            font_size_axis_label: 14.0,
-            font_size_tick_label: 11.0,
-            font_size_annotation: 12.0,
-            font_size_colorbar: 11.0,
+            font_size_axis_label: 18.0,
+            font_size_tick_label: 14.0,
+            font_size_annotation: 16.0,
+            font_size_colorbar: 13.0,
             isoline_line_width: 1.8,
             default_colormap: 0,
         }

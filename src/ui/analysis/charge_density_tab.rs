@@ -1,5 +1,6 @@
 // src/ui/analysis/charge_density_tab.rs
 // 2D charge density visualization tab
+// Self-contained: heatmap + isolines + atom overlay rendered via Cairo
 // All rendering consolidated here — no separate rendering_charge_density module
 
 use crate::io::chgcar::{self, ChgcarData};
@@ -316,16 +317,13 @@ struct PlotLayout {
 
 impl PlotLayout {
     fn compute(width: f64, height: f64, ps: &PlotStyle) -> Self {
-        // Scale margins proportionally for larger export fonts
-        let margin = if ps.font_axis_label > 12.0 {
-            16.0
-        } else {
-            12.0
-        };
-        let cb_w = if ps.font_colorbar > 10.0 { 28.0 } else { 22.0 };
-        let label_w = if ps.font_colorbar > 10.0 { 70.0 } else { 55.0 };
-        let axis_margin_left = if ps.font_tick_label > 9.0 { 52.0 } else { 40.0 };
-        let axis_margin_bottom = if ps.font_tick_label > 9.0 { 40.0 } else { 28.0 };
+        // Scale margins proportionally to font sizes for publication quality
+        let margin = (ps.font_axis_label * 1.1).clamp(12.0, 28.0);
+        let cb_w = (ps.font_colorbar * 2.2).clamp(22.0, 40.0);
+        // Rotated (vertical) colorbar labels need only ~1.5x font height of width
+        let label_w = (ps.font_colorbar * 1.8).clamp(18.0, 36.0);
+        let axis_margin_left = (ps.font_tick_label * 4.0).clamp(40.0, 80.0);
+        let axis_margin_bottom = (ps.font_tick_label * 3.0).clamp(28.0, 60.0);
         let plot_x = margin + axis_margin_left;
         let plot_y = margin;
         let plot_w = (width - cb_w - label_w - margin * 2.0 - axis_margin_left - 6.0).max(10.0);
@@ -370,6 +368,17 @@ fn draw_scene(
     // ── Cell boundary clipping for HKL slices ──
     let use_clip = clip_to_cell && slice.cell_boundary_uv.len() >= 3;
     if use_clip {
+        // Fill the plot area with a subtle background first, so the void
+        // outside the polygon is gray (not harsh white) in exports.
+        if is_export {
+            cr.set_source_rgb(0.92, 0.92, 0.92);
+        } else {
+            cr.set_source_rgb(0.15, 0.15, 0.15);
+        }
+        cr.rectangle(ly.plot_x, ly.plot_y, ly.plot_w, ly.plot_h);
+        let _ = cr.fill();
+
+        // Now clip to the polygon for heatmap + isolines + atoms
         cr.save().ok();
         cr.new_path();
         let (px, py) = (
@@ -506,8 +515,12 @@ fn draw_scene(
     // ── Restore clip and draw cell boundary outline ──
     if use_clip {
         cr.restore().ok();
-        // Draw the cell boundary polygon outline
-        cr.set_source_rgba(1.0, 1.0, 1.0, 0.85);
+        // Polygon outline: dark for export (white bg), light for screen (dark bg)
+        if is_export {
+            cr.set_source_rgba(0.2, 0.2, 0.2, 0.9);
+        } else {
+            cr.set_source_rgba(1.0, 1.0, 1.0, 0.85);
+        }
         cr.set_line_width(if is_export { 2.0 } else { 1.5 });
         let (px, py) = (
             ly.plot_x + slice.cell_boundary_uv[0].0 * ly.plot_w,
@@ -521,11 +534,13 @@ fn draw_scene(
         let _ = cr.stroke();
     }
 
-    // ── Plot border ──
-    cr.set_source_rgb(ps.fg_color.0, ps.fg_color.1, ps.fg_color.2);
-    cr.set_line_width(ps.border_width);
-    cr.rectangle(ly.plot_x, ly.plot_y, ly.plot_w, ly.plot_h);
-    let _ = cr.stroke();
+    // ── Plot border (skip when clipped — polygon boundary replaces it) ──
+    if !use_clip {
+        cr.set_source_rgb(ps.fg_color.0, ps.fg_color.1, ps.fg_color.2);
+        cr.set_line_width(ps.border_width);
+        cr.rectangle(ly.plot_x, ly.plot_y, ly.plot_w, ly.plot_h);
+        let _ = cr.stroke();
+    }
 
     // ── Axis labels and ticks ──
     draw_axis_labels(cr, &ly, slice, &ps);
@@ -664,8 +679,15 @@ fn draw_colorbar(
         (1.0, slice.data_min),
     ] {
         let y = ly.plot_y + frac * ly.plot_h;
-        cr.move_to(ly.cb_x + ly.cb_w + 3.0, y + 4.0);
-        let _ = cr.show_text(&fmt_val(*value));
+        let label = fmt_val(*value);
+        let tw = cr.text_extents(&label).map(|te| te.width()).unwrap_or(0.0);
+        // Rotated label parallel to colorbar (vertical text reading bottom-to-top)
+        cr.save().ok();
+        cr.translate(ly.cb_x + ly.cb_w + ps.font_colorbar + 2.0, y + tw * 0.5);
+        cr.rotate(-std::f64::consts::FRAC_PI_2);
+        cr.move_to(0.0, 0.0);
+        let _ = cr.show_text(&label);
+        cr.restore().ok();
     }
 }
 
@@ -682,32 +704,25 @@ fn fmt_val(v: f64) -> String {
 
 // ---------------------------------------------------------------------------
 // 3D crystal preview renderer (orthographic projection via Cairo)
+// Drawn as an inset overlay inside the main 2D plot area.
 // ---------------------------------------------------------------------------
 
-fn draw_3d_preview(cr: &cairo::Context, width: f64, height: f64, state: &ChargeDensityState) {
-    // Dark background
-    cr.set_source_rgb(0.10, 0.10, 0.13);
-    cr.rectangle(0.0, 0.0, width, height);
-    let _ = cr.fill();
+/// Inset rectangle position and size: bottom-left of the plot area.
+fn inset_rect(plot_w: f64, plot_h: f64) -> (f64, f64, f64, f64) {
+    let iw = (plot_w * 0.32).clamp(160.0, 260.0);
+    let ih = (plot_h * 0.35).clamp(130.0, 220.0);
+    let margin = 8.0;
+    let ix = margin;
+    let iy = plot_h - ih - margin;
+    (ix, iy, iw, ih)
+}
 
+fn draw_3d_preview(cr: &cairo::Context, width: f64, height: f64, state: &ChargeDensityState) {
+    // Background is drawn by the caller (rounded rect); we just draw content.
     let chgcar = match &state.chgcar_a {
         Some(c) => c,
-        None => {
-            cr.set_source_rgb(0.45, 0.45, 0.45);
-            cr.set_font_size(13.0);
-            cr.move_to(width / 2.0 - 90.0, height / 2.0);
-            let _ = cr.show_text("Load CHGCAR for 3D preview");
-            return;
-        }
+        None => return,
     };
-
-    if !state.show_3d_atoms && !state.show_3d_cell {
-        cr.set_source_rgb(0.40, 0.40, 0.40);
-        cr.set_font_size(11.0);
-        cr.move_to(width / 2.0 - 100.0, height / 2.0);
-        let _ = cr.show_text("Enable \'Show Atoms\' or \'Show Cell\'");
-        return;
-    }
 
     let lat = &chgcar.lattice;
 
@@ -862,12 +877,6 @@ fn draw_3d_preview(cr: &cairo::Context, width: f64, height: f64, state: &ChargeD
             let _ = cr.stroke();
         }
     }
-
-    // ── Drag hint ──
-    cr.set_source_rgba(0.5, 0.5, 0.5, 0.4);
-    cr.set_font_size(9.0);
-    cr.move_to(4.0, height - 4.0);
-    let _ = cr.show_text("Drag to rotate");
 }
 
 /// Compute the intersection polygon of the current slice plane with the unit cell.
@@ -966,17 +975,6 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
     left_pane.set_hexpand(true);
     left_pane.set_vexpand(true);
 
-    // 3D crystal structure preview
-    let frame_3d = Frame::new(Some(" Crystal Structure "));
-    let drawing_area_3d = DrawingArea::new();
-    drawing_area_3d.set_hexpand(true);
-    drawing_area_3d.set_content_width(600);
-    drawing_area_3d.set_content_height(220);
-    frame_3d.set_child(Some(&drawing_area_3d));
-    frame_3d.set_visible(false); // shown when Show Atoms or Show Cell is toggled
-    left_pane.append(&frame_3d);
-
-    // 2D charge density plot
     let frame_plot = Frame::new(Some(" Charge Density Slice "));
     let drawing_area = DrawingArea::new();
     drawing_area.set_hexpand(true);
@@ -1254,15 +1252,17 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
     {
         let st = state.clone();
         drawing_area.set_draw_func(move |_, cr, w, h| {
+            let wf = w as f64;
+            let hf = h as f64;
             cr.set_source_rgb(0.1, 0.1, 0.1);
-            cr.rectangle(0.0, 0.0, w as f64, h as f64);
+            cr.rectangle(0.0, 0.0, wf, hf);
             let _ = cr.fill();
             let st = st.borrow();
             if let Some(slice) = &st.cached_slice {
                 draw_scene(
                     cr,
-                    w as f64,
-                    h as f64,
+                    wf,
+                    hf,
                     slice,
                     &st.cached_isolines,
                     &st.cached_atoms,
@@ -1271,10 +1271,52 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                     None,
                     st.show_3d_cell,
                 );
+                // ── 3D inset overlay (bottom-left corner) ──
+                if st.show_3d_atoms || st.show_3d_cell {
+                    let (ix, iy, iw, ih) = inset_rect(wf, hf);
+                    // Rounded-rect background
+                    let r = 6.0;
+                    cr.new_sub_path();
+                    cr.arc(ix + iw - r, iy + r, r, -std::f64::consts::FRAC_PI_2, 0.0);
+                    cr.arc(
+                        ix + iw - r,
+                        iy + ih - r,
+                        r,
+                        0.0,
+                        std::f64::consts::FRAC_PI_2,
+                    );
+                    cr.arc(
+                        ix + r,
+                        iy + ih - r,
+                        r,
+                        std::f64::consts::FRAC_PI_2,
+                        std::f64::consts::PI,
+                    );
+                    cr.arc(
+                        ix + r,
+                        iy + r,
+                        r,
+                        std::f64::consts::PI,
+                        3.0 * std::f64::consts::FRAC_PI_2,
+                    );
+                    cr.close_path();
+                    cr.set_source_rgba(0.08, 0.08, 0.11, 0.88);
+                    let _ = cr.fill_preserve();
+                    cr.set_source_rgba(0.4, 0.5, 0.6, 0.5);
+                    cr.set_line_width(1.0);
+                    let _ = cr.stroke();
+                    // Clip + translate for the 3D draw
+                    cr.save().ok();
+                    cr.rectangle(ix, iy, iw, ih);
+                    cr.clip();
+                    cr.translate(ix, iy);
+                    draw_3d_preview(cr, iw, ih, &st);
+                    cr.restore().ok();
+                }
             } else {
                 cr.set_source_rgb(0.55, 0.55, 0.55);
                 cr.set_font_size(15.0);
-                cr.move_to(w as f64 / 2.0 - 120.0, h as f64 / 2.0);
+                cr.move_to(wf / 2.0 - 120.0, hf / 2.0);
                 let _ = cr.show_text("Load a CHGCAR to visualize");
             }
         });
@@ -1289,7 +1331,6 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
         let rd = radio_down.clone();
         let rm = radio_mag.clone();
         let da = drawing_area.clone();
-        let da3d = drawing_area_3d.clone();
         Rc::new(move |data: ChgcarData, filename: String| {
             let spin = data.spin_polarized;
             let n_atoms = data.atoms.len();
@@ -1318,7 +1359,6 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                 s.recompute();
             }
             da.queue_draw();
-            da3d.queue_draw();
         })
     };
 
@@ -1418,69 +1458,67 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
         });
     }
 
-    // ── 3D preview: draw function ──
+    // ── 3D inset: mouse drag to rotate (on the main drawing area) ──
     {
         let st = state.clone();
-        drawing_area_3d.set_draw_func(move |_, cr, w, h| {
-            let st = st.borrow();
-            draw_3d_preview(cr, w as f64, h as f64, &st);
-        });
-    }
-
-    // ── 3D preview: mouse drag to rotate ──
-    {
-        let st = state.clone();
-        let da3d = drawing_area_3d.clone();
+        let da = drawing_area.clone();
         let drag = gtk4::GestureDrag::new();
         let drag_start_rot = Rc::new(RefCell::new((0.0f64, 0.0f64)));
+        let drag_in_inset = Rc::new(RefCell::new(false));
 
         let ds = drag_start_rot.clone();
+        let di = drag_in_inset.clone();
         let st2 = st.clone();
-        drag.connect_drag_begin(move |_, _x, _y| {
+        let da2 = da.clone();
+        drag.connect_drag_begin(move |_, x, y| {
+            let wf = da2.width() as f64;
+            let hf = da2.height() as f64;
+            let (ix, iy, iw, ih) = inset_rect(wf, hf);
             let s = st2.borrow();
-            *ds.borrow_mut() = (s.rot_3d_y, s.rot_3d_x);
+            let in_inset = (s.show_3d_atoms || s.show_3d_cell)
+                && s.chgcar_a.is_some()
+                && x >= ix
+                && x <= ix + iw
+                && y >= iy
+                && y <= iy + ih;
+            *di.borrow_mut() = in_inset;
+            if in_inset {
+                *ds.borrow_mut() = (s.rot_3d_y, s.rot_3d_x);
+            }
         });
 
         let ds2 = drag_start_rot.clone();
+        let di2 = drag_in_inset.clone();
         drag.connect_drag_update(move |_, dx, dy| {
+            if !*di2.borrow() {
+                return;
+            }
             let start = *ds2.borrow();
             let mut s = st.borrow_mut();
             s.rot_3d_y = start.0 + dx * 0.008;
             s.rot_3d_x = start.1 + dy * 0.008;
             drop(s);
-            da3d.queue_draw();
+            da.queue_draw();
         });
 
-        drawing_area_3d.add_controller(drag);
+        drawing_area.add_controller(drag);
     }
 
     // ── 3D preview: checkbox toggles ──
     {
         let st = state.clone();
-        let da3d = drawing_area_3d.clone();
-        let da2d = drawing_area.clone();
-        let frame = frame_3d.clone();
+        let da = drawing_area.clone();
         check_3d_atoms.connect_toggled(move |cb| {
-            let mut s = st.borrow_mut();
-            s.show_3d_atoms = cb.is_active();
-            frame.set_visible(s.show_3d_atoms || s.show_3d_cell);
-            drop(s);
-            da3d.queue_draw();
-            da2d.queue_draw();
+            st.borrow_mut().show_3d_atoms = cb.is_active();
+            da.queue_draw();
         });
     }
     {
         let st = state.clone();
-        let da3d = drawing_area_3d.clone();
-        let da2d = drawing_area.clone();
-        let frame = frame_3d.clone();
+        let da = drawing_area.clone();
         check_3d_cell.connect_toggled(move |cb| {
-            let mut s = st.borrow_mut();
-            s.show_3d_cell = cb.is_active();
-            frame.set_visible(s.show_3d_atoms || s.show_3d_cell);
-            drop(s);
-            da3d.queue_draw();
-            da2d.queue_draw(); // cell clip changes the 2D plot
+            st.borrow_mut().show_3d_cell = cb.is_active();
+            da.queue_draw();
         });
     }
 
@@ -1488,7 +1526,6 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
     {
         let st = state.clone();
         let da = drawing_area.clone();
-        let da3d = drawing_area_3d.clone();
         let status = status_label.clone();
         let lbl = pos_label.clone();
         pos_adj.connect_value_changed(move |adj| {
@@ -1508,7 +1545,6 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                     ));
                 }
                 da.queue_draw();
-                da3d.queue_draw();
             }
         });
     }
@@ -1517,7 +1553,6 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
     {
         let st = state.clone();
         let da = drawing_area.clone();
-        let da3d = drawing_area_3d.clone();
         let status = status_label.clone();
         let lbl = off_label.clone();
         off_adj.connect_value_changed(move |adj| {
@@ -1536,7 +1571,6 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                     ));
                 }
                 da.queue_draw();
-                da3d.queue_draw();
             }
         });
     }
@@ -1609,7 +1643,6 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
     {
         let st = state.clone();
         let da = drawing_area.clone();
-        let da3d = drawing_area_3d.clone();
         let status = status_label.clone();
         let plane_combo = plane_combo.clone();
         let pos_adj = pos_adj.clone();
@@ -1702,13 +1735,13 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                 status.set_text("No data — load a CHGCAR first.");
             }
             da.queue_draw();
-            da3d.queue_draw();
         });
     }
 
     // Export PNG / PDF
     {
         let st = state.clone();
+        let app_st = app_state.clone();
         btn_export.connect_clicked(move |btn| {
             let s = st.borrow();
             if s.cached_slice.is_none() {
@@ -1721,8 +1754,14 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
             let clip_cell = s.show_3d_cell;
             drop(s);
 
+            // Read export settings live from app config (picks up preference changes)
+            let export_cfg = app_st
+                .as_ref()
+                .map(|s| s.borrow().config.export_plot.clone())
+                .unwrap_or_default();
+
             // Read export settings from app config (captured at build time)
-            let export_cfg = export_cfg.clone();
+            // export_cfg is already read live above
 
             let native = FileChooserNative::new(
                 Some("Export PNG / PDF"),
@@ -1746,8 +1785,8 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
             native.connect_response(move |d, resp| {
                 if resp == ResponseType::Accept {
                     if let Some(path) = d.file().and_then(|f| f.path()) {
-                        let w = 1200.0f64;
-                        let h = 900.0f64;
+                        let w = 1600.0f64;
+                        let h = 1200.0f64;
                         let ext = path
                             .extension()
                             .and_then(|e| e.to_str())

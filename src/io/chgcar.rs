@@ -1,6 +1,7 @@
 // src/io/chgcar.rs
 // VASP CHGCAR file parser
 // Supports: non-spin-polarized, spin-polarized (two grids), charge density difference
+// Parses atom positions and species for overlay on density slices
 
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};

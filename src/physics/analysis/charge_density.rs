@@ -6,7 +6,9 @@ use crate::io::chgcar::ChgcarData;
 use nalgebra::{Matrix3, Vector3};
 use std::borrow::Cow;
 
+// ---------------------------------------------------------------------------
 // Public types
+// ---------------------------------------------------------------------------
 
 /// Which density channel to visualize
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -401,12 +403,72 @@ pub fn extract_slice_hkl(
     let plane_d = pmin + offset.clamp(0.0, 1.0) * (pmax - pmin);
     let origin = cell_centre + n * (plane_d - cell_centre.dot(&n));
 
-    // In-plane bounding box
-    let uv: Vec<(f64, f64)> = corners.iter().map(|p| (p.dot(&u), p.dot(&v))).collect();
-    let umin = uv.iter().map(|&(x, _)| x).fold(f64::INFINITY, f64::min);
-    let umax = uv.iter().map(|&(x, _)| x).fold(f64::NEG_INFINITY, f64::max);
-    let vmin = uv.iter().map(|&(_, y)| y).fold(f64::INFINITY, f64::min);
-    let vmax = uv.iter().map(|&(_, y)| y).fold(f64::NEG_INFINITY, f64::max);
+    // In-plane bounding box — computed from the cell–plane intersection
+    // polygon so the shape always fills the plot area tightly.
+    let cell_edges: [(usize, usize); 12] = [
+        (0, 1),
+        (0, 2),
+        (0, 3),
+        (1, 4),
+        (1, 5),
+        (2, 4),
+        (2, 6),
+        (3, 5),
+        (3, 6),
+        (4, 7),
+        (5, 7),
+        (6, 7),
+    ];
+    // Compute intersection points in raw (u_proj, v_proj) Cartesian coords
+    let mut poly_uv_raw: Vec<(f64, f64)> = Vec::new();
+    for &(i0, i1) in &cell_edges {
+        let p0 = corners[i0];
+        let p1 = corners[i1];
+        let d = p1 - p0;
+        let dn = d.dot(&n);
+        if dn.abs() < 1e-12 {
+            continue;
+        }
+        let t = (plane_d - p0.dot(&n)) / dn;
+        if t >= -1e-6 && t <= 1.0 + 1e-6 {
+            let pt = p0 + d * t.clamp(0.0, 1.0);
+            poly_uv_raw.push((pt.dot(&u), pt.dot(&v)));
+        }
+    }
+    // Dedup
+    poly_uv_raw.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    poly_uv_raw.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-4 && (a.1 - b.1).abs() < 1e-4);
+
+    // Use polygon bounds if we have a valid polygon, else fall back to cell corners
+    let (umin, umax, vmin, vmax) = if poly_uv_raw.len() >= 3 {
+        let pu_min = poly_uv_raw
+            .iter()
+            .map(|p| p.0)
+            .fold(f64::INFINITY, f64::min);
+        let pu_max = poly_uv_raw
+            .iter()
+            .map(|p| p.0)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let pv_min = poly_uv_raw
+            .iter()
+            .map(|p| p.1)
+            .fold(f64::INFINITY, f64::min);
+        let pv_max = poly_uv_raw
+            .iter()
+            .map(|p| p.1)
+            .fold(f64::NEG_INFINITY, f64::max);
+        // Tiny margin so vertices aren't exactly on the edge
+        let mu = (pu_max - pu_min) * 0.005;
+        let mv = (pv_max - pv_min) * 0.005;
+        (pu_min - mu, pu_max + mu, pv_min - mv, pv_max + mv)
+    } else {
+        let uv: Vec<(f64, f64)> = corners.iter().map(|p| (p.dot(&u), p.dot(&v))).collect();
+        let pu_min = uv.iter().map(|&(x, _)| x).fold(f64::INFINITY, f64::min);
+        let pu_max = uv.iter().map(|&(x, _)| x).fold(f64::NEG_INFINITY, f64::max);
+        let pv_min = uv.iter().map(|&(_, y)| y).fold(f64::INFINITY, f64::min);
+        let pv_max = uv.iter().map(|&(_, y)| y).fold(f64::NEG_INFINITY, f64::max);
+        (pu_min, pu_max, pv_min, pv_max)
+    };
 
     let u_range = umax - umin;
     let v_range = vmax - vmin;
@@ -445,42 +507,25 @@ pub fn extract_slice_hkl(
     let (data_min, data_max) = compute_min_max(&grid);
     let annotation = format!("({}{}{}) offset = {:.3}", hkl[0], hkl[1], hkl[2], offset);
 
-    // ── Cell boundary polygon: intersect the plane with the 12 cell edges ──
+    // ── Cell boundary polygon in normalised [0,1] plot coordinates ──
     let cell_boundary_uv = {
-        let cell_edges: [(usize, usize); 12] = [
-            (0, 1),
-            (0, 2),
-            (0, 3), // from origin
-            (1, 4),
-            (1, 5), // from a
-            (2, 4),
-            (2, 6), // from b
-            (3, 5),
-            (3, 6), // from c
-            (4, 7),
-            (5, 7),
-            (6, 7), // to a+b+c
-        ];
-        let mut pts: Vec<(f64, f64)> = Vec::new();
-        for &(i0, i1) in &cell_edges {
-            let p0 = corners[i0];
-            let p1 = corners[i1];
-            let d = p1 - p0;
-            let dn = d.dot(&n);
-            if dn.abs() < 1e-12 {
-                continue;
-            }
-            let t = (plane_d - p0.dot(&n)) / dn;
-            if t >= -1e-6 && t <= 1.0 + 1e-6 {
-                let pt = p0 + d * t.clamp(0.0, 1.0);
-                let pu = (pt.dot(&u) - umin) / u_range;
-                let pv = (pt.dot(&v) - vmin) / v_range;
-                pts.push((pu, pv));
-            }
-        }
-        // Remove near-duplicates
-        pts.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-        pts.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-4 && (a.1 - b.1).abs() < 1e-4);
+        // Normalise the raw polygon to the (now tight) u/v sampling range
+        let mut pts: Vec<(f64, f64)> = poly_uv_raw
+            .iter()
+            .map(|&(pu, pv)| {
+                let nu = if u_range.abs() > 1e-12 {
+                    (pu - umin) / u_range
+                } else {
+                    0.5
+                };
+                let nv = if v_range.abs() > 1e-12 {
+                    (pv - vmin) / v_range
+                } else {
+                    0.5
+                };
+                (nu, nv)
+            })
+            .collect();
         // Sort angularly around centroid
         if pts.len() >= 3 {
             let n_pts = pts.len() as f64;
@@ -570,12 +615,62 @@ pub fn project_atoms_hkl(
     let pmax = projs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let plane_d = pmin + offset.clamp(0.0, 1.0) * (pmax - pmin);
 
-    // In-plane bounding box for normalisation
-    let uv: Vec<(f64, f64)> = corners.iter().map(|p| (p.dot(&u), p.dot(&v))).collect();
-    let umin = uv.iter().map(|&(x, _)| x).fold(f64::INFINITY, f64::min);
-    let umax = uv.iter().map(|&(x, _)| x).fold(f64::NEG_INFINITY, f64::max);
-    let vmin = uv.iter().map(|&(_, y)| y).fold(f64::INFINITY, f64::min);
-    let vmax = uv.iter().map(|&(_, y)| y).fold(f64::NEG_INFINITY, f64::max);
+    // In-plane bounding box — tight-fitted to the cell–plane intersection polygon
+    // (must match the bounds used in extract_slice_hkl)
+    let cell_edges: [(usize, usize); 12] = [
+        (0, 1),
+        (0, 2),
+        (0, 3),
+        (1, 4),
+        (1, 5),
+        (2, 4),
+        (2, 6),
+        (3, 5),
+        (3, 6),
+        (4, 7),
+        (5, 7),
+        (6, 7),
+    ];
+    let mut poly_uv: Vec<(f64, f64)> = Vec::new();
+    for &(i0, i1) in &cell_edges {
+        let p0 = corners[i0];
+        let p1 = corners[i1];
+        let d = p1 - p0;
+        let dn = d.dot(&n);
+        if dn.abs() < 1e-12 {
+            continue;
+        }
+        let t = (plane_d - p0.dot(&n)) / dn;
+        if t >= -1e-6 && t <= 1.0 + 1e-6 {
+            let pt = p0 + d * t.clamp(0.0, 1.0);
+            poly_uv.push((pt.dot(&u), pt.dot(&v)));
+        }
+    }
+    poly_uv.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    poly_uv.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-4 && (a.1 - b.1).abs() < 1e-4);
+
+    let (umin, umax, vmin, vmax) = if poly_uv.len() >= 3 {
+        let pu_min = poly_uv.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
+        let pu_max = poly_uv
+            .iter()
+            .map(|p| p.0)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let pv_min = poly_uv.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
+        let pv_max = poly_uv
+            .iter()
+            .map(|p| p.1)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let mu = (pu_max - pu_min) * 0.005;
+        let mv = (pv_max - pv_min) * 0.005;
+        (pu_min - mu, pu_max + mu, pv_min - mv, pv_max + mv)
+    } else {
+        let uv: Vec<(f64, f64)> = corners.iter().map(|p| (p.dot(&u), p.dot(&v))).collect();
+        let pu_min = uv.iter().map(|&(x, _)| x).fold(f64::INFINITY, f64::min);
+        let pu_max = uv.iter().map(|&(x, _)| x).fold(f64::NEG_INFINITY, f64::max);
+        let pv_min = uv.iter().map(|&(_, y)| y).fold(f64::INFINITY, f64::min);
+        let pv_max = uv.iter().map(|&(_, y)| y).fold(f64::NEG_INFINITY, f64::max);
+        (pu_min, pu_max, pv_min, pv_max)
+    };
     let u_range = umax - umin;
     let v_range = vmax - vmin;
 

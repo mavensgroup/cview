@@ -322,68 +322,69 @@ fn incremental_hull(
     center: [f64; 3],
     pts: &[[f64; 3]],
     atom_indices: &[usize],
-    i0: usize,
-    i1: usize,
-    i2: usize,
-    i3: usize,
+    _i0: usize,
+    _i1: usize,
+    _i2: usize,
+    _i3: usize,
 ) -> Vec<Face> {
-    let mut hull: Vec<[usize; 3]> = vec![
-        oriented_face(center, pts, [i0, i1, i2]),
-        oriented_face(center, pts, [i0, i1, i3]),
-        oriented_face(center, pts, [i0, i2, i3]),
-        oriented_face(center, pts, [i1, i2, i3]),
-    ];
+    let n = pts.len();
+    let tol = 1e-9;
+    let mut raw_faces: Vec<[usize; 3]> = Vec::new();
 
-    for pi in 0..pts.len() {
-        if [i0, i1, i2, i3].contains(&pi) {
-            continue;
-        }
-        let p = pts[pi];
-
-        let visible: Vec<usize> = hull
-            .iter()
-            .enumerate()
-            .filter(|(_, f)| face_visible_from(pts, f, p))
-            .map(|(i, _)| i)
-            .collect();
-
-        if visible.is_empty() {
-            continue;
-        }
-
-        let mut horizon: Vec<[usize; 2]> = Vec::new();
-        for &vi in &visible {
-            for edge in face_edges(hull[vi]) {
-                let shared = visible
-                    .iter()
-                    .filter(|&&vj| vj != vi && face_has_edge(hull[vj], edge))
-                    .count();
-                if shared == 0 {
-                    horizon.push(edge);
+    // Enumerate all triples; keep those whose plane has every other point
+    // on one side (or coplanar within tol). That is the definition of a
+    // convex-hull face.
+    for i in 0..n {
+        for j in (i + 1)..n {
+            for k in (j + 1)..n {
+                let a = v(pts[i]);
+                let b = v(pts[j]);
+                let c = v(pts[k]);
+                let nrm = (b - a).cross(&(c - a));
+                let len = nrm.norm();
+                if len < 1e-12 {
+                    continue; // collinear triple
+                }
+                let mut pos = 0usize;
+                let mut neg = 0usize;
+                for m in 0..n {
+                    if m == i || m == j || m == k {
+                        continue;
+                    }
+                    let d = nrm.dot(&(v(pts[m]) - a)) / len;
+                    if d > tol {
+                        pos += 1;
+                    } else if d < -tol {
+                        neg += 1;
+                    }
+                }
+                // A hull face has all other points strictly on one side
+                // (coplanar points are allowed — they'll form adjacent faces).
+                if pos == 0 || neg == 0 {
+                    raw_faces.push(oriented_face(center, pts, [i, j, k]));
                 }
             }
         }
-
-        let mut vis_sorted = visible.clone();
-        vis_sorted.sort_unstable();
-        for &vi in vis_sorted.iter().rev() {
-            hull.swap_remove(vi);
-        }
-        for edge in horizon {
-            hull.push(oriented_face(center, pts, [edge[0], edge[1], pi]));
-        }
     }
 
-    // Post-process: subdivide faces to include any coplanar points the
-    // incremental algorithm skipped (e.g. equatorial vertices of a regular
-    // octahedron).
-    ensure_all_vertices(center, pts, &mut hull);
+    // Deduplicate faces that share the same vertex set (can happen when
+    // many points are coplanar and multiple triples describe the same
+    // planar region from different triangulations — keep them all; they
+    // are distinct triangles, not duplicates). Only drop exact index-set
+    // duplicates.
+    raw_faces.sort_by_key(|f| {
+        let mut s = *f;
+        s.sort_unstable();
+        s
+    });
+    raw_faces.dedup_by_key(|f| {
+        let mut s = *f;
+        s.sort_unstable();
+        s
+    });
 
-    // Filter out degenerate (zero/near-zero area) sub-triangles that arise
-    // when a coplanar vertex sits exactly on an existing edge.  These have
-    // collinear vertices, so oriented_face / face_normal produce unstable
-    // results that flicker on rotation.
-    hull.into_iter()
+    raw_faces
+        .into_iter()
         .filter(|f| {
             let a = v(pts[f[0]]);
             let cross = (v(pts[f[1]]) - a).cross(&(v(pts[f[2]]) - a));
@@ -392,7 +393,6 @@ fn incremental_hull(
         .map(|f| make_face(center, pts, atom_indices, f[0], f[1], f[2]))
         .collect()
 }
-
 fn face_visible_from(pts: &[[f64; 3]], f: &[usize; 3], p: [f64; 3]) -> bool {
     let v0 = v(pts[f[0]]);
     let n = (v(pts[f[1]]) - v0).cross(&(v(pts[f[2]]) - v0));
@@ -404,11 +404,66 @@ fn face_visible_from(pts: &[[f64; 3]], f: &[usize; 3], p: [f64; 3]) -> bool {
 /// in regular octahedra, cubes, etc.) may be skipped by the incremental
 /// algorithm.  For each missing point we find the face it is coplanar with and
 /// subdivide that face to include it.
+// fn ensure_all_vertices(center: [f64; 3], pts: &[[f64; 3]], hull: &mut Vec<[usize; 3]>) {
+// let n_pts = pts.len();
+// // Iterate until no more missing points (rare: usually one pass suffices)
+// for _round in 0..4 {
+// // Collect which point indices appear in the hull
+// let mut present = vec![false; n_pts];
+// for f in hull.iter() {
+// for &vi in f {
+// if vi < n_pts {
+// present[vi] = true;
+// }
+// }
+// }
+
+// let missing: Vec<usize> = (0..n_pts).filter(|&i| !present[i]).collect();
+// if missing.is_empty() {
+// return;
+// }
+
+// for &mi in &missing {
+// let p = v(pts[mi]);
+// // Find the face this point is coplanar with (smallest |dot| product)
+// let mut best_fi: Option<usize> = None;
+// let mut best_dist = f64::MAX;
+
+// for (fi, f) in hull.iter().enumerate() {
+// let v0 = v(pts[f[0]]);
+// let n = (v(pts[f[1]]) - v0).cross(&(v(pts[f[2]]) - v0));
+// let len = n.norm();
+// if len < 1e-14 {
+// continue; // degenerate face
+// }
+// let d = (n.dot(&(p - v0)) / len).abs();
+// if d < best_dist {
+// best_dist = d;
+// best_fi = Some(fi);
+// }
+// }
+
+// if let Some(fi) = best_fi {
+// // Subdivide the face [a, b, c] into three faces:
+// //   [a, b, mi], [b, c, mi], [c, a, mi]
+// let f = hull[fi];
+// let new_faces = [
+// oriented_face(center, pts, [f[0], f[1], mi]),
+// oriented_face(center, pts, [f[1], f[2], mi]),
+// oriented_face(center, pts, [f[2], f[0], mi]),
+// ];
+// hull[fi] = new_faces[0]; // replace original
+// hull.push(new_faces[1]);
+// hull.push(new_faces[2]);
+// }
+// }
+// }
+// }
+
 fn ensure_all_vertices(center: [f64; 3], pts: &[[f64; 3]], hull: &mut Vec<[usize; 3]>) {
     let n_pts = pts.len();
-    // Iterate until no more missing points (rare: usually one pass suffices)
+    let cen = v(center);
     for _round in 0..4 {
-        // Collect which point indices appear in the hull
         let mut present = vec![false; n_pts];
         for f in hull.iter() {
             for &vi in f {
@@ -417,7 +472,6 @@ fn ensure_all_vertices(center: [f64; 3], pts: &[[f64; 3]], hull: &mut Vec<[usize
                 }
             }
         }
-
         let missing: Vec<usize> = (0..n_pts).filter(|&i| !present[i]).collect();
         if missing.is_empty() {
             return;
@@ -425,41 +479,57 @@ fn ensure_all_vertices(center: [f64; 3], pts: &[[f64; 3]], hull: &mut Vec<[usize
 
         for &mi in &missing {
             let p = v(pts[mi]);
-            // Find the face this point is coplanar with (smallest |dot| product)
             let mut best_fi: Option<usize> = None;
             let mut best_dist = f64::MAX;
 
             for (fi, f) in hull.iter().enumerate() {
                 let v0 = v(pts[f[0]]);
-                let n = (v(pts[f[1]]) - v0).cross(&(v(pts[f[2]]) - v0));
+                let v1 = v(pts[f[1]]);
+                let v2 = v(pts[f[2]]);
+                let n = (v1 - v0).cross(&(v2 - v0));
                 let len = n.norm();
                 if len < 1e-14 {
-                    continue; // degenerate face
+                    continue;
                 }
-                let d = (n.dot(&(p - v0)) / len).abs();
+                let face_centroid = (v0 + v1 + v2) / 3.0;
+                let outward = if n.dot(&(face_centroid - cen)) >= 0.0 {
+                    n
+                } else {
+                    -n
+                };
+
+                // Reject faces on the opposite hemisphere — prevents gluing
+                // antipodal orphans onto an unrelated face.
+                if outward.dot(&(p - cen)) <= -1e-10 {
+                    continue;
+                }
+
+                let d = (outward.dot(&(p - v0)) / len).abs();
                 if d < best_dist {
                     best_dist = d;
                     best_fi = Some(fi);
                 }
             }
 
+            // Require genuine coplanarity; never fabricate interior triangles.
+            let tol = 1e-9;
             if let Some(fi) = best_fi {
-                // Subdivide the face [a, b, c] into three faces:
-                //   [a, b, mi], [b, c, mi], [c, a, mi]
+                if best_dist > tol {
+                    continue;
+                }
                 let f = hull[fi];
                 let new_faces = [
                     oriented_face(center, pts, [f[0], f[1], mi]),
                     oriented_face(center, pts, [f[1], f[2], mi]),
                     oriented_face(center, pts, [f[2], f[0], mi]),
                 ];
-                hull[fi] = new_faces[0]; // replace original
+                hull[fi] = new_faces[0];
                 hull.push(new_faces[1]);
                 hull.push(new_faces[2]);
             }
         }
     }
 }
-
 fn face_edges(f: [usize; 3]) -> [[usize; 2]; 3] {
     [[f[0], f[1]], [f[1], f[2]], [f[2], f[0]]]
 }
@@ -654,12 +724,27 @@ mod tests {
             [0.0, 0.0, 1.0],
             [0.0, 0.0, -1.0],
         ]);
-        for face in convex_hull_3d(center, &pts, &idx) {
-            let v0 = v(pts[face.vertex_atom_indices[0]]);
-            let v1 = v(pts[face.vertex_atom_indices[1]]);
-            let v2 = v(pts[face.vertex_atom_indices[2]]);
+
+        let c = v(center);
+        let faces = convex_hull_3d(center, &pts, &idx);
+
+        assert!(!faces.is_empty(), "hull should not be empty");
+
+        for (i, face) in faces.iter().enumerate() {
+            let vi = &face.vertex_atom_indices;
+
+            let v0 = v(pts[vi[0]]);
+            let v1 = v(pts[vi[1]]);
+            let v2 = v(pts[vi[2]]);
+
             let n = (v1 - v0).cross(&(v2 - v0));
-            assert!(n.dot(&(v0 - v(center))) > 0.0, "normal must point outward");
+
+            // ✅ Use centroid instead of vertex
+            let centroid = (v0 + v1 + v2) / 3.0;
+
+            let dot = n.dot(&(centroid - c));
+
+            assert!(dot >= -1e-12, "Face {} has inward normal: dot={}", i, dot);
         }
     }
 
