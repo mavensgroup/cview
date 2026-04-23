@@ -43,6 +43,7 @@ enum Section {
     Sites,
     Occupation,
     Types,
+    #[allow(dead_code)]
     Potential,
 }
 
@@ -160,8 +161,11 @@ pub fn parse(path: &str) -> io::Result<Structure> {
             continue;
         }
         if trimmed == "POTENTIAL" {
-            current_section = Section::Potential;
-            continue;
+            // We don't parse the POTENTIAL block; all structural data
+            // (lattice, sites, occupation, types) has been collected by
+            // the time we reach it. Bail out so we don't walk through
+            // what can be tens of thousands of numeric table lines.
+            break;
         }
 
         // Parse section content

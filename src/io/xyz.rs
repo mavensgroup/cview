@@ -12,7 +12,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
     let n_atoms_str = lines
         .next()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "Empty XYZ file"))??;
-    let _n_atoms: usize = n_atoms_str
+    let n_atoms: usize = n_atoms_str
         .trim()
         .parse()
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid atom count"))?;
@@ -47,8 +47,16 @@ pub fn parse(path: &str) -> io::Result<Structure> {
     }
 
     // 3. Atoms
-    let mut atoms = Vec::new();
+    //
+    // Respect n_atoms strictly: XYZ trajectory files concatenate multiple
+    // frames, each with its own count+comment header. Reading to EOF would
+    // merge frames and scale linearly with trajectory length; stopping at
+    // n_atoms loads just the first frame.
+    let mut atoms = Vec::with_capacity(n_atoms);
     for (i, line) in lines.enumerate() {
+        if atoms.len() >= n_atoms {
+            break;
+        }
         let line = line?;
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() < 4 {

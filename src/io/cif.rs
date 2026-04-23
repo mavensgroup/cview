@@ -1,5 +1,3 @@
-//io/cif.rs
-
 use crate::model::{Atom, Structure};
 use crate::utils::linalg::frac_to_cart;
 use std::fs::File;
@@ -49,8 +47,31 @@ pub fn parse(path: &str) -> io::Result<Structure> {
     let mut in_loop = false;
     let mut current_loop_headers: Vec<String> = Vec::new();
 
+    // Per CIF spec (IUCr, Hall/Allen/Brown 1991), a `;` at column 1 opens
+    // a multi-line text field; the next line beginning with `;` at column 1
+    // closes it. Everything in between is opaque string data and MUST NOT
+    // be parsed as tags/loops/data — both for correctness (text values can
+    // legally contain anything) and for speed (ShelXL-produced CIFs embed
+    // hkl reflection dumps here, often 100k+ lines).
+    let mut in_text_field = false;
+
     for line_res in reader.lines() {
         let line = line_res?;
+
+        // --- Semicolon text field (highest priority, before trim) ---
+        // The CIF rule is strict: the `;` must be the first character of
+        // the raw line. Do NOT use the trimmed line for this check.
+        if in_text_field {
+            if line.starts_with(';') {
+                in_text_field = false;
+            }
+            continue;
+        }
+        if line.starts_with(';') {
+            in_text_field = true;
+            continue;
+        }
+
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;

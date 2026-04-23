@@ -12,6 +12,7 @@ use crate::physics::operations::miller_algo::MillerMath;
 use crate::rendering::polyhedra;
 use crate::rendering::polyhedra_lighting;
 use crate::state::TabState;
+use crate::utils::spatial_grid::SpatialGrid;
 use gtk4::cairo;
 use std::cmp::Ordering;
 use std::f64::consts::PI;
@@ -195,21 +196,36 @@ pub fn draw_structure(
 
     // ========================================================================
     // STEP 2: Collect Bonds (skip bonds involving coord-only or hidden ghosts)
+    //
+    // Uses a spatial grid to avoid the O(N²) nested scan. Grid cell size =
+    // max bond distance (4 Å), so each query visits a 3×3×3 block at most.
+    // Atoms filtered out at grid build time are never returned as neighbors,
+    // so the inner loop doesn't need to re-check is_coord_only / is_ghost.
     // ========================================================================
     if tab.view.show_bonds {
+        const MAX_BOND_DIST: f64 = 4.0;
+
+        let grid = SpatialGrid::build(atoms, MAX_BOND_DIST, |a| {
+            !a.is_coord_only && !(a.is_ghost && !show_ghosts)
+        });
+        let mut neighbors: Vec<usize> = Vec::with_capacity(64);
+
         for (i, r1) in atoms.iter().enumerate() {
             if r1.is_coord_only || (r1.is_ghost && !show_ghosts) {
                 continue;
             }
             let rad1 = get_atom_cov(&r1.element);
 
-            for (j, r2) in atoms.iter().enumerate() {
-                if i >= j {
+            neighbors.clear();
+            grid.query(r1.cart_pos, MAX_BOND_DIST, &mut neighbors);
+
+            for &j in &neighbors {
+                // Enforce unique (i, j) ordering so each pair is emitted once.
+                if j <= i {
                     continue;
                 }
-                if r2.is_coord_only || (r2.is_ghost && !show_ghosts) {
-                    continue;
-                }
+                let r2 = &atoms[j];
+                // Grid filter already excluded coord_only and hidden ghosts.
 
                 // Calculate CARTESIAN distance
                 let dx = r2.cart_pos[0] - r1.cart_pos[0];
@@ -217,9 +233,8 @@ pub fn draw_structure(
                 let dz = r2.cart_pos[2] - r1.cart_pos[2];
                 let dist = (dx * dx + dy * dy + dz * dz).sqrt();
 
-                if dist > 4.0 {
-                    continue;
-                }
+                // Grid query already enforced dist ≤ MAX_BOND_DIST, so no
+                // redundant check needed here.
 
                 let rad2 = get_atom_cov(&r2.element);
                 let max_bond_dist = (rad1 + rad2) * tolerance;

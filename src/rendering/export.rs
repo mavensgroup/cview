@@ -359,16 +359,6 @@ pub fn export_svg_advanced(
     ))
 }
 
-/// SVG export stub when feature is disabled
-// #[cfg(not(feature = "svg"))]
-// pub fn export_svg_advanced(
-// _state: Rc<RefCell<AppState>>,
-// _path: &str,
-// _settings: ExportSettings,
-// ) -> Result<String, String> {
-// Err("SVG export not available. Enable 'svg' feature in cairo-rs dependency.".to_string())
-// }
-
 // ============================================================================
 // BACKWARD COMPATIBILITY - Simple exports
 // ============================================================================
@@ -473,10 +463,7 @@ pub fn export_for_journal(
     match format {
         ExportFormat::PNG => export_png_advanced(state, path, settings),
         ExportFormat::PDF => export_pdf_advanced(state, path, settings),
-        #[cfg(feature = "svg")]
         ExportFormat::SVG => export_svg_advanced(state, path, settings),
-        #[cfg(not(feature = "svg"))]
-        ExportFormat::SVG => Err("SVG export requires 'svg' feature in cairo-rs".to_string()),
     }
 }
 

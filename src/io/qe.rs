@@ -35,16 +35,15 @@ fn parse_output(content: &str) -> io::Result<Structure> {
 
     while i < lines.len() {
         let line = lines[i].trim();
-        let lower = line.to_lowercase();
 
         // lattice parameter (alat)  =      10.2000  a.u.
-        if lower.contains("lattice parameter (alat)") {
+        if ascii_contains_ci(line, "lattice parameter (alat)") {
             if let Some(val) = extract_val(line, "=") {
                 alat = val * BOHR_TO_ANG;
             }
         }
 
-        if lower.starts_with("cell_parameters") {
+        if ascii_starts_with_ci(line, "cell_parameters") {
             let (unit, scale) = parse_header_unit(line, alat);
 
             if i + 3 < lines.len() {
@@ -68,7 +67,7 @@ fn parse_output(content: &str) -> io::Result<Structure> {
             }
         }
 
-        if lower.starts_with("atomic_positions") {
+        if ascii_starts_with_ci(line, "atomic_positions") {
             let (unit, scale_factor) = parse_header_unit(line, alat);
             atoms.clear(); // Keep only the latest step
 
@@ -77,7 +76,7 @@ fn parse_output(content: &str) -> io::Result<Structure> {
                 let atom_line = lines[i].trim();
                 if atom_line.is_empty()
                     || atom_line.starts_with("End")
-                    || atom_line.contains("total energy")
+                    || ascii_contains_ci(atom_line, "total energy")
                 {
                     break;
                 }
@@ -142,30 +141,33 @@ fn parse_input(content: &str) -> io::Result<Structure> {
     let lines: Vec<&str> = content.lines().collect();
 
     // Pass 1: Global params
+    //
+    // Uses ASCII-insensitive helpers instead of allocating a lowercased
+    // copy of every line. Celldm tokenization is handled with a local
+    // whitespace-stripping scan rather than `lower.replace(" ", "")`.
     for line in &lines {
         let trimmed = line.trim();
         if trimmed.starts_with('!') || trimmed.starts_with('#') {
             continue;
         }
 
-        let lower = trimmed.to_lowercase();
-
-        // Handle "celldm(1) = ..." and "celldm (1) = ..."
-        let clean_line = lower.replace(" ", "");
-
-        if clean_line.contains("celldm(1)=") {
+        // Detect "celldm(1) = ..." / "celldm (1) = ..." without allocating.
+        if contains_celldm_one(trimmed) {
             if let Some(val) = extract_val(line, "=") {
                 alat = val * BOHR_TO_ANG;
             }
         }
-        // Handle "A = ..."
-        else if lower.contains(" a ") || lower.starts_with("a=") || lower.starts_with("a =") {
+        // Handle "A = ..." / " a " / "a=" / "a ="
+        else if ascii_contains_ci(trimmed, " a ")
+            || ascii_starts_with_ci(trimmed, "a=")
+            || ascii_starts_with_ci(trimmed, "a =")
+        {
             if let Some(val) = extract_val(line, "=") {
                 alat = val;
             }
         }
 
-        if lower.contains("ibrav") {
+        if ascii_contains_ci(trimmed, "ibrav") {
             if let Some(val) = extract_val(line, "=") {
                 ibrav = val as i32;
             }
@@ -176,10 +178,9 @@ fn parse_input(content: &str) -> io::Result<Structure> {
     let mut i = 0;
     while i < lines.len() {
         let line = lines[i].trim();
-        let lower = line.to_lowercase();
 
         // Explicit Lattice
-        if lower.starts_with("cell_parameters") {
+        if ascii_starts_with_ci(line, "cell_parameters") {
             let (unit, _) = parse_header_unit(line, alat);
             if i + 3 < lines.len() {
                 let v1 = parse_vec3(lines[i + 1]);
@@ -203,7 +204,7 @@ fn parse_input(content: &str) -> io::Result<Structure> {
         }
 
         // Atoms
-        if lower.starts_with("atomic_positions") {
+        if ascii_starts_with_ci(line, "atomic_positions") {
             // Determine default unit based on ibrav presence
             let default_unit = if ibrav != 0 { "alat" } else { "angstrom" };
             let (unit, _) = parse_header_unit_with_default(line, alat, default_unit);
@@ -215,8 +216,7 @@ fn parse_input(content: &str) -> io::Result<Structure> {
                 if atom_line.is_empty()
                     || atom_line.starts_with('/')
                     || atom_line.starts_with('&')
-                    || atom_line.starts_with("K_POINTS")
-                    || atom_line.to_lowercase().starts_with("k_points")
+                    || ascii_starts_with_ci(atom_line, "k_points")
                 {
                     break;
                 }
@@ -368,20 +368,17 @@ fn extract_val(line: &str, delimiter: &str) -> Option<f64> {
 
 /// Robust Vec3 parsing: Handles whitespace, commas, 'd' notation
 fn parse_vec3(line: &str) -> [f64; 3] {
-    let parts: Vec<String> = line.split_whitespace().map(|s| s.to_string()).collect();
-
-    let mut nums = Vec::new();
-    for p in parts {
+    let mut nums = Vec::with_capacity(3);
+    for p in line.split_whitespace() {
         if nums.len() == 3 {
             break;
         }
-        let clean_p = p.to_lowercase().replace(',', "");
-
-        let is_numeric = clean_and_parse_first_number(&clean_p).is_some();
-        if is_numeric {
-            if let Some(val) = clean_and_parse_first_number(&clean_p) {
-                nums.push(val);
-            }
+        // Strip commas locally without allocating a String per token until
+        // necessary. `clean_and_parse_first_number` already handles the
+        // Fortran 'd' notation + comment splitting.
+        let clean: String = p.replace(',', "");
+        if let Some(val) = clean_and_parse_first_number(&clean) {
+            nums.push(val);
         }
     }
 
@@ -407,6 +404,86 @@ fn clean_and_parse_first_number(raw: &str) -> Option<f64> {
     let float_str = token.to_lowercase().replace('d', "e");
 
     float_str.parse::<f64>().ok()
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ASCII-insensitive helpers
+//
+// QE keywords (CELL_PARAMETERS, ATOMIC_POSITIONS, alat, ibrav, …) are pure
+// ASCII. Per-line `to_lowercase()` allocates a fresh String every call,
+// which dominates parse time for large relax/MD output files. These helpers
+// do the comparisons in-place against an already-ASCII-lowercased needle.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// True iff `haystack.to_ascii_lowercase().starts_with(needle_lower)`
+/// without allocating. `needle_lower` MUST already be lowercase.
+fn ascii_starts_with_ci(haystack: &str, needle_lower: &str) -> bool {
+    let nb = needle_lower.as_bytes();
+    let hb = haystack.as_bytes();
+    if hb.len() < nb.len() {
+        return false;
+    }
+    for (h, n) in hb.iter().zip(nb.iter()) {
+        if h.to_ascii_lowercase() != *n {
+            return false;
+        }
+    }
+    true
+}
+
+/// True iff `haystack.to_ascii_lowercase().contains(needle_lower)` without
+/// allocating. `needle_lower` MUST already be lowercase. Linear scan.
+fn ascii_contains_ci(haystack: &str, needle_lower: &str) -> bool {
+    let nb = needle_lower.as_bytes();
+    if nb.is_empty() {
+        return true;
+    }
+    let hb = haystack.as_bytes();
+    if hb.len() < nb.len() {
+        return false;
+    }
+    for start in 0..=(hb.len() - nb.len()) {
+        let mut ok = true;
+        for (i, n) in nb.iter().enumerate() {
+            if hb[start + i].to_ascii_lowercase() != *n {
+                ok = false;
+                break;
+            }
+        }
+        if ok {
+            return true;
+        }
+    }
+    false
+}
+
+/// Whitespace-tolerant check for `celldm(1)=` anywhere in the line.
+/// Matches `celldm(1)=`, `celldm (1) =`, `Celldm( 1 )=`, etc., without
+/// allocating the "whitespace-stripped" copy the original code built.
+fn contains_celldm_one(line: &str) -> bool {
+    const NEEDLE: &[u8] = b"celldm(1)=";
+    let hb = line.as_bytes();
+
+    // Try every possible starting position. At each start, match NEEDLE
+    // while skipping any whitespace in the haystack between matched bytes.
+    for start in 0..hb.len() {
+        let mut h = start;
+        let mut matched = true;
+        for &n in NEEDLE {
+            while h < hb.len() && (hb[h] as char).is_ascii_whitespace() {
+                h += 1;
+            }
+            if h >= hb.len() || hb[h].to_ascii_lowercase() != n {
+                matched = false;
+                break;
+            }
+            h += 1;
+        }
+        if matched {
+            return true;
+        }
+    }
+    false
 }
 
 pub fn write(path: &str, structure: &Structure) -> io::Result<()> {

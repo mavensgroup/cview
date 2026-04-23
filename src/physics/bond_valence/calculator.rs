@@ -260,28 +260,32 @@ pub fn calculate_bvs_auto(structure: &Structure, atom_idx: usize) -> f64 {
 }
 
 // ─── Batch helpers ────────────────────────────────────────────────────────────
+//
+// All batch BVS calculations are parallelized with rayon. Each atom's BVS is
+// independent — it reads the immutable structure and writes its own Vec slot,
+// so the per-atom map is embarrassingly parallel. This matters most for
+// `calculate_bvs_pbc` (and by extension `_auto`), which loops over all
+// periodic images within cutoff per atom — a single 520-atom chibaite cell
+// generates ~100K image-pair evaluations, easily saturating 4–8 cores.
 
 pub fn calculate_bvs_all(structure: &Structure) -> Vec<f64> {
+    use rayon::prelude::*;
     (0..structure.atoms.len())
+        .into_par_iter()
         .map(|i| calculate_bvs(structure, i))
         .collect()
 }
 
 pub fn calculate_bvs_all_pbc(structure: &Structure) -> Vec<f64> {
+    use rayon::prelude::*;
     (0..structure.atoms.len())
+        .into_par_iter()
         .map(|i| calculate_bvs_pbc(structure, i))
         .collect()
 }
 
 /// Automatic dispatch batch version — recommended entry point.
 pub fn calculate_bvs_all_auto(structure: &Structure) -> Vec<f64> {
-    (0..structure.atoms.len())
-        .map(|i| calculate_bvs_auto(structure, i))
-        .collect()
-}
-
-#[cfg(feature = "parallel")]
-pub fn calculate_bvs_all_parallel(structure: &Structure) -> Vec<f64> {
     use rayon::prelude::*;
     (0..structure.atoms.len())
         .into_par_iter()

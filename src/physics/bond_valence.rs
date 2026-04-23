@@ -7,6 +7,3 @@ pub use calculator::{
     calculate_bvs_all_pbc, calculate_bvs_auto, calculate_bvs_deviation, calculate_bvs_pbc,
     calculate_structure_quality, get_ideal_oxidation_state, BVSQuality,
 };
-
-#[cfg(feature = "parallel")]
-pub use calculator::calculate_bvs_all_parallel;
