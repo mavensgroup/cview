@@ -58,7 +58,7 @@ pub fn create_tab_content(state: Rc<RefCell<AppState>>, tab_id: usize) -> (Drawi
 
     // 3. Draw Elements
     rendering::painter::draw_unit_cell(cr, &lattice_corners, false);
-    rendering::painter::draw_structure(cr, &atoms, tab, bounds.scale, false);
+    rendering::painter::draw_structure(cr, &atoms, tab, bounds.scale, false, st.config.color_scheme);
     rendering::painter::draw_miller_planes(
       cr,
       tab,

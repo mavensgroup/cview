@@ -1,7 +1,10 @@
 // src/model/elements.rs
 
-/// Holds all physical, visual, and scattering properties for a chemical element.
-/// This struct acts as the central row for our database.
+use serde::{Deserialize, Serialize};
+
+/// Holds all physical and scattering properties for a chemical element.
+/// Color is intentionally NOT stored here — it is purely a presentation concern,
+/// computed at render time by `get_element_color` from the active `ColorScheme`.
 #[derive(Debug, Clone)]
 struct AtomData {
     pub atomic_number: i32,
@@ -19,9 +22,6 @@ struct AtomData {
 
     // -- Chemistry --
     pub electronegativity: f64, // Pauling scale
-
-    // -- Visualization --
-    pub color_rgb: (f64, f64, f64), // Material Design / CPK
 }
 
 /// The Central Database for Atomic Properties.
@@ -30,7 +30,6 @@ struct AtomData {
 /// - **Cromer-Mann**: *Int. Tab. Cryst. Vol C*, Table 6.1.1.4 (1992).
 /// - **Ionic Radii**: Shannon, R.D. *Acta Cryst. A* 32, 751 (1976).
 /// - **VdW Radii**: Alvarez, S. *Dalton Trans.* 42, 8617 (2013).
-/// - **Colors**: Material Design Palette (Adapted for CPK-like distinctness).
 /// - **Electronegativity**: Pauling, L. *The Nature of the Chemical Bond* (1960).
 fn get_atom_data(element: &str) -> AtomData {
     match element {
@@ -46,7 +45,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.60,
             vdw_radius: 1.20,
             electronegativity: 2.20,
-            color_rgb: (0.76, 0.88, 0.62), // Green 200
         },
         "He" => AtomData {
             atomic_number: 2,
@@ -59,7 +57,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.00,
             vdw_radius: 1.40,
             electronegativity: 0.00,
-            color_rgb: (0.70, 0.89, 0.96), // Cyan 200
         },
 
         // --- Period 2 ---
@@ -74,7 +71,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.76,
             vdw_radius: 1.82,
             electronegativity: 0.98,
-            color_rgb: (0.94, 0.33, 0.31), // Red 400
         },
         "Be" => AtomData {
             atomic_number: 4,
@@ -87,7 +83,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.45,
             vdw_radius: 1.53,
             electronegativity: 1.57,
-            color_rgb: (1.00, 0.70, 0.35), // Orange 300
         },
         "B" => AtomData {
             atomic_number: 5,
@@ -100,7 +95,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.27,
             vdw_radius: 1.92,
             electronegativity: 2.04,
-            color_rgb: (0.30, 0.69, 0.60), // Teal 400
         },
         "C" => AtomData {
             atomic_number: 6,
@@ -113,7 +107,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.16,
             vdw_radius: 1.70,
             electronegativity: 2.55,
-            color_rgb: (0.56, 0.76, 0.29), // Green 500
         },
         "N" => AtomData {
             atomic_number: 7,
@@ -126,7 +119,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.13,
             vdw_radius: 1.55,
             electronegativity: 3.04,
-            color_rgb: (0.41, 0.73, 0.39), // Green 400
         },
         "O" => AtomData {
             atomic_number: 8,
@@ -139,7 +131,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.40,
             vdw_radius: 1.52,
             electronegativity: 3.44,
-            color_rgb: (0.30, 0.69, 0.31), // Green 600
         },
         "F" => AtomData {
             atomic_number: 9,
@@ -152,7 +143,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.33,
             vdw_radius: 1.47,
             electronegativity: 3.98,
-            color_rgb: (0.51, 0.78, 0.33), // Lime 500
         },
         "Ne" => AtomData {
             atomic_number: 10,
@@ -165,7 +155,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.00,
             vdw_radius: 1.54,
             electronegativity: 0.00,
-            color_rgb: (0.38, 0.80, 0.85), // Cyan 400
         },
 
         // --- Period 3 ---
@@ -180,7 +169,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.02,
             vdw_radius: 2.27,
             electronegativity: 0.93,
-            color_rgb: (0.92, 0.26, 0.21), // Red 500
         },
         "Mg" => AtomData {
             atomic_number: 12,
@@ -193,7 +181,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.72,
             vdw_radius: 1.73,
             electronegativity: 1.31,
-            color_rgb: (1.00, 0.60, 0.20), // Orange 400
         },
         "Al" => AtomData {
             atomic_number: 13,
@@ -206,7 +193,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.54,
             vdw_radius: 1.84,
             electronegativity: 1.61,
-            color_rgb: (0.33, 0.59, 0.82), // Blue 400
         },
         "Si" => AtomData {
             atomic_number: 14,
@@ -219,7 +205,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.40,
             vdw_radius: 2.10,
             electronegativity: 1.90,
-            color_rgb: (0.30, 0.69, 0.60), // Teal 500
         },
         "P" => AtomData {
             atomic_number: 15,
@@ -232,7 +217,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.38,
             vdw_radius: 1.80,
             electronegativity: 2.19,
-            color_rgb: (0.56, 0.76, 0.29), // Green 600
         },
         "S" => AtomData {
             atomic_number: 16,
@@ -245,7 +229,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.84,
             vdw_radius: 1.80,
             electronegativity: 2.58,
-            color_rgb: (0.69, 0.82, 0.24), // Lime 600
         },
         "Cl" => AtomData {
             atomic_number: 17,
@@ -258,7 +241,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.81,
             vdw_radius: 1.75,
             electronegativity: 3.16,
-            color_rgb: (0.51, 0.78, 0.33), // Lime 500
         },
         "Ar" => AtomData {
             atomic_number: 18,
@@ -271,7 +253,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.00,
             vdw_radius: 1.88,
             electronegativity: 0.00,
-            color_rgb: (0.18, 0.75, 0.83), // Cyan 500
         },
 
         // --- Period 4 ---
@@ -286,7 +267,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.38,
             vdw_radius: 2.75,
             electronegativity: 0.82,
-            color_rgb: (0.85, 0.20, 0.19), // Red 700
         },
         "Ca" => AtomData {
             atomic_number: 20,
@@ -299,7 +279,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.00,
             vdw_radius: 2.31,
             electronegativity: 1.00,
-            color_rgb: (0.96, 0.55, 0.19), // Orange 600
         },
         "Sc" => AtomData {
             atomic_number: 21,
@@ -312,7 +291,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.745,
             vdw_radius: 2.30,
             electronegativity: 1.36,
-            color_rgb: (0.47, 0.53, 0.60), // Blue Grey 500
         },
         "Ti" => AtomData {
             atomic_number: 22,
@@ -325,7 +303,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.605,
             vdw_radius: 2.15,
             electronegativity: 1.54,
-            color_rgb: (0.55, 0.61, 0.67), // Blue Grey 400
         },
         "V" => AtomData {
             atomic_number: 23,
@@ -338,7 +315,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.59,
             vdw_radius: 2.05,
             electronegativity: 1.63,
-            color_rgb: (0.38, 0.45, 0.53), // Blue Grey 600
         },
         "Cr" => AtomData {
             atomic_number: 24,
@@ -351,7 +327,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.615,
             vdw_radius: 2.05,
             electronegativity: 1.66,
-            color_rgb: (0.33, 0.39, 0.45), // Blue Grey 700
         },
         "Mn" => AtomData {
             atomic_number: 25,
@@ -364,7 +339,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.83,
             vdw_radius: 2.05,
             electronegativity: 1.55,
-            color_rgb: (0.26, 0.32, 0.36), // Blue Grey 800
         },
         "Fe" => AtomData {
             atomic_number: 26,
@@ -377,7 +351,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.78,
             vdw_radius: 2.00,
             electronegativity: 1.83,
-            color_rgb: (0.21, 0.27, 0.31), // Blue Grey 900
         },
         "Co" => AtomData {
             atomic_number: 27,
@@ -390,7 +363,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.745,
             vdw_radius: 2.00,
             electronegativity: 1.88,
-            color_rgb: (0.38, 0.45, 0.53),
         },
         "Ni" => AtomData {
             atomic_number: 28,
@@ -403,7 +375,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.69,
             vdw_radius: 1.97,
             electronegativity: 1.91,
-            color_rgb: (0.47, 0.53, 0.60),
         },
         "Cu" => AtomData {
             atomic_number: 29,
@@ -416,7 +387,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.73,
             vdw_radius: 1.96,
             electronegativity: 1.90,
-            color_rgb: (0.55, 0.61, 0.67),
         },
         "Zn" => AtomData {
             atomic_number: 30,
@@ -429,7 +399,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.74,
             vdw_radius: 2.01,
             electronegativity: 1.65,
-            color_rgb: (0.69, 0.75, 0.78),
         },
         "Ga" => AtomData {
             atomic_number: 31,
@@ -442,7 +411,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.62,
             vdw_radius: 1.87,
             electronegativity: 1.81,
-            color_rgb: (0.33, 0.59, 0.82),
         },
         "Ge" => AtomData {
             atomic_number: 32,
@@ -455,7 +423,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.53,
             vdw_radius: 2.11,
             electronegativity: 2.01,
-            color_rgb: (0.30, 0.69, 0.60),
         },
         "As" => AtomData {
             atomic_number: 33,
@@ -468,7 +435,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.58,
             vdw_radius: 1.85,
             electronegativity: 2.18,
-            color_rgb: (0.30, 0.69, 0.60),
         },
         "Se" => AtomData {
             atomic_number: 34,
@@ -481,7 +447,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.98,
             vdw_radius: 1.90,
             electronegativity: 2.55,
-            color_rgb: (0.56, 0.76, 0.29),
         },
         "Br" => AtomData {
             atomic_number: 35,
@@ -494,7 +459,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.96,
             vdw_radius: 1.85,
             electronegativity: 2.96,
-            color_rgb: (0.69, 0.82, 0.24),
         },
         "Kr" => AtomData {
             atomic_number: 36,
@@ -507,7 +471,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.00,
             vdw_radius: 2.02,
             electronegativity: 3.00,
-            color_rgb: (0.18, 0.75, 0.83),
         },
 
         // --- Period 5 ---
@@ -522,7 +485,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.52,
             vdw_radius: 3.03,
             electronegativity: 0.82,
-            color_rgb: (0.78, 0.17, 0.16), // Red 800
         },
         "Sr" => AtomData {
             atomic_number: 38,
@@ -535,7 +497,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.18,
             vdw_radius: 2.49,
             electronegativity: 0.95,
-            color_rgb: (0.94, 0.50, 0.20),
         },
         "Y" => AtomData {
             atomic_number: 39,
@@ -548,7 +509,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.90,
             vdw_radius: 2.40,
             electronegativity: 1.22,
-            color_rgb: (0.47, 0.53, 0.60),
         },
         "Zr" => AtomData {
             atomic_number: 40,
@@ -561,7 +521,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.72,
             vdw_radius: 2.30,
             electronegativity: 1.33,
-            color_rgb: (0.55, 0.61, 0.67),
         },
         "Nb" => AtomData {
             atomic_number: 41,
@@ -574,7 +533,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.64,
             vdw_radius: 2.15,
             electronegativity: 1.60,
-            color_rgb: (0.38, 0.45, 0.53),
         },
         "Mo" => AtomData {
             atomic_number: 42,
@@ -587,7 +545,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.59,
             vdw_radius: 2.10,
             electronegativity: 2.16,
-            color_rgb: (0.33, 0.39, 0.45),
         },
         "Tc" => AtomData {
             atomic_number: 43,
@@ -600,7 +557,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.56,
             vdw_radius: 2.05,
             electronegativity: 1.90,
-            color_rgb: (0.26, 0.32, 0.36),
         },
         "Ru" => AtomData {
             atomic_number: 44,
@@ -613,7 +569,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.62,
             vdw_radius: 2.05,
             electronegativity: 2.20,
-            color_rgb: (0.21, 0.27, 0.31),
         },
         "Rh" => AtomData {
             atomic_number: 45,
@@ -626,7 +581,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.665,
             vdw_radius: 2.00,
             electronegativity: 2.28,
-            color_rgb: (0.38, 0.45, 0.53),
         },
         "Pd" => AtomData {
             atomic_number: 46,
@@ -639,7 +593,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.86,
             vdw_radius: 2.05,
             electronegativity: 2.20,
-            color_rgb: (0.47, 0.53, 0.60),
         },
         "Ag" => AtomData {
             atomic_number: 47,
@@ -652,7 +605,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.15,
             vdw_radius: 2.03,
             electronegativity: 1.93,
-            color_rgb: (0.69, 0.75, 0.78),
         },
         "Cd" => AtomData {
             atomic_number: 48,
@@ -665,7 +617,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.95,
             vdw_radius: 2.18,
             electronegativity: 1.69,
-            color_rgb: (0.33, 0.59, 0.82),
         },
         "In" => AtomData {
             atomic_number: 49,
@@ -678,7 +629,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.80,
             vdw_radius: 1.93,
             electronegativity: 1.78,
-            color_rgb: (0.33, 0.59, 0.82),
         },
         "Sn" => AtomData {
             atomic_number: 50,
@@ -691,7 +641,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.69,
             vdw_radius: 2.17,
             electronegativity: 1.96,
-            color_rgb: (0.30, 0.69, 0.60),
         },
         "Sb" => AtomData {
             atomic_number: 51,
@@ -704,7 +653,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.76,
             vdw_radius: 2.06,
             electronegativity: 2.05,
-            color_rgb: (0.30, 0.69, 0.60),
         },
         "Te" => AtomData {
             atomic_number: 52,
@@ -717,7 +665,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 2.21,
             vdw_radius: 2.06,
             electronegativity: 2.10,
-            color_rgb: (0.56, 0.76, 0.29),
         },
         "I" => AtomData {
             atomic_number: 53,
@@ -730,7 +677,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 2.20,
             vdw_radius: 1.98,
             electronegativity: 2.66,
-            color_rgb: (0.69, 0.82, 0.24),
         },
         "Xe" => AtomData {
             atomic_number: 54,
@@ -743,7 +689,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.00,
             vdw_radius: 2.16,
             electronegativity: 2.60,
-            color_rgb: (0.18, 0.75, 0.83),
         },
 
         // --- Period 6 ---
@@ -758,7 +703,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.67,
             vdw_radius: 3.43,
             electronegativity: 0.79,
-            color_rgb: (0.72, 0.11, 0.11), // Red 900
         },
         "Ba" => AtomData {
             atomic_number: 56,
@@ -771,7 +715,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.35,
             vdw_radius: 2.68,
             electronegativity: 0.89,
-            color_rgb: (0.90, 0.49, 0.13),
         },
         // Lanthanides
         "La" => AtomData {
@@ -785,7 +728,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.03,
             vdw_radius: 2.50,
             electronegativity: 1.10,
-            color_rgb: (0.58, 0.46, 0.80), // Deep Purple
         },
         "Ce" => AtomData {
             atomic_number: 58,
@@ -798,7 +740,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.01,
             vdw_radius: 2.48,
             electronegativity: 1.12,
-            color_rgb: (0.49, 0.34, 0.76),
         },
         "Pr" => AtomData {
             atomic_number: 59,
@@ -811,7 +752,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.99,
             vdw_radius: 2.47,
             electronegativity: 1.13,
-            color_rgb: (0.40, 0.28, 0.71),
         },
         "Nd" => AtomData {
             atomic_number: 60,
@@ -824,7 +764,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.98,
             vdw_radius: 2.45,
             electronegativity: 1.14,
-            color_rgb: (0.31, 0.23, 0.64),
         },
         "Pm" => AtomData {
             atomic_number: 61,
@@ -837,7 +776,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.97,
             vdw_radius: 2.43,
             electronegativity: 1.13,
-            color_rgb: (0.26, 0.20, 0.59),
         },
         "Sm" => AtomData {
             atomic_number: 62,
@@ -850,7 +788,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.96,
             vdw_radius: 2.42,
             electronegativity: 1.17,
-            color_rgb: (0.21, 0.18, 0.53),
         },
         "Eu" => AtomData {
             atomic_number: 63,
@@ -863,7 +800,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.09,
             vdw_radius: 2.40,
             electronegativity: 1.20,
-            color_rgb: (0.18, 0.16, 0.49),
         },
         "Gd" => AtomData {
             atomic_number: 64,
@@ -876,7 +812,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.94,
             vdw_radius: 2.38,
             electronegativity: 1.20,
-            color_rgb: (0.16, 0.14, 0.45),
         },
         "Tb" => AtomData {
             atomic_number: 65,
@@ -889,7 +824,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.92,
             vdw_radius: 2.37,
             electronegativity: 1.20,
-            color_rgb: (0.14, 0.12, 0.41),
         },
         "Dy" => AtomData {
             atomic_number: 66,
@@ -902,7 +836,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.91,
             vdw_radius: 2.35,
             electronegativity: 1.22,
-            color_rgb: (0.12, 0.10, 0.37),
         },
         "Ho" => AtomData {
             atomic_number: 67,
@@ -915,7 +848,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.90,
             vdw_radius: 2.33,
             electronegativity: 1.23,
-            color_rgb: (0.10, 0.09, 0.34),
         },
         "Er" => AtomData {
             atomic_number: 68,
@@ -928,7 +860,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.89,
             vdw_radius: 2.32,
             electronegativity: 1.24,
-            color_rgb: (0.09, 0.08, 0.31),
         },
         "Tm" => AtomData {
             atomic_number: 69,
@@ -941,7 +872,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.88,
             vdw_radius: 2.30,
             electronegativity: 1.25,
-            color_rgb: (0.08, 0.07, 0.28),
         },
         "Yb" => AtomData {
             atomic_number: 70,
@@ -954,7 +884,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.86,
             vdw_radius: 2.28,
             electronegativity: 1.10,
-            color_rgb: (0.07, 0.06, 0.25),
         },
         "Lu" => AtomData {
             atomic_number: 71,
@@ -967,7 +896,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.85,
             vdw_radius: 2.27,
             electronegativity: 1.27,
-            color_rgb: (0.06, 0.05, 0.22),
         },
         "Hf" => AtomData {
             atomic_number: 72,
@@ -980,7 +908,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.71,
             vdw_radius: 2.25,
             electronegativity: 1.30,
-            color_rgb: (0.29, 0.35, 0.38),
         },
         "Ta" => AtomData {
             atomic_number: 73,
@@ -993,7 +920,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.64,
             vdw_radius: 2.20,
             electronegativity: 1.50,
-            color_rgb: (0.29, 0.35, 0.38),
         },
         "W" => AtomData {
             atomic_number: 74,
@@ -1006,7 +932,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.60,
             vdw_radius: 2.10,
             electronegativity: 2.36,
-            color_rgb: (0.29, 0.35, 0.38),
         },
         "Re" => AtomData {
             atomic_number: 75,
@@ -1019,7 +944,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.63,
             vdw_radius: 2.05,
             electronegativity: 1.90,
-            color_rgb: (0.29, 0.35, 0.38),
         },
         "Os" => AtomData {
             atomic_number: 76,
@@ -1032,7 +956,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.63,
             vdw_radius: 2.00,
             electronegativity: 2.20,
-            color_rgb: (0.29, 0.35, 0.38),
         },
         "Ir" => AtomData {
             atomic_number: 77,
@@ -1045,7 +968,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.68,
             vdw_radius: 2.00,
             electronegativity: 2.20,
-            color_rgb: (0.29, 0.35, 0.38),
         },
         "Pt" => AtomData {
             atomic_number: 78,
@@ -1058,7 +980,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.86,
             vdw_radius: 2.05,
             electronegativity: 2.28,
-            color_rgb: (0.29, 0.35, 0.38),
         },
         "Au" => AtomData {
             atomic_number: 79,
@@ -1071,7 +992,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.37,
             vdw_radius: 2.10,
             electronegativity: 2.54,
-            color_rgb: (1.00, 0.82, 0.14), // Gold
         },
         "Hg" => AtomData {
             atomic_number: 80,
@@ -1084,7 +1004,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.02,
             vdw_radius: 2.05,
             electronegativity: 2.00,
-            color_rgb: (0.72, 0.72, 0.73),
         },
         "Tl" => AtomData {
             atomic_number: 81,
@@ -1097,7 +1016,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.50,
             vdw_radius: 1.96,
             electronegativity: 1.62,
-            color_rgb: (0.65, 0.33, 0.33),
         },
         "Pb" => AtomData {
             atomic_number: 82,
@@ -1110,7 +1028,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.19,
             vdw_radius: 2.02,
             electronegativity: 2.33,
-            color_rgb: (0.34, 0.35, 0.38),
         },
         "Bi" => AtomData {
             atomic_number: 83,
@@ -1123,7 +1040,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.03,
             vdw_radius: 2.07,
             electronegativity: 2.02,
-            color_rgb: (0.62, 0.31, 0.71),
         },
         "Po" => AtomData {
             atomic_number: 84,
@@ -1136,7 +1052,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.94,
             vdw_radius: 1.97,
             electronegativity: 2.00,
-            color_rgb: (0.67, 0.33, 0.00),
         },
         "At" => AtomData {
             atomic_number: 85,
@@ -1149,7 +1064,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.62,
             vdw_radius: 2.02,
             electronegativity: 2.20,
-            color_rgb: (0.46, 0.31, 0.27),
         },
         "Rn" => AtomData {
             atomic_number: 86,
@@ -1162,7 +1076,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.00,
             vdw_radius: 2.20,
             electronegativity: 2.20,
-            color_rgb: (0.26, 0.51, 0.59),
         },
 
         // --- Period 7 ---
@@ -1177,7 +1090,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.80,
             vdw_radius: 3.48,
             electronegativity: 0.70,
-            color_rgb: (0.62, 0.08, 0.08),
         },
         "Ra" => AtomData {
             atomic_number: 88,
@@ -1190,7 +1102,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.48,
             vdw_radius: 2.83,
             electronegativity: 0.90,
-            color_rgb: (0.85, 0.40, 0.11),
         },
         "Ac" => AtomData {
             atomic_number: 89,
@@ -1203,7 +1114,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.12,
             vdw_radius: 2.00,
             electronegativity: 1.10,
-            color_rgb: (0.49, 0.54, 0.80),
         },
         "Th" => AtomData {
             atomic_number: 90,
@@ -1216,7 +1126,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.05,
             vdw_radius: 2.40,
             electronegativity: 1.30,
-            color_rgb: (0.39, 0.44, 0.75),
         },
         "Pa" => AtomData {
             atomic_number: 91,
@@ -1229,7 +1138,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.99,
             vdw_radius: 2.00,
             electronegativity: 1.50,
-            color_rgb: (0.30, 0.34, 0.71),
         },
         "U" => AtomData {
             atomic_number: 92,
@@ -1242,7 +1150,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 1.00,
             vdw_radius: 1.86,
             electronegativity: 1.38,
-            color_rgb: (0.25, 0.30, 0.67),
         },
         "Np" => AtomData {
             atomic_number: 93,
@@ -1255,7 +1162,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.98,
             vdw_radius: 2.00,
             electronegativity: 1.36,
-            color_rgb: (0.21, 0.26, 0.63),
         },
         "Pu" => AtomData {
             atomic_number: 94,
@@ -1268,7 +1174,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.96,
             vdw_radius: 2.00,
             electronegativity: 1.28,
-            color_rgb: (0.18, 0.23, 0.59),
         },
         "Am" => AtomData {
             atomic_number: 95,
@@ -1281,7 +1186,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.95,
             vdw_radius: 2.00,
             electronegativity: 1.13,
-            color_rgb: (0.16, 0.20, 0.55),
         },
         "Cm" => AtomData {
             atomic_number: 96,
@@ -1294,7 +1198,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.94,
             vdw_radius: 2.00,
             electronegativity: 1.28,
-            color_rgb: (0.14, 0.18, 0.51),
         },
         "Bk" => AtomData {
             atomic_number: 97,
@@ -1307,7 +1210,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.93,
             vdw_radius: 2.00,
             electronegativity: 1.30,
-            color_rgb: (0.12, 0.16, 0.47),
         },
         "Cf" => AtomData {
             atomic_number: 98,
@@ -1320,7 +1222,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.92,
             vdw_radius: 2.00,
             electronegativity: 1.30,
-            color_rgb: (0.10, 0.14, 0.43),
         },
         "Es" => AtomData {
             atomic_number: 99,
@@ -1333,7 +1234,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.91,
             vdw_radius: 2.00,
             electronegativity: 1.30,
-            color_rgb: (0.09, 0.12, 0.39),
         },
         "Fm" => AtomData {
             atomic_number: 100,
@@ -1346,7 +1246,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.90,
             vdw_radius: 2.00,
             electronegativity: 1.30,
-            color_rgb: (0.08, 0.11, 0.35),
         },
         "Md" => AtomData {
             atomic_number: 101,
@@ -1359,7 +1258,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.89,
             vdw_radius: 2.00,
             electronegativity: 1.30,
-            color_rgb: (0.07, 0.10, 0.32),
         },
         "No" => AtomData {
             atomic_number: 102,
@@ -1372,7 +1270,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.88,
             vdw_radius: 2.00,
             electronegativity: 1.30,
-            color_rgb: (0.06, 0.09, 0.29),
         },
         "Lr" => AtomData {
             atomic_number: 103,
@@ -1385,7 +1282,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.87,
             vdw_radius: 2.00,
             electronegativity: 1.30,
-            color_rgb: (0.05, 0.08, 0.26),
         },
 
         // --- Unknown / Default ---
@@ -1400,7 +1296,6 @@ fn get_atom_data(element: &str) -> AtomData {
             ionic_radius: 0.00,
             vdw_radius: 2.00,
             electronegativity: 0.00,
-            color_rgb: (1.00, 0.08, 0.58), // Hot Pink
         },
     }
 }
@@ -1462,24 +1357,499 @@ pub fn get_electronegativity(element: &str) -> f64 {
     get_atom_data(element).electronegativity
 }
 
-/// Returns the CPK/Material Design Color tuple (R, G, B).
-///
-/// **Source:** Material Design Colors adapted for standard CPK distinctions.
-pub fn get_cpk_color(element: &str) -> (f64, f64, f64) {
-    get_atom_data(element).color_rgb
-}
-
-/// Legacy wrapper for existing code compatibility.
-/// Returns (Covalent Radius, RGB Color).
-pub fn get_atom_properties(element: &str) -> (f64, (f64, f64, f64)) {
-    let d = get_atom_data(element);
-    (d.covalent_radius, d.color_rgb)
-}
-
 /// Legacy wrapper for existing code compatibility.
 /// Returns just the Covalent Radius.
 pub fn get_atom_cov(element: &str) -> f64 {
     get_atom_data(element).covalent_radius
+}
+
+// =============================================================================
+// COLOR SCHEMES
+// =============================================================================
+//
+// Sources:
+//   GroupMaterial : Google Material Design palette, group/period-mapped (CView original).
+//   Jmol          : Jmol default element colors.
+//                   http://jmol.sourceforge.net/jscolors/  (public domain)
+//   CpkClassic    : Original Corey–Pauling–Koltun (CPK) scheme.
+//                   Corey, R.B.; Pauling, L. Rev. Sci. Instrum. 24, 621 (1953).
+//                   Extended subset from: http://life.nthu.edu.tw/~fmhsu/rasframe/CPKCLRS.HTM
+//   RasMol        : RasMol default element colors (softer/lower saturation than Jmol).
+//                   Sayle, R.; Milner-White, E.J. Trends Biochem. Sci. 20, 374 (1995).
+//                   http://www.rasmol.org/doc/RasMol_2.7.5.html#atomcolours
+//
+// All colors are (R, G, B) tuples with components in [0.0, 1.0].
+// Unknown elements fall back to mid-gray: (0.5, 0.5, 0.5).
+// =============================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum ColorScheme {
+    GroupMaterial,
+    Jmol,
+    CpkClassic,
+    RasMol,
+    Electronegativity,
+    AtomicRadius,
+}
+
+impl Default for ColorScheme {
+    fn default() -> Self {
+        ColorScheme::GroupMaterial
+    }
+}
+
+/// Returns the visualization color for an element under the given scheme.
+pub fn get_element_color(element: &str, scheme: ColorScheme) -> (f64, f64, f64) {
+    match scheme {
+        ColorScheme::GroupMaterial => group_material(element),
+        ColorScheme::Jmol => jmol(element),
+        ColorScheme::CpkClassic => cpk_classic(element),
+        ColorScheme::RasMol => rasmol(element),
+        ColorScheme::Electronegativity => electronegativity_color(element),
+        ColorScheme::AtomicRadius => atomic_radius_color(element),
+    }
+}
+
+// -----------------------------------------------------------------------------
+// GroupMaterial — Google Material Design palette, group/period mapped
+// (extracted verbatim from the previous AtomData.color_rgb field)
+// -----------------------------------------------------------------------------
+fn group_material(element: &str) -> (f64, f64, f64) {
+    match element {
+        // Period 1
+        "H" => (0.76, 0.88, 0.62),  // Green 200
+        "He" => (0.70, 0.89, 0.96), // Cyan 200
+        // Period 2
+        "Li" => (0.94, 0.33, 0.31), // Red 400
+        "Be" => (1.00, 0.70, 0.35), // Orange 300
+        "B" => (0.30, 0.69, 0.60),  // Teal 400
+        "C" => (0.56, 0.76, 0.29),  // Green 500
+        "N" => (0.41, 0.73, 0.39),  // Green 400
+        "O" => (0.30, 0.69, 0.31),  // Green 600
+        "F" => (0.51, 0.78, 0.33),  // Lime 500
+        "Ne" => (0.38, 0.80, 0.85), // Cyan 400
+        // Period 3
+        "Na" => (0.92, 0.26, 0.21), // Red 500
+        "Mg" => (1.00, 0.60, 0.20), // Orange 400
+        "Al" => (0.33, 0.59, 0.82), // Blue 400
+        "Si" => (0.30, 0.69, 0.60), // Teal 500
+        "P" => (0.56, 0.76, 0.29),  // Green 600
+        "S" => (0.69, 0.82, 0.24),  // Lime 600
+        "Cl" => (0.51, 0.78, 0.33), // Lime 500
+        "Ar" => (0.18, 0.75, 0.83), // Cyan 500
+        // Period 4 — alkali / alkaline
+        "K" => (0.85, 0.20, 0.19),  // Red 700
+        "Ca" => (0.96, 0.55, 0.19), // Orange 600
+        // Period 4 — transition metals (Blue Grey scale)
+        "Sc" => (0.47, 0.53, 0.60),
+        "Ti" => (0.55, 0.61, 0.67),
+        "V" => (0.38, 0.45, 0.53),
+        "Cr" => (0.33, 0.39, 0.45),
+        "Mn" => (0.26, 0.32, 0.36),
+        "Fe" => (0.21, 0.27, 0.31),
+        "Co" => (0.38, 0.45, 0.53),
+        "Ni" => (0.47, 0.53, 0.60),
+        "Cu" => (0.55, 0.61, 0.67),
+        "Zn" => (0.69, 0.75, 0.78),
+        // Period 4 — post-transition / metalloid
+        "Ga" => (0.33, 0.59, 0.82),
+        "Ge" => (0.30, 0.69, 0.60),
+        "As" => (0.30, 0.69, 0.60),
+        "Se" => (0.56, 0.76, 0.29),
+        "Br" => (0.69, 0.82, 0.24),
+        "Kr" => (0.18, 0.75, 0.83),
+        // Period 5
+        "Rb" => (0.78, 0.17, 0.16),
+        "Sr" => (0.94, 0.50, 0.20),
+        "Y" => (0.47, 0.53, 0.60),
+        "Zr" => (0.55, 0.61, 0.67),
+        "Nb" => (0.38, 0.45, 0.53),
+        "Mo" => (0.33, 0.39, 0.45),
+        "Tc" => (0.26, 0.32, 0.36),
+        "Ru" => (0.21, 0.27, 0.31),
+        "Rh" => (0.38, 0.45, 0.53),
+        "Pd" => (0.47, 0.53, 0.60),
+        "Ag" => (0.69, 0.75, 0.78),
+        "Cd" => (0.33, 0.59, 0.82),
+        "In" => (0.33, 0.59, 0.82),
+        "Sn" => (0.30, 0.69, 0.60),
+        "Sb" => (0.30, 0.69, 0.60),
+        "Te" => (0.56, 0.76, 0.29),
+        "I" => (0.69, 0.82, 0.24),
+        "Xe" => (0.18, 0.75, 0.83),
+        // Period 6 — alkali / alkaline
+        "Cs" => (0.72, 0.11, 0.11),
+        "Ba" => (0.90, 0.49, 0.13),
+        // Lanthanides (Deep Purple gradient)
+        "La" => (0.58, 0.46, 0.80),
+        "Ce" => (0.49, 0.34, 0.76),
+        "Pr" => (0.40, 0.28, 0.71),
+        "Nd" => (0.31, 0.23, 0.64),
+        "Pm" => (0.26, 0.20, 0.59),
+        "Sm" => (0.21, 0.18, 0.53),
+        "Eu" => (0.18, 0.16, 0.49),
+        "Gd" => (0.16, 0.14, 0.45),
+        "Tb" => (0.14, 0.12, 0.41),
+        "Dy" => (0.12, 0.10, 0.37),
+        "Ho" => (0.10, 0.09, 0.34),
+        "Er" => (0.09, 0.08, 0.31),
+        "Tm" => (0.08, 0.07, 0.28),
+        "Yb" => (0.07, 0.06, 0.25),
+        "Lu" => (0.06, 0.05, 0.22),
+        // Period 6 — transition metals
+        "Hf" => (0.29, 0.35, 0.38),
+        "Ta" => (0.29, 0.35, 0.38),
+        "W" => (0.29, 0.35, 0.38),
+        "Re" => (0.29, 0.35, 0.38),
+        "Os" => (0.29, 0.35, 0.38),
+        "Ir" => (0.29, 0.35, 0.38),
+        "Pt" => (0.29, 0.35, 0.38),
+        "Au" => (1.00, 0.82, 0.14), // Gold
+        "Hg" => (0.72, 0.72, 0.73),
+        "Tl" => (0.65, 0.33, 0.33),
+        "Pb" => (0.34, 0.35, 0.38),
+        "Bi" => (0.62, 0.31, 0.71),
+        "Po" => (0.67, 0.33, 0.00),
+        "At" => (0.46, 0.31, 0.27),
+        "Rn" => (0.26, 0.51, 0.59),
+        // Period 7
+        "Fr" => (0.62, 0.08, 0.08),
+        "Ra" => (0.85, 0.40, 0.11),
+        // Actinides (Indigo gradient)
+        "Ac" => (0.49, 0.54, 0.80),
+        "Th" => (0.39, 0.44, 0.75),
+        "Pa" => (0.30, 0.34, 0.71),
+        "U" => (0.25, 0.30, 0.67),
+        "Np" => (0.21, 0.26, 0.63),
+        "Pu" => (0.18, 0.23, 0.59),
+        "Am" => (0.16, 0.20, 0.55),
+        "Cm" => (0.14, 0.18, 0.51),
+        "Bk" => (0.12, 0.16, 0.47),
+        "Cf" => (0.10, 0.14, 0.43),
+        "Es" => (0.09, 0.12, 0.39),
+        "Fm" => (0.08, 0.11, 0.35),
+        "Md" => (0.07, 0.10, 0.32),
+        "No" => (0.06, 0.09, 0.29),
+        "Lr" => (0.05, 0.08, 0.26),
+        _ => (0.50, 0.50, 0.50),
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Jmol — industry-standard palette used by Jmol, VESTA, Avogadro, etc.
+// Source: http://jmol.sourceforge.net/jscolors/  (public domain)
+// -----------------------------------------------------------------------------
+fn jmol(element: &str) -> (f64, f64, f64) {
+    match element {
+        "H" => (1.000, 1.000, 1.000),
+        "He" => (0.851, 1.000, 1.000),
+        "Li" => (0.800, 0.502, 1.000),
+        "Be" => (0.761, 1.000, 0.000),
+        "B" => (1.000, 0.710, 0.710),
+        "C" => (0.565, 0.565, 0.565),
+        "N" => (0.188, 0.314, 0.973),
+        "O" => (1.000, 0.051, 0.051),
+        "F" => (0.565, 0.878, 0.314),
+        "Ne" => (0.702, 0.890, 0.961),
+        "Na" => (0.671, 0.361, 0.949),
+        "Mg" => (0.541, 1.000, 0.000),
+        "Al" => (0.749, 0.651, 0.651),
+        "Si" => (0.941, 0.784, 0.627),
+        "P" => (1.000, 0.502, 0.000),
+        "S" => (1.000, 1.000, 0.188),
+        "Cl" => (0.122, 0.941, 0.122),
+        "Ar" => (0.502, 0.820, 0.890),
+        "K" => (0.561, 0.251, 0.831),
+        "Ca" => (0.239, 1.000, 0.000),
+        "Sc" => (0.902, 0.902, 0.902),
+        "Ti" => (0.749, 0.761, 0.780),
+        "V" => (0.651, 0.651, 0.671),
+        "Cr" => (0.541, 0.600, 0.780),
+        "Mn" => (0.612, 0.478, 0.780),
+        "Fe" => (0.878, 0.400, 0.200),
+        "Co" => (0.941, 0.565, 0.627),
+        "Ni" => (0.314, 0.816, 0.314),
+        "Cu" => (0.784, 0.502, 0.200),
+        "Zn" => (0.490, 0.502, 0.690),
+        "Ga" => (0.761, 0.561, 0.561),
+        "Ge" => (0.400, 0.561, 0.561),
+        "As" => (0.741, 0.502, 0.890),
+        "Se" => (1.000, 0.631, 0.000),
+        "Br" => (0.651, 0.161, 0.161),
+        "Kr" => (0.361, 0.722, 0.820),
+        "Rb" => (0.439, 0.180, 0.690),
+        "Sr" => (0.000, 1.000, 0.000),
+        "Y" => (0.580, 1.000, 1.000),
+        "Zr" => (0.580, 0.878, 0.878),
+        "Nb" => (0.451, 0.761, 0.788),
+        "Mo" => (0.329, 0.710, 0.710),
+        "Tc" => (0.231, 0.620, 0.620),
+        "Ru" => (0.141, 0.561, 0.561),
+        "Rh" => (0.039, 0.490, 0.549),
+        "Pd" => (0.000, 0.412, 0.522),
+        "Ag" => (0.753, 0.753, 0.753),
+        "Cd" => (1.000, 0.851, 0.561),
+        "In" => (0.651, 0.459, 0.451),
+        "Sn" => (0.400, 0.502, 0.502),
+        "Sb" => (0.620, 0.388, 0.710),
+        "Te" => (0.831, 0.478, 0.000),
+        "I" => (0.580, 0.000, 0.580),
+        "Xe" => (0.259, 0.620, 0.690),
+        "Cs" => (0.341, 0.090, 0.561),
+        "Ba" => (0.000, 0.788, 0.000),
+        "La" => (0.439, 0.831, 1.000),
+        "Ce" => (1.000, 1.000, 0.780),
+        "Pr" => (0.851, 1.000, 0.780),
+        "Nd" => (0.780, 1.000, 0.780),
+        "Pm" => (0.639, 1.000, 0.780),
+        "Sm" => (0.561, 1.000, 0.780),
+        "Eu" => (0.380, 1.000, 0.780),
+        "Gd" => (0.271, 1.000, 0.780),
+        "Tb" => (0.188, 1.000, 0.780),
+        "Dy" => (0.122, 1.000, 0.780),
+        "Ho" => (0.000, 1.000, 0.612),
+        "Er" => (0.000, 0.902, 0.459),
+        "Tm" => (0.000, 0.831, 0.322),
+        "Yb" => (0.000, 0.749, 0.220),
+        "Lu" => (0.000, 0.671, 0.141),
+        "Hf" => (0.302, 0.761, 1.000),
+        "Ta" => (0.302, 0.651, 1.000),
+        "W" => (0.129, 0.580, 0.839),
+        "Re" => (0.149, 0.490, 0.671),
+        "Os" => (0.149, 0.400, 0.588),
+        "Ir" => (0.090, 0.329, 0.529),
+        "Pt" => (0.816, 0.816, 0.878),
+        "Au" => (1.000, 0.820, 0.137),
+        "Hg" => (0.722, 0.722, 0.816),
+        "Tl" => (0.651, 0.329, 0.302),
+        "Pb" => (0.341, 0.349, 0.380),
+        "Bi" => (0.620, 0.310, 0.710),
+        "Po" => (0.671, 0.361, 0.000),
+        "At" => (0.459, 0.310, 0.271),
+        "Rn" => (0.259, 0.510, 0.588),
+        "Fr" => (0.259, 0.000, 0.400),
+        "Ra" => (0.000, 0.490, 0.000),
+        "Ac" => (0.439, 0.671, 0.980),
+        "Th" => (0.000, 0.729, 1.000),
+        "Pa" => (0.000, 0.631, 1.000),
+        "U" => (0.000, 0.561, 1.000),
+        "Np" => (0.000, 0.502, 1.000),
+        "Pu" => (0.000, 0.420, 1.000),
+        "Am" => (0.329, 0.361, 0.949),
+        "Cm" => (0.471, 0.361, 0.890),
+        "Bk" => (0.541, 0.310, 0.890),
+        "Cf" => (0.631, 0.212, 0.831),
+        "Es" => (0.702, 0.122, 0.831),
+        "Fm" => (0.702, 0.122, 0.729),
+        "Md" => (0.702, 0.051, 0.651),
+        "No" => (0.741, 0.051, 0.529),
+        "Lr" => (0.780, 0.000, 0.400),
+        _ => (0.500, 0.500, 0.500),
+    }
+}
+
+// -----------------------------------------------------------------------------
+// CPK Classic — original Corey–Pauling–Koltun physical model colors.
+// Source: Corey & Pauling (1953); extended list from standard chemistry literature.
+// Many heavy/rare elements not defined in the original CPK scheme fall back to
+// a neutral steel-blue to signal "not a classic CPK element".
+// -----------------------------------------------------------------------------
+fn cpk_classic(element: &str) -> (f64, f64, f64) {
+    match element {
+        // Core CPK elements
+        "H" => (1.000, 1.000, 1.000),
+        "C" => (0.200, 0.200, 0.200),
+        "N" => (0.561, 0.561, 1.000),
+        "O" => (0.941, 0.000, 0.000),
+        "F" => (0.122, 0.941, 0.122),
+        "Cl" => (0.122, 0.941, 0.122),
+        "Br" => (0.600, 0.129, 0.000),
+        "I" => (0.627, 0.125, 0.941),
+        "S" => (1.000, 0.784, 0.196),
+        "P" => (1.000, 0.502, 0.000),
+        // Metals
+        "Fe" => (1.000, 0.647, 0.000),
+        "Ca" => (0.800, 0.800, 0.800),
+        "Mg" => (0.800, 0.800, 0.800),
+        "Na" => (0.671, 0.361, 0.949),
+        "K" => (0.561, 0.251, 0.831),
+        "Cu" => (0.784, 0.502, 0.200),
+        "Zn" => (0.490, 0.502, 0.690),
+        "Ag" => (0.753, 0.753, 0.753),
+        "Au" => (1.000, 0.820, 0.137),
+        "Hg" => (0.722, 0.722, 0.816),
+        // Noble gases (CPK had no standard; use cyan convention)
+        "He" => (0.851, 1.000, 1.000),
+        "Ne" => (0.702, 0.890, 0.961),
+        "Ar" => (0.502, 0.820, 0.890),
+        "Kr" => (0.361, 0.722, 0.820),
+        "Xe" => (0.259, 0.620, 0.690),
+        "Rn" => (0.259, 0.510, 0.588),
+        // Extended (community-accepted, same as Jmol for these)
+        "Li" => (0.800, 0.502, 1.000),
+        "Be" => (0.761, 1.000, 0.000),
+        "B" => (1.000, 0.710, 0.710),
+        "Al" => (0.749, 0.651, 0.651),
+        "Si" => (0.941, 0.784, 0.627),
+        "Ti" => (0.749, 0.761, 0.780),
+        "Cr" => (0.541, 0.600, 0.780),
+        "Mn" => (0.612, 0.478, 0.780),
+        "Co" => (0.941, 0.565, 0.627),
+        "Ni" => (0.314, 0.816, 0.314),
+        "Ga" => (0.761, 0.561, 0.561),
+        "Ge" => (0.400, 0.561, 0.561),
+        "As" => (0.741, 0.502, 0.890),
+        "Se" => (1.000, 0.631, 0.000),
+        "Sr" => (0.000, 1.000, 0.000),
+        "Zr" => (0.580, 0.878, 0.878),
+        "Mo" => (0.329, 0.710, 0.710),
+        "Pd" => (0.000, 0.412, 0.522),
+        "Cd" => (1.000, 0.851, 0.561),
+        "In" => (0.651, 0.459, 0.451),
+        "Sn" => (0.400, 0.502, 0.502),
+        "Sb" => (0.620, 0.388, 0.710),
+        "Te" => (0.831, 0.478, 0.000),
+        "Ba" => (0.000, 0.788, 0.000),
+        "W" => (0.129, 0.580, 0.839),
+        "Pt" => (0.816, 0.816, 0.878),
+        "Pb" => (0.341, 0.349, 0.380),
+        "Bi" => (0.620, 0.310, 0.710),
+        "U" => (0.000, 0.561, 1.000),
+        // Steel-blue: "no classic CPK definition"
+        _ => (0.439, 0.502, 0.565),
+    }
+}
+
+// -----------------------------------------------------------------------------
+// RasMol — softer, lower-saturation palette from the RasMol molecular viewer.
+// Source: Sayle & Milner-White, Trends Biochem. Sci. 20, 374 (1995).
+//         http://www.rasmol.org/doc/RasMol_2.7.5.html#atomcolours
+// -----------------------------------------------------------------------------
+fn rasmol(element: &str) -> (f64, f64, f64) {
+    match element {
+        "H" => (0.902, 0.902, 0.902),
+        "He" => (0.851, 1.000, 1.000),
+        "Li" => (0.698, 0.133, 1.000),
+        "Be" => (0.761, 1.000, 0.000),
+        "B" => (1.000, 0.710, 0.710),
+        "C" => (0.784, 0.784, 0.784),
+        "N" => (0.533, 0.533, 1.000),
+        "O" => (0.941, 0.000, 0.000),
+        "F" => (0.698, 1.000, 0.196),
+        "Ne" => (0.702, 0.890, 0.961),
+        "Na" => (0.000, 0.000, 1.000),
+        "Mg" => (0.533, 1.000, 0.000),
+        "Al" => (0.502, 0.502, 0.565),
+        "Si" => (0.502, 0.600, 0.600),
+        "P" => (1.000, 0.502, 0.000),
+        "S" => (1.000, 0.784, 0.196),
+        "Cl" => (0.000, 1.000, 0.000),
+        "Ar" => (0.502, 0.820, 0.890),
+        "K" => (0.627, 0.208, 0.831),
+        "Ca" => (0.502, 1.000, 0.000),
+        "Sc" => (0.902, 0.902, 0.902),
+        "Ti" => (0.749, 0.761, 0.780),
+        "V" => (0.651, 0.651, 0.671),
+        "Cr" => (0.541, 0.600, 0.780),
+        "Mn" => (0.612, 0.478, 0.780),
+        "Fe" => (1.000, 0.647, 0.000),
+        "Co" => (0.941, 0.565, 0.627),
+        "Ni" => (0.314, 0.816, 0.314),
+        "Cu" => (0.784, 0.502, 0.200),
+        "Zn" => (0.490, 0.502, 0.690),
+        "Ga" => (0.761, 0.561, 0.561),
+        "Ge" => (0.400, 0.561, 0.561),
+        "As" => (0.741, 0.502, 0.890),
+        "Se" => (1.000, 0.631, 0.000),
+        "Br" => (0.400, 0.000, 0.000),
+        "Kr" => (0.361, 0.722, 0.820),
+        "Rb" => (0.439, 0.180, 0.690),
+        "Sr" => (0.000, 1.000, 0.000),
+        "Y" => (0.580, 1.000, 1.000),
+        "Zr" => (0.580, 0.878, 0.878),
+        "Nb" => (0.451, 0.761, 0.788),
+        "Mo" => (0.329, 0.710, 0.710),
+        "Tc" => (0.231, 0.620, 0.620),
+        "Ru" => (0.141, 0.561, 0.561),
+        "Rh" => (0.039, 0.490, 0.549),
+        "Pd" => (0.000, 0.412, 0.522),
+        "Ag" => (0.753, 0.753, 0.753),
+        "Cd" => (1.000, 0.851, 0.561),
+        "In" => (0.651, 0.459, 0.451),
+        "Sn" => (0.400, 0.502, 0.502),
+        "Sb" => (0.620, 0.388, 0.710),
+        "Te" => (0.831, 0.478, 0.000),
+        "I" => (0.624, 0.125, 0.941),
+        "Xe" => (0.259, 0.620, 0.690),
+        "Cs" => (0.341, 0.090, 0.561),
+        "Ba" => (0.000, 0.788, 0.000),
+        // Lanthanides — uniform pink-tan in RasMol
+        "La" | "Ce" | "Pr" | "Nd" | "Pm" | "Sm" | "Eu" => (0.851, 0.725, 0.663),
+        "Gd" | "Tb" | "Dy" | "Ho" | "Er" | "Tm" | "Yb" | "Lu" => (0.800, 0.651, 0.545),
+        "Hf" => (0.302, 0.761, 1.000),
+        "Ta" => (0.302, 0.651, 1.000),
+        "W" => (0.129, 0.580, 0.839),
+        "Re" => (0.149, 0.490, 0.671),
+        "Os" => (0.149, 0.400, 0.588),
+        "Ir" => (0.090, 0.329, 0.529),
+        "Pt" => (0.816, 0.816, 0.878),
+        "Au" => (1.000, 0.820, 0.137),
+        "Hg" => (0.722, 0.722, 0.816),
+        "Tl" => (0.651, 0.329, 0.302),
+        "Pb" => (0.341, 0.349, 0.380),
+        "Bi" => (0.620, 0.310, 0.710),
+        "Po" => (0.671, 0.361, 0.000),
+        "At" => (0.459, 0.310, 0.271),
+        "Rn" => (0.259, 0.510, 0.588),
+        "Fr" => (0.259, 0.000, 0.400),
+        "Ra" => (0.000, 0.490, 0.000),
+        // Actinides — uniform blue-teal in RasMol
+        "Ac" | "Th" | "Pa" | "U" | "Np" | "Pu" | "Am" | "Cm" | "Bk" | "Cf" | "Es" | "Fm" | "Md"
+        | "No" | "Lr" => (0.439, 0.671, 0.980),
+        _ => (0.500, 0.500, 0.500),
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Electronegativity — continuous blue→red colormap.
+// Maps Pauling electronegativity (range ~0.7–4.0) to a blue-white-red gradient.
+// Elements with no electronegativity data show in mid-gray.
+// -----------------------------------------------------------------------------
+fn electronegativity_color(element: &str) -> (f64, f64, f64) {
+    let chi = get_electronegativity(element);
+    if chi <= 0.0 {
+        return (0.65, 0.65, 0.65);
+    }
+    let min = 0.70_f64; // Fr (least electronegative)
+    let max = 3.98_f64; // F  (most electronegative)
+    let t = ((chi - min) / (max - min)).clamp(0.0, 1.0);
+    blue_white_red(t)
+}
+
+// -----------------------------------------------------------------------------
+// Atomic Radius — continuous blue→red colormap.
+// Maps covalent radius (range ~0.31–2.60 Å) to a blue-white-red gradient.
+// Larger atoms → blue; smaller atoms → red.
+// -----------------------------------------------------------------------------
+fn atomic_radius_color(element: &str) -> (f64, f64, f64) {
+    let r = get_covalent_radius(element);
+    if r <= 0.0 {
+        return (0.65, 0.65, 0.65);
+    }
+    let min = 0.31_f64;
+    let max = 2.60_f64;
+    let t = 1.0 - ((r - min) / (max - min)).clamp(0.0, 1.0);
+    blue_white_red(t)
+}
+
+fn blue_white_red(t: f64) -> (f64, f64, f64) {
+    if t < 0.5 {
+        let s = t * 2.0;
+        (s, s, 1.0)
+    } else {
+        let s = (t - 0.5) * 2.0;
+        (1.0, 1.0 - s, 1.0 - s)
+    }
 }
 
 // =========================================================================

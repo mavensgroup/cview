@@ -23,6 +23,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 // Import SOTA sprite cache
+use crate::model::elements::ColorScheme;
 use crate::rendering::sprite_cache::SpriteCache;
 
 // ============================================================================
@@ -272,6 +273,8 @@ pub struct Config {
 
     // ── APPEARANCE (6) — colors live in style, toggles via ViewState ──
     #[serde(default)]
+    pub color_scheme: ColorScheme,
+    #[serde(default)]
     pub render_quality: RenderQuality,
     #[serde(default = "d_true")]
     pub default_show_axes: bool,
@@ -356,6 +359,7 @@ impl Default for Config {
             auto_center_structure: true,
             remember_last_view: false,
 
+            color_scheme: ColorScheme::default(),
             render_quality: RenderQuality::Fast,
             default_show_axes: true,
             default_show_unit_cell: true,

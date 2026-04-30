@@ -115,7 +115,8 @@ fn snapshot_atoms(
                 let ovr = tab.overrides.get(&i);
                 let label = ovr.and_then(|o| o.display_label.clone());
                 let has = ovr.map(|o| !o.is_empty()).unwrap_or(false);
-                let (_, default_rgb) = crate::model::elements::get_atom_properties(&a.element);
+                let default_rgb =
+                    crate::model::elements::get_element_color(&a.element, state.config.color_scheme);
                 let color = ovr
                     .and_then(|o| o.color)
                     .or_else(|| tab.style.element_colors.get(&a.element).copied())

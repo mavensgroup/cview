@@ -7,5 +7,5 @@ pub mod structure;
 
 // Re-exports for cleaner imports
 // pub use bs_data::BrillouinZoneData;
-pub use elements::get_atom_properties;
+pub use elements::{ColorScheme, get_element_color};
 pub use structure::{Atom, Structure};

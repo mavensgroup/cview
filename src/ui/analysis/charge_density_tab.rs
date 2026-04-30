@@ -4,7 +4,7 @@
 // All rendering consolidated here — no separate rendering_charge_density module
 
 use crate::io::chgcar::{self, ChgcarData};
-use crate::model::elements::get_cpk_color;
+use crate::model::elements::{ColorScheme, get_element_color};
 use crate::physics::analysis::charge_density::{
     auto_thresholds, extract_isolines, extract_slice, extract_slice_hkl, project_atoms_fractional,
     project_atoms_hkl, DensityChannel, DensitySlice, Isoline, ProjectedAtom, SlicePlane,
@@ -351,6 +351,7 @@ fn draw_scene(
     is_export: bool,
     export_settings: Option<&crate::config::ExportPlotSettings>,
     clip_to_cell: bool,
+    color_scheme: ColorScheme,
 ) {
     let ps = if is_export {
         match export_settings {
@@ -488,7 +489,7 @@ fn draw_scene(
             }
 
             let alpha = (1.0 - atom.distance_ang * 2.0).clamp(0.3, 1.0);
-            let (er, eg, eb) = get_cpk_color(&atom.element);
+            let (er, eg, eb) = get_element_color(&atom.element, color_scheme);
 
             // Filled circle with dark outline
             cr.arc(ax, ay, atom_radius, 0.0, 2.0 * std::f64::consts::PI);
@@ -717,7 +718,13 @@ fn inset_rect(plot_w: f64, plot_h: f64) -> (f64, f64, f64, f64) {
     (ix, iy, iw, ih)
 }
 
-fn draw_3d_preview(cr: &cairo::Context, width: f64, height: f64, state: &ChargeDensityState) {
+fn draw_3d_preview(
+    cr: &cairo::Context,
+    width: f64,
+    height: f64,
+    state: &ChargeDensityState,
+    color_scheme: ColorScheme,
+) {
     // Background is drawn by the caller (rounded rect); we just draw content.
     let chgcar = match &state.chgcar_a {
         Some(c) => c,
@@ -868,7 +875,7 @@ fn draw_3d_preview(cr: &cairo::Context, width: f64, height: f64, state: &ChargeD
 
         let atom_r = 5.0;
         for (ax, ay, _, elem) in &atom_draw_list {
-            let (r, g, b) = get_cpk_color(elem);
+            let (r, g, b) = get_element_color(elem, color_scheme);
             cr.arc(*ax, *ay, atom_r, 0.0, 2.0 * std::f64::consts::PI);
             cr.set_source_rgb(r, g, b);
             let _ = cr.fill_preserve();
@@ -1251,6 +1258,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
     // Draw function
     {
         let st = state.clone();
+        let app_st_draw = app_state.clone();
         drawing_area.set_draw_func(move |_, cr, w, h| {
             let wf = w as f64;
             let hf = h as f64;
@@ -1258,6 +1266,10 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
             cr.rectangle(0.0, 0.0, wf, hf);
             let _ = cr.fill();
             let st = st.borrow();
+            let scheme = app_st_draw
+                .as_ref()
+                .map(|s| s.borrow().config.color_scheme)
+                .unwrap_or_default();
             if let Some(slice) = &st.cached_slice {
                 draw_scene(
                     cr,
@@ -1270,6 +1282,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                     false,
                     None,
                     st.show_3d_cell,
+                    scheme,
                 );
                 // ── 3D inset overlay (bottom-left corner) ──
                 if st.show_3d_atoms || st.show_3d_cell {
@@ -1310,7 +1323,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                     cr.rectangle(ix, iy, iw, ih);
                     cr.clip();
                     cr.translate(ix, iy);
-                    draw_3d_preview(cr, iw, ih, &st);
+                    draw_3d_preview(cr, iw, ih, &st, scheme);
                     cr.restore().ok();
                 }
             } else {
@@ -1759,6 +1772,10 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                 .as_ref()
                 .map(|s| s.borrow().config.export_plot.clone())
                 .unwrap_or_default();
+            let export_scheme = app_st
+                .as_ref()
+                .map(|s| s.borrow().config.color_scheme)
+                .unwrap_or_default();
 
             // Read export settings from app config (captured at build time)
             // export_cfg is already read live above
@@ -1810,6 +1827,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                                         true,
                                         Some(&export_cfg),
                                         clip_cell,
+                                        export_scheme,
                                     );
                                 }
                                 surf.finish();
@@ -1833,6 +1851,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                                     true,
                                     Some(&export_cfg),
                                     clip_cell,
+                                    export_scheme,
                                 );
                             }
                             if let Ok(mut file) = std::fs::File::create(&path) {

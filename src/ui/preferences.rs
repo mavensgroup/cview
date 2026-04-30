@@ -10,6 +10,7 @@
 //   - Advanced      (5 settings — none were wired to runtime behavior)
 
 use crate::config::RotationCenter;
+use crate::model::elements::ColorScheme;
 use crate::state::AppState;
 use gtk4::{self as gtk, gdk, prelude::*};
 use std::cell::RefCell;
@@ -254,7 +255,52 @@ fn build_appearance_tab(state: Rc<RefCell<AppState>>, da: gtk::DrawingArea) -> g
     bc_row.append(&bc_btn);
     vbox.append(&bc_row);
 
-    // 3. Render Quality
+    // 3. Atom Color Scheme
+    vbox.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
+    let cs_label = gtk::Label::new(Some("Atom Color Scheme:"));
+    cs_label.set_halign(gtk::Align::Start);
+    vbox.append(&cs_label);
+
+    let cs_dropdown = gtk::DropDown::from_strings(&[
+        "Group/Material (Default)",
+        "Jmol",
+        "CPK Classic",
+        "RasMol",
+        "Electronegativity",
+        "Atomic Radius",
+    ]);
+    cs_dropdown.set_selected(match state.borrow().config.color_scheme {
+        ColorScheme::GroupMaterial => 0,
+        ColorScheme::Jmol => 1,
+        ColorScheme::CpkClassic => 2,
+        ColorScheme::RasMol => 3,
+        ColorScheme::Electronegativity => 4,
+        ColorScheme::AtomicRadius => 5,
+    });
+    let s_cs = state.clone();
+    let da_cs = da.clone();
+    cs_dropdown.connect_selected_notify(move |d| {
+        let mut st = s_cs.borrow_mut();
+        st.config.color_scheme = match d.selected() {
+            1 => ColorScheme::Jmol,
+            2 => ColorScheme::CpkClassic,
+            3 => ColorScheme::RasMol,
+            4 => ColorScheme::Electronegativity,
+            5 => ColorScheme::AtomicRadius,
+            _ => ColorScheme::GroupMaterial,
+        };
+        // Sprite cache holds rasterized atoms colored under the previous scheme;
+        // clear all tabs' caches so the new scheme renders immediately.
+        for tab in st.tabs.iter_mut() {
+            tab.style.atom_cache.borrow_mut().clear();
+        }
+        st.save_config();
+        drop(st);
+        da_cs.queue_draw();
+    });
+    vbox.append(&cs_dropdown);
+
+    // 4. Render Quality
     vbox.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
     let rq_label = gtk::Label::new(Some("Screen Render Quality:"));
     rq_label.set_halign(gtk::Align::Start);

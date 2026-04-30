@@ -254,7 +254,7 @@ pub fn calculate_scene(
         atom.screen_pos[0] = (atom.screen_pos[0] - box_cx) * final_scale + win_cx;
         atom.screen_pos[1] = (atom.screen_pos[1] - box_cy) * final_scale + win_cy;
 
-        let (raw_r, _) = crate::model::elements::get_atom_properties(&atom.element);
+        let raw_r = crate::model::elements::get_covalent_radius(&atom.element);
         let mult = tab.override_radius_scale(atom.original_index);
         atom.screen_radius = raw_r * tab.style.atom_scale * mult * final_scale;
     }

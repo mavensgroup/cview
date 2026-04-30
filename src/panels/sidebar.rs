@@ -10,7 +10,7 @@ use gtk4::{
 };
 
 use crate::config::ColorMode;
-use crate::model::elements::get_atom_properties;
+use crate::model::elements::get_element_color;
 use crate::state::AppState;
 use crate::utils::console;
 use std::cell::RefCell;
@@ -875,8 +875,7 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
             if let Some(c) = tab.style.element_colors.get(&elem) {
                 *c
             } else {
-                let (_, def) = get_atom_properties(&elem);
-                def
+                get_element_color(&elem, st.config.color_scheme)
             }
         };
 
@@ -919,6 +918,7 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
         let btn_ref = btn.clone();
         btn_reset.connect_clicked(move |_| {
             let mut st = s_r.borrow_mut();
+            let scheme = st.config.color_scheme;
             let tab = st.active_tab_mut();
             tab.style.element_colors.remove(&elem_key_r);
             let e = elem_key_r.clone();
@@ -926,7 +926,7 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
                 .atom_cache
                 .borrow_mut()
                 .clear_matching(|key| key.starts_with(&format!("{}_", e)));
-            let (_, def) = get_atom_properties(&elem_key_r);
+            let def = get_element_color(&elem_key_r, scheme);
             btn_ref.set_rgba(&gdk::RGBA::new(
                 def.0 as f32,
                 def.1 as f32,

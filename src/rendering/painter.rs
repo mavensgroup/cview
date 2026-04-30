@@ -6,7 +6,7 @@
 use super::primitives::*;
 use super::scene::RenderAtom;
 use crate::config::ColorMode;
-use crate::model::elements::{get_atom_cov, get_atom_properties};
+use crate::model::elements::{ColorScheme, get_atom_cov, get_covalent_radius, get_element_color};
 use crate::physics::bond_valence::get_ideal_oxidation_state;
 use crate::physics::operations::miller_algo::MillerMath;
 use crate::rendering::polyhedra;
@@ -98,7 +98,13 @@ pub fn draw_unit_cell(cr: &cairo::Context, corners: &[[f64; 2]], is_export: bool
 // ============================================================================
 
 /// Draw all polyhedra with Lambertian shading, globally depth-sorted.
-fn draw_all_polyhedra(cr: &cairo::Context, atoms: &[RenderAtom], tab: &TabState, _scale: f64) {
+fn draw_all_polyhedra(
+    cr: &cairo::Context,
+    atoms: &[RenderAtom],
+    tab: &TabState,
+    _scale: f64,
+    color_scheme: ColorScheme,
+) {
     let settings = match &tab.style.polyhedra_settings {
         Some(s) if s.show_polyhedra => s,
         _ => return,
@@ -121,8 +127,12 @@ fn draw_all_polyhedra(cr: &cairo::Context, atoms: &[RenderAtom], tab: &TabState,
         let base_color = match &settings.color_mode {
             crate::config::PolyhedraColorMode::Custom(r, g, b) => (*r, *g, *b),
             _ => {
-                let (_, c) = get_atom_properties(&atoms[poly.center_idx].element);
-                c
+                let elem = &atoms[poly.center_idx].element;
+                tab.style
+                    .element_colors
+                    .get(elem)
+                    .copied()
+                    .unwrap_or_else(|| get_element_color(elem, color_scheme))
             }
         };
         let center_cart = atoms[poly.center_idx].cart_pos;
@@ -164,6 +174,7 @@ pub fn draw_structure(
     tab: &TabState,
     scale: f64,
     is_export: bool,
+    color_scheme: ColorScheme,
 ) {
     // Bond detection tolerance
     let tolerance = if tab.view.bond_cutoff < 0.1 || tab.view.bond_cutoff > 2.0 {
@@ -241,8 +252,8 @@ pub fn draw_structure(
                 let min_bond_dist = 0.4;
 
                 if dist > min_bond_dist && dist < max_bond_dist {
-                    let (raw_r1, _) = get_atom_properties(&r1.element);
-                    let (raw_r2, _) = get_atom_properties(&r2.element);
+                    let raw_r1 = get_covalent_radius(&r1.element);
+                    let raw_r2 = get_covalent_radius(&r2.element);
 
                     let mult1 = tab.override_radius_scale(r1.original_index);
                     let mult2 = tab.override_radius_scale(r2.original_index);
@@ -301,7 +312,7 @@ pub fn draw_structure(
     // ========================================================================
     // STEP 4: Draw Polyhedra (background — behind bonds and atoms)
     // ========================================================================
-    draw_all_polyhedra(cr, atoms, tab, scale);
+    draw_all_polyhedra(cr, atoms, tab, scale, color_scheme);
 
     // ========================================================================
     // STEP 5: Draw Bonds (on top of polyhedra)
@@ -326,7 +337,8 @@ pub fn draw_structure(
     let mut cache_access = tab.style.atom_cache.borrow_mut();
 
     for atom in render_atoms {
-        let (raw_r, default_rgb) = get_atom_properties(&atom.element);
+        let raw_r = get_covalent_radius(&atom.element);
+        let default_rgb = get_element_color(&atom.element, color_scheme);
 
         // Per-atom override beats every color mode — this is exactly what the
         // user just set in the Atom Instances dialog, so respect it everywhere

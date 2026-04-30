@@ -192,7 +192,7 @@ pub fn setup_drawing(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) {
             scene::calculate_scene(tab, &st.config, w, h, false, None, None);
 
         painter::draw_unit_cell(cr, &lattice_corners, false);
-        painter::draw_structure(cr, &render_atoms, tab, bounds.scale, false);
+        painter::draw_structure(cr, &render_atoms, tab, bounds.scale, false, st.config.color_scheme);
         painter::draw_axes(cr, tab, w, h);
     });
 }
@@ -249,6 +249,7 @@ pub fn export_png_advanced(
         img_width,
         img_height,
         &settings,
+        st.config.color_scheme,
     );
 
     // Write to file
@@ -307,6 +308,7 @@ pub fn export_pdf_advanced(
         img_width,
         img_height,
         &settings,
+        st.config.color_scheme,
     );
 
     // Finalize PDF
@@ -360,6 +362,7 @@ pub fn export_svg_advanced(
         img_width,
         img_height,
         &settings,
+        st.config.color_scheme,
     );
 
     // Finalize SVG
@@ -435,6 +438,7 @@ fn draw_export_content(
     width: f64,
     height: f64,
     settings: &ExportSettings,
+    color_scheme: crate::model::elements::ColorScheme,
 ) {
     // Unit cell
     if settings.include_unit_cell {
@@ -442,7 +446,7 @@ fn draw_export_content(
     }
 
     // Structure (atoms + bonds)
-    painter::draw_structure(cr, render_atoms, tab, scale, true);
+    painter::draw_structure(cr, render_atoms, tab, scale, true, color_scheme);
 
     // Miller planes
     if settings.include_miller_planes && !tab.miller_planes.is_empty() {
