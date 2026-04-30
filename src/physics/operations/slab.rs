@@ -174,6 +174,10 @@ pub fn generate_slab(
             element,
             position: [cart_pos.x, cart_pos.y, cart_pos.z],
             original_index: idx,
+            // Slab construction is by element + lattice transform; per-atom
+            // oxidation hints from the source aren't tracked through the
+            // tuple pipeline. BVS will fall back to inference.
+            oxidation: None,
         });
     }
 

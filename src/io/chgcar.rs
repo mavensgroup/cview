@@ -80,6 +80,7 @@ impl ChgcarData {
                 element: a.element.clone(),
                 position: a.frac_coords,
                 original_index: i,
+                oxidation: None,
             })
             .collect();
         crate::model::structure::Structure {

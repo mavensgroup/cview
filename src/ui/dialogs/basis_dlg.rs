@@ -9,12 +9,19 @@ use gtk4::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Returns the selected original indices, sorted. Since selected_indices now stores
-/// original_index directly (not unique_id), this is a simple sorted collect.
+/// Returns the unique base-atom indices for the current selection. Selection
+/// is keyed by per-instance `unique_id`, so several ghost copies can map to
+/// the same `original_index` — dedupe before passing to basis ops.
 fn resolve_selected_original_indices(state: &AppState) -> Vec<usize> {
     let tab = state.active_tab();
-    let mut result: Vec<usize> = tab.interaction.selected_indices.iter().cloned().collect();
+    let mut result: Vec<usize> = tab
+        .interaction
+        .selected
+        .values()
+        .map(|s| s.original_index)
+        .collect();
     result.sort_unstable();
+    result.dedup();
     result
 }
 
@@ -98,8 +105,7 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
     // 1. UPDATE LABEL ON OPEN
     {
         let s = state.borrow();
-        let st = s.active_tab();
-        let n = st.interaction.selected_indices.len();
+        let n = resolve_selected_original_indices(&s).len();
         lbl_count.set_text(&format!("{} atoms selected", n));
         btn_change.set_sensitive(n > 0);
     }

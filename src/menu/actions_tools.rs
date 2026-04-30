@@ -2,7 +2,7 @@
 
 use crate::physics::operations::conversion::{convert_structure, CellType};
 use crate::state::AppState;
-use crate::ui::dialogs::{basis_dlg, miller_dlg, supercell_dlg};
+use crate::ui::dialogs::{atom_instances_dlg, basis_dlg, miller_dlg, supercell_dlg};
 use crate::utils::console;
 use gtk4::prelude::*;
 use gtk4::{Application, ApplicationWindow, DrawingArea, Notebook};
@@ -49,6 +49,23 @@ pub fn setup(
         }
     });
     app.add_action(&basis_action);
+
+    // --- ATOM INSTANCES ---
+    let inst_action = gtk4::gio::SimpleAction::new("atom_instances", None);
+    let win_weak_i = window.downgrade();
+    let state_weak_i = Rc::downgrade(&state);
+    let nb_weak_i = notebook.downgrade();
+
+    inst_action.connect_activate(move |_, _| {
+        if let Some(win) = win_weak_i.upgrade() {
+            if let Some(st) = state_weak_i.upgrade() {
+                if let Some(nb) = nb_weak_i.upgrade() {
+                    atom_instances_dlg::show(&win, st, &nb);
+                }
+            }
+        }
+    });
+    app.add_action(&inst_action);
 
     // --- MILLER PLANES ---
     let mil_action = gtk4::gio::SimpleAction::new("miller_planes", None);

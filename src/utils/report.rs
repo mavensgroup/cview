@@ -1,10 +1,7 @@
 // src/utils/report.rs
 
-use crate::model::bvs::get_bvs_params;
 use crate::model::structure::Structure;
-use crate::physics::bond_valence::{
-  calculate_bvs_auto, calculate_structure_quality, get_ideal_oxidation_state, BVSQuality,
-};
+use crate::physics::bond_valence::{analyze_structure, BVSQuality};
 use crate::utils::geometry;
 use std::collections::{HashMap, HashSet};
 
@@ -53,199 +50,148 @@ pub fn structure_summary(structure: &Structure, filename: &str) -> String {
 // ─── BVS analysis ────────────────────────────────────────────────────────────
 
 pub fn bvs_analysis(structure: &Structure) -> String {
+  let r = analyze_structure(structure);
+  let quality = BVSQuality::from_deviation(r.mean_abs_dev);
   let mut out = String::new();
 
-  out.push_str("═══════════════════════════════════════════════════\n");
-  out.push_str("           BOND VALENCE SUM ANALYSIS\n");
-  out.push_str("═══════════════════════════════════════════════════\n\n");
+  out.push_str("═══════════════════════════════════════════════════════════════\n");
+  out.push_str("                  BOND VALENCE SUM ANALYSIS\n");
+  out.push_str("═══════════════════════════════════════════════════════════════\n\n");
 
-  let (avg_dev, max_dev, count) = calculate_structure_quality(structure);
-  let quality = BVSQuality::from_deviation(avg_dev);
-
-  out.push_str(&format!("Validated atoms:   {}\n", count));
-  out.push_str(&format!("Average deviation: {:.3} v.u.\n", avg_dev));
-  out.push_str(&format!("Maximum deviation: {:.3} v.u.\n", max_dev));
+  out.push_str(&format!("Atoms:                {}\n", structure.atoms.len()));
+  out.push_str(&format!("Validated:            {}\n", r.validated));
+  out.push_str(&format!("Mean |Δ|:             {:.3} v.u.\n", r.mean_abs_dev));
+  out.push_str(&format!("Max  |Δ|:             {:.3} v.u.\n", r.max_abs_dev));
   out.push_str(&format!(
-    "Overall quality:   {} {}\n\n",
+    "GII (√⟨Δ²⟩):          {:.3} v.u.\n",
+    r.gii
+  ));
+  out.push_str(&format!(
+    "Overall quality:      {} {}\n\n",
     quality.symbol(),
     quality.as_str()
   ));
 
-  out.push_str("─────────────────────────────────────────────────────────────\n");
+  // Tabulate atoms in worst-deviation-first order. Atoms with no expected
+  // valence (V=0) sink to the bottom — they don't contribute to GII.
+  let mut order: Vec<usize> = (0..r.atoms.len()).collect();
+  order.sort_by(|&i, &j| {
+    let ai = &r.atoms[i];
+    let aj = &r.atoms[j];
+    let key = |a: &crate::physics::bond_valence::AtomBVS| -> (u8, f64) {
+      // Primary sort: known states first; secondary: |Δ| descending.
+      let cls = if a.is_unknown() { 1 } else { 0 };
+      (cls, -a.abs_deviation())
+    };
+    key(ai).partial_cmp(&key(aj)).unwrap_or(std::cmp::Ordering::Equal)
+  });
+
+  out.push_str("───────────────────────────────────────────────────────────────\n");
   out.push_str(&format!(
-    "{:<6} {:<4} {:<10} {:<10} {:<10} {:<8} {:<6}\n",
-    "Index", "Elem", "BVS Calc", "Expected", "Deviation", "Status", "Params"
+    "{:<5} {:<4} {:>4} {:>8} {:>8} {:>8} {:>4} {:<8} {:<6}\n",
+    "Idx", "Elem", "Ox", "BVS", "Expect", "Δ", "CN", "Status", "Source"
   ));
-  out.push_str("─────────────────────────────────────────────────────────────\n");
+  out.push_str("───────────────────────────────────────────────────────────────\n");
 
-  let show_count = structure.atoms.len().min(30);
+  // Cap at 50 worst entries — long tables are noise. The summary stats
+  // above already capture the global picture.
+  const MAX_ROWS: usize = 50;
+  let shown = order.iter().copied().take(MAX_ROWS);
 
-  for i in 0..show_count {
+  for i in shown {
     let atom = &structure.atoms[i];
-    let bvs_calc = calculate_bvs_auto(structure, i);
-    let bvs_ideal = get_ideal_oxidation_state(&atom.element);
+    let a = r.atoms[i];
 
-    let deviation = if bvs_ideal > 0.1 {
-      (bvs_calc - bvs_ideal).abs()
+    let ox_str = if a.is_unknown() {
+      "?".to_string()
     } else {
-      0.0
+      format!("{:+}", a.assumed_v)
     };
 
-    let status = if bvs_ideal < 0.1 {
+    let status = if a.is_unknown() {
       "–"
-    } else if deviation < 0.15 {
-      "✓ Good"
-    } else if deviation < 0.40 {
-      "⚠ Warn"
     } else {
-      "✗ Poor"
+      let d = a.abs_deviation();
+      if d < 0.10 {
+        "✓ Excel"
+      } else if d < 0.20 {
+        "✓ Good"
+      } else if d < 0.40 {
+        "⚠ Warn"
+      } else {
+        "✗ Poor"
+      }
     };
 
-    let param_status = neighbor_param_source(structure, i);
-
     out.push_str(&format!(
-      "{:<6} {:<4} {:<10.3} {:<10.3} {:<10.3} {:<8} {:<6}\n",
-      i, atom.element, bvs_calc, bvs_ideal, deviation, status, param_status
+      "{:<5} {:<4} {:>4} {:>8.3} {:>8.3} {:>+8.3} {:>4} {:<8} {:<6}\n",
+      i,
+      atom.element,
+      ox_str,
+      a.bvs,
+      a.expected,
+      a.deviation(),
+      a.coordination,
+      status,
+      a.source.as_str()
     ));
   }
 
-  if structure.atoms.len() > 30 {
+  if r.atoms.len() > MAX_ROWS {
     out.push_str(&format!(
-      "... and {} more atoms.\n",
-      structure.atoms.len() - 30
+      "… {} more atoms not shown (sorted by |Δ| descending).\n",
+      r.atoms.len() - MAX_ROWS
     ));
   }
 
-  out.push_str("\nParams key: IUCr = experimental table  B&OK = Brese-O'Keeffe fallback\n");
+  out.push_str(
+    "\nSource: IUCr = bvparm2020 table   B&OK = Brese-O'Keeffe fallback\n",
+  );
+  out.push_str(
+    "Δ      = signed deviation BVS − expected (positive = over-bonded)\n",
+  );
+  out.push_str(
+    "CN     = coordination number (bonds with v_ij > 0.04 v.u.)\n",
+  );
+  out.push_str(
+    "GII    = Global Instability Index √⟨Δ²⟩ over validated atoms\n",
+  );
 
   if matches!(quality, BVSQuality::Poor | BVSQuality::Acceptable) {
     out.push_str("\n⚠ RECOMMENDATIONS:\n");
-    if avg_dev > 0.5 {
-      out.push_str("• Structure may have incorrect atom positions\n");
-      out.push_str("• Check if this is the asymmetric unit (needs full cell)\n");
-      out.push_str("• Try 'View → Show Full Unit Cell' to include periodic images\n");
+    if r.mean_abs_dev > 0.5 {
+      out.push_str("• Likely incorrect atom positions or wrong oxidation states\n");
+      out.push_str("• If only the asymmetric unit was provided, expand symmetry first\n");
+      out.push_str("• Use 'View → Show Full Unit Cell' to verify periodic images\n");
     } else {
-      out.push_str("• Mild distortion — common in DFT-relaxed or experimental structures\n");
+      out.push_str("• Mild distortion — common in DFT-relaxed and experimental structures\n");
     }
-    let bok_count = (0..structure.atoms.len())
-      .filter(|&i| neighbor_param_source(structure, i) == "B&OK")
+    let bok_count = r
+      .atoms
+      .iter()
+      .filter(|a| {
+        matches!(
+          a.source,
+          crate::physics::bond_valence::ParamSource::BresOKeeffe
+        )
+      })
       .count();
-    if bok_count > structure.atoms.len() / 2 {
-      out.push_str("• Many bonds use Brese-O'Keeffe fallback (less accurate than IUCr table)\n");
+    if bok_count > r.atoms.len() / 2 {
+      out.push_str(
+        "• Most bonds rely on the Brese-O'Keeffe fallback — table coverage is sparse here\n",
+      );
+    }
+    let unknown = r.atoms.iter().filter(|a| a.is_unknown()).count();
+    if unknown > 0 {
+      out.push_str(&format!(
+        "• {} atom(s) have no expected oxidation state — pass explicit charges in CIF if known\n",
+        unknown
+      ));
     }
   }
 
-  out.push_str("\n═══════════════════════════════════════════════════\n");
+  out.push_str("\n═══════════════════════════════════════════════════════════════\n");
   out
-}
-
-// ─── Internal helpers ────────────────────────────────────────────────────────
-
-/// Anion / cation classification matching calculator.rs
-fn is_anion(element: &str) -> bool {
-  matches!(
-    element,
-    "O" | "S" | "Se" | "Te" | "F" | "Cl" | "Br" | "I" | "N" | "P" | "As" | "H"
-  )
-}
-
-/// Returns "IUCr", "B&OK", or "n/a" for the closest valid bond of atom i.
-/// IUCr = exact match in the bvparm2020 table.
-/// B&OK = Brese-O'Keeffe empirical fallback.
-///
-/// Detection: call get_bvs_params with val=9 for both elements (forces B&OK).
-/// If the real call's R0 differs from the val=9 result, the real call hit
-/// the IUCr table.
-fn neighbor_param_source(structure: &Structure, atom_idx: usize) -> &'static str {
-  const CUTOFF_SQ: f64 = 6.0 * 6.0;
-
-  let atom = &structure.atoms[atom_idx];
-  let pos_a = atom.position;
-
-  let mut best_dist_sq = f64::MAX;
-  let mut best_src: &'static str = "n/a";
-
-  for (j, neighbor) in structure.atoms.iter().enumerate() {
-    if j == atom_idx {
-      continue;
-    }
-
-    let pos_b = neighbor.position;
-    let dx = pos_b[0] - pos_a[0];
-    let dy = pos_b[1] - pos_a[1];
-    let dz = pos_b[2] - pos_a[2];
-    let dist_sq = dx * dx + dy * dy + dz * dz;
-    if !(0.25..=CUTOFF_SQ).contains(&dist_sq) {
-      continue;
-    }
-
-    // Determine cation/anion
-    let (cation, anion) = if !is_anion(&atom.element) && is_anion(&neighbor.element) {
-      (atom.element.as_str(), neighbor.element.as_str())
-    } else if is_anion(&atom.element) && !is_anion(&neighbor.element) {
-      (neighbor.element.as_str(), atom.element.as_str())
-    } else {
-      continue;
-    };
-
-    let src = param_source(cation, anion);
-    if dist_sq < best_dist_sq && src != "n/a" {
-      best_dist_sq = dist_sq;
-      best_src = src;
-    }
-  }
-
-  best_src
-}
-
-/// Distinguish IUCr table hit from B&OK fallback for a cation-anion pair.
-fn param_source(cation: &str, anion: &str) -> &'static str {
-  // Common anion valences
-  let anion_vals: &[i32] = match anion {
-    "O" | "S" | "Se" | "Te" => &[-2],
-    "F" | "Cl" | "Br" | "I" => &[-1],
-    "N" | "P" | "As" => &[-3],
-    "H" => &[-1],
-    _ => &[9],
-  };
-
-  // Try real valence combinations
-  let cation_vals: &[i32] = match cation {
-    "H" | "Li" | "Na" | "K" | "Rb" | "Cs" | "Ag" => &[1],
-    "Cu" => &[2, 1],
-    "Be" | "Mg" | "Ca" | "Sr" | "Ba" | "Ra" | "Zn" | "Cd" | "Hg" => &[2],
-    "B" | "Al" | "Ga" | "In" | "Tl" | "La" | "Sc" | "Y" => &[3],
-    "Si" | "Ge" | "Ti" | "Zr" | "Hf" | "Sn" | "Pb" | "C" | "Th" => &[4],
-    "Nb" | "Ta" | "P" => &[5],
-    "Mo" | "W" | "Cr" => &[6, 3],
-    "Mn" => &[2, 3, 4],
-    "Fe" => &[3, 2],
-    "Co" | "Ni" => &[2, 3],
-    "V" => &[5, 4, 3],
-    _ => &[9],
-  };
-
-  // val=9 result is what B&OK produces
-  let fallback = get_bvs_params(cation, 9, anion, 9);
-
-  for &vc in cation_vals {
-    for &va in anion_vals {
-      if let Some(real) = get_bvs_params(cation, vc, anion, va) {
-        return match fallback {
-          Some(f) if (real.r0 - f.r0).abs() > 1e-6 => "IUCr",
-          None => "IUCr",
-          _ => "B&OK",
-        };
-      }
-    }
-  }
-
-  // Only val=9 available
-  if fallback.is_some() {
-    "B&OK"
-  } else {
-    "n/a"
-  }
 }
 
 // ─── Geometry analysis ───────────────────────────────────────────────────────

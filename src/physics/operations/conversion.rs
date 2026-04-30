@@ -94,6 +94,10 @@ pub fn convert_structure(structure: &Structure, cell_type: CellType) -> Result<S
             element,
             position,
             original_index: i,
+            // Moyo's primitive/conventional standardization keys atoms by Z;
+            // mixed-valence species at distinct sites are merged. Drop the
+            // oxidation hint here — downstream BVS will re-infer.
+            oxidation: None,
         });
     }
 

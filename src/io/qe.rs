@@ -106,6 +106,7 @@ fn parse_output(content: &str) -> io::Result<Structure> {
                         element: el,
                         position: pos,
                         original_index: atoms.len(),
+                        oxidation: None,
                     });
                 }
                 i += 1;
@@ -247,6 +248,7 @@ fn parse_input(content: &str) -> io::Result<Structure> {
                         element: el,
                         position: pos,
                         original_index: atoms.len(),
+                        oxidation: None,
                     });
                 }
                 i += 1;

@@ -255,7 +255,8 @@ pub fn calculate_scene(
         atom.screen_pos[1] = (atom.screen_pos[1] - box_cy) * final_scale + win_cy;
 
         let (raw_r, _) = crate::model::elements::get_atom_properties(&atom.element);
-        atom.screen_radius = raw_r * tab.style.atom_scale * final_scale;
+        let mult = tab.override_radius_scale(atom.original_index);
+        atom.screen_radius = raw_r * tab.style.atom_scale * mult * final_scale;
     }
 
     let final_corners: Vec<[f64; 2]> = rotated_corners

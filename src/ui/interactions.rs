@@ -1,7 +1,7 @@
 // src/ui/interactions.rs
 
 use crate::rendering::scene;
-use crate::state::AppState;
+use crate::state::{AppState, SelectedAtom};
 use crate::utils::{console, report};
 use gtk4::gdk;
 use gtk4::glib;
@@ -99,8 +99,8 @@ pub fn setup_interactions(
         let is_shift = st.active_tab().interaction.is_shift_pressed;
 
         if is_shift {
-            let tab = st.active_tab_mut();
-            if let Some((start, _)) = tab.interaction.selection_box {
+            let selection_box = st.active_tab().interaction.selection_box;
+            if let Some((start, _)) = selection_box {
                 let end_x = start.0 + x;
                 let end_y = start.1 + y;
                 let min_x = start.0.min(end_x);
@@ -111,21 +111,37 @@ pub fn setup_interactions(
                 let w = da.width() as f64;
                 let h = da.height() as f64;
 
+                let show_ghosts = st.active_tab().view.show_full_unit_cell;
                 let (atoms, _, _) =
                     scene::calculate_scene(st.active_tab(), &st.config, w, h, false, None, None);
 
                 let tab_mut = st.active_tab_mut();
                 let mut count = 0;
                 for atom in atoms {
+                    // Ghost shells used only for coordination math are never
+                    // drawn, so they must not be selectable.
+                    if atom.is_coord_only {
+                        continue;
+                    }
+                    if atom.is_ghost && !show_ghosts {
+                        continue;
+                    }
                     let ax = atom.screen_pos[0];
                     let ay = atom.screen_pos[1];
 
                     if ax >= min_x && ax <= max_x && ay >= min_y && ay <= max_y {
-                        tab_mut
-                            .interaction
-                            .selected_indices
-                            .insert(atom.original_index);
-                        count += 1;
+                        use std::collections::hash_map::Entry;
+                        if let Entry::Vacant(v) =
+                            tab_mut.interaction.selected.entry(atom.unique_id)
+                        {
+                            v.insert(SelectedAtom {
+                                unique_id: atom.unique_id,
+                                original_index: atom.original_index,
+                                cart_pos: atom.cart_pos,
+                                element: atom.element.clone(),
+                            });
+                            count += 1;
+                        }
                     }
                 }
 
@@ -176,6 +192,8 @@ pub fn setup_interactions(
         let w = widget.width() as f64;
         let h = widget.height() as f64;
 
+        let show_ghosts = st.active_tab().view.show_full_unit_cell;
+
         let (atoms, _, _) =
             scene::calculate_scene(st.active_tab(), &st.config, w, h, false, None, None);
 
@@ -186,32 +204,46 @@ pub fn setup_interactions(
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        let mut clicked_original_index: Option<usize> = None;
+        let mut clicked: Option<SelectedAtom> = None;
         for atom in &sorted_atoms {
+            // Coordination-only ghosts are never drawn; never select them.
+            if atom.is_coord_only {
+                continue;
+            }
+            // Visible ghosts are only present on screen if "Show Full Unit Cell"
+            // is on. When it's off, don't allow clicking through to a hidden one.
+            if atom.is_ghost && !show_ghosts {
+                continue;
+            }
             let dx = atom.screen_pos[0] - x;
             let dy = atom.screen_pos[1] - y;
             let dist = (dx * dx + dy * dy).sqrt();
             if dist <= atom.screen_radius + 4.0 {
-                clicked_original_index = Some(atom.original_index);
+                clicked = Some(SelectedAtom {
+                    unique_id: atom.unique_id,
+                    original_index: atom.original_index,
+                    cart_pos: atom.cart_pos,
+                    element: atom.element.clone(),
+                });
                 break;
             }
         }
 
-        if let Some(original_idx) = clicked_original_index {
-            st.toggle_selection(original_idx);
+        if let Some(sel) = clicked {
+            st.toggle_selection(sel);
 
             let tab = st.active_tab();
-            if let Some(structure) = &tab.structure {
-                let mut selected_atoms: Vec<(usize, String, [f64; 3])> = Vec::new();
-                for &sel_idx in &tab.interaction.selected_indices {
-                    if let Some(atom) = structure.atoms.get(sel_idx) {
-                        selected_atoms.push((sel_idx, atom.element.clone(), atom.position));
-                    }
-                }
-                selected_atoms.sort_by_key(|a| a.0);
-                let text = report::geometry_analysis_from_positions(&selected_atoms);
-                console::info(&text);
-            }
+            // Use the cart_pos captured at selection time — ghost copies have
+            // positions distinct from structure.atoms[original_index].
+            let mut selected_atoms: Vec<(usize, String, [f64; 3])> = tab
+                .interaction
+                .selected
+                .values()
+                .map(|s| (s.unique_id, s.element.clone(), s.cart_pos))
+                .collect();
+            selected_atoms.sort_by_key(|a| a.0);
+            let text = report::geometry_analysis_from_positions(&selected_atoms);
+            console::info(&text);
 
             da.queue_draw();
         }

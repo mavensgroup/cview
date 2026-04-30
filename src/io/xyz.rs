@@ -78,6 +78,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
             element: el,
             position: [x, y, z],
             original_index: i,
+            oxidation: None,
         });
     }
 

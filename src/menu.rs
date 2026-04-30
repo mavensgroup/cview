@@ -77,6 +77,7 @@ pub fn build_menu_and_actions(
     let tools_menu = gtk4::gio::Menu::new();
     tools_menu.append(Some("Supercell..."), Some("app.supercell"));
     tools_menu.append(Some("Basis..."), Some("app.basis"));
+    tools_menu.append(Some("Atom Instances..."), Some("app.atom_instances"));
     tools_menu.append(Some("Miller Indices..."), Some("app.miller_planes"));
     tools_menu.append(
         Some("Toggle Primitive/Conventional"),

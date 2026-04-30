@@ -163,6 +163,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
                 element: element.clone(),
                 position,
                 original_index: atom_id,
+                oxidation: None,
             });
             atom_id += 1;
         }

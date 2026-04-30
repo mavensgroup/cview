@@ -153,6 +153,17 @@ pub fn setup(
                                             tab.original_structure = Some(structure.clone());
                                             tab.structure = Some(structure);
                                             tab.file_name = filename.clone();
+                                            // Replacing the structure in-place must reset
+                                            // every per-tab piece of state that referred
+                                            // to the previous structure — otherwise old
+                                            // selections appear as "pre-highlighted"
+                                            // atoms on the new one.
+                                            tab.interaction.selected.clear();
+                                            tab.interaction.undo_stack.clear();
+                                            tab.miller_planes.clear();
+                                            tab.kpath_result = None;
+                                            tab.void_result = None;
+                                            tab.invalidate_bvs_cache();
                                             replace_current_tab = true;
                                         } else {
                                             s.add_tab(structure, filename.clone());

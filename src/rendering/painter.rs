@@ -244,8 +244,10 @@ pub fn draw_structure(
                     let (raw_r1, _) = get_atom_properties(&r1.element);
                     let (raw_r2, _) = get_atom_properties(&r2.element);
 
-                    let r1_px = raw_r1 * tab.style.atom_scale * scale;
-                    let r2_px = raw_r2 * tab.style.atom_scale * scale;
+                    let mult1 = tab.override_radius_scale(r1.original_index);
+                    let mult2 = tab.override_radius_scale(r2.original_index);
+                    let r1_px = raw_r1 * tab.style.atom_scale * mult1 * scale;
+                    let r2_px = raw_r2 * tab.style.atom_scale * mult2 * scale;
 
                     let v_x = r2.screen_pos[0] - r1.screen_pos[0];
                     let v_y = r2.screen_pos[1] - r1.screen_pos[1];
@@ -326,37 +328,44 @@ pub fn draw_structure(
     for atom in render_atoms {
         let (raw_r, default_rgb) = get_atom_properties(&atom.element);
 
-        let rgb = match tab.style.color_mode {
-            ColorMode::Element => tab
-                .style
-                .element_colors
-                .get(&atom.element)
-                .copied()
-                .unwrap_or(default_rgb),
-            ColorMode::BondValence => {
-                if let Some(bvs_value) = tab.bvs_cache.get(atom.original_index) {
-                    let ideal = get_ideal_oxidation_state(&atom.element);
-                    get_bvs_color(
-                        *bvs_value,
-                        ideal,
-                        tab.style.bvs_threshold_good,
-                        tab.style.bvs_threshold_warn,
-                    )
-                } else {
-                    (0.7, 0.7, 0.7)
+        // Per-atom override beats every color mode — this is exactly what the
+        // user just set in the Atom Instances dialog, so respect it everywhere
+        // including BVS view.
+        let override_rgb = tab.override_color(atom.original_index);
+
+        let rgb = if let Some(c) = override_rgb {
+            c
+        } else {
+            match tab.style.color_mode {
+                ColorMode::Element => tab
+                    .style
+                    .element_colors
+                    .get(&atom.element)
+                    .copied()
+                    .unwrap_or(default_rgb),
+                ColorMode::BondValence => {
+                    if let Some(bvs_value) = tab.bvs_cache.get(atom.original_index) {
+                        let ideal = get_ideal_oxidation_state(&atom.element);
+                        get_bvs_color(
+                            *bvs_value,
+                            ideal,
+                            tab.style.bvs_threshold_good,
+                            tab.style.bvs_threshold_warn,
+                        )
+                    } else {
+                        (0.7, 0.7, 0.7)
+                    }
                 }
+                _ => default_rgb,
             }
-            _ => default_rgb,
         };
 
-        let target_atom_cov = raw_r * tab.style.atom_scale * scale;
+        let radius_mult = tab.override_radius_scale(atom.original_index);
+        let target_atom_cov = raw_r * tab.style.atom_scale * radius_mult * scale;
 
-        // Selection glow
-        if tab
-            .interaction
-            .selected_indices
-            .contains(&atom.original_index)
-        {
+        // Selection glow — keyed on per-instance unique_id so only the clicked
+        // ghost copy lights up, not every symmetry-equivalent corner.
+        if tab.interaction.selected.contains_key(&atom.unique_id) {
             cr.save().ok();
             let highlight_radius = target_atom_cov + 4.0;
             cr.set_source_rgba(1.0, 0.85, 0.0, 0.8);
@@ -372,7 +381,15 @@ pub fn draw_structure(
         }
 
         // Draw Atom (Vector vs Sprite)
-        if is_export || matches!(tab.style.color_mode, ColorMode::BondValence) {
+        // BVS view and per-atom color overrides both use the vector path —
+        // sprite cache is keyed by element+material, so a per-atom color
+        // change wouldn't get a fresh sprite without a more invasive cache-key
+        // rework. Vector draw is fast enough for the override case (typically
+        // a few atoms, not all of them).
+        if is_export
+            || matches!(tab.style.color_mode, ColorMode::BondValence)
+            || override_rgb.is_some()
+        {
             draw_atom_vector(
                 cr,
                 atom.screen_pos[0],

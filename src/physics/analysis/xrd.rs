@@ -209,6 +209,7 @@ mod tests {
                     element: e.to_string(),
                     position: p,
                     original_index: i,
+                    oxidation: None,
                 })
                 .collect(),
             formula: String::new(),

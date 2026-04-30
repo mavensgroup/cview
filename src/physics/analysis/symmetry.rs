@@ -322,6 +322,7 @@ mod tests {
                         element: e.to_string(),
                         position: [r.x, r.y, r.z],
                         original_index: i,
+                        oxidation: None,
                     }
                 })
                 .collect(),

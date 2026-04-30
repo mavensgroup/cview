@@ -5,7 +5,7 @@ use crate::config::{Config, RenderStyle};
 use crate::model::miller::MillerPlane;
 use crate::model::structure::Structure;
 use crate::physics::analysis::{kpath::KPathResult, voids::VoidResult};
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct ViewState {
@@ -58,9 +58,42 @@ impl Default for ViewState {
     }
 }
 
+/// One picked atom instance. Selection is keyed by `unique_id` from the
+/// renderer's scene pass, so each ghost copy at the cell boundary is a
+/// distinct selectable target. `cart_pos` is the actual world position of
+/// the clicked instance — required because ghost copies sit at cartesian
+/// offsets that differ from the underlying `structure.atoms[original_index]`.
+#[derive(Debug, Clone)]
+pub struct SelectedAtom {
+    pub unique_id: usize,
+    pub original_index: usize,
+    pub cart_pos: [f64; 3],
+    pub element: String,
+}
+
+/// Per-atom render override. Purely cosmetic — never written to any IO format.
+/// Keyed by `Atom` index in `Structure.atoms`. Lives only in the session;
+/// reload from file resets it. Use the Tools → Atom Instances dialog to edit.
+#[derive(Debug, Clone, Default)]
+pub struct AtomOverride {
+    /// Display label shown in tooltips/dialog (e.g. "Fe1", "Fe_oct"). Element
+    /// identity stays in `Atom.element`; this is just a tag for the user.
+    pub display_label: Option<String>,
+    /// RGB in 0..=1. When set, replaces the element's color at draw time.
+    pub color: Option<(f64, f64, f64)>,
+    /// Multiplier on the element's covalent radius. None ⇒ 1.0.
+    pub radius_scale: Option<f64>,
+}
+
+impl AtomOverride {
+    pub fn is_empty(&self) -> bool {
+        self.display_label.is_none() && self.color.is_none() && self.radius_scale.is_none()
+    }
+}
+
 #[derive(Default)]
 pub struct InteractionState {
-    pub selected_indices: HashSet<usize>,
+    pub selected: HashMap<usize, SelectedAtom>,
     pub undo_stack: Vec<Structure>,
     pub is_shift_pressed: bool,
     pub selection_box: Option<((f64, f64), (f64, f64))>,
@@ -78,6 +111,9 @@ pub struct TabState {
     pub void_result: Option<VoidResult>,
     pub bvs_cache: Vec<f64>,
     pub bvs_cache_valid: bool,
+    /// Per-atom cosmetic overrides keyed by index into `structure.atoms`.
+    /// Indices that aren't present here render with element defaults.
+    pub overrides: HashMap<usize, AtomOverride>,
 }
 
 impl TabState {
@@ -94,7 +130,29 @@ impl TabState {
             void_result: None,
             bvs_cache: Vec::new(),
             bvs_cache_valid: false,
+            overrides: HashMap::new(),
         }
+    }
+
+    /// Color to use for atom at `index`: override if present, else None
+    /// (caller falls back to element/BVS color).
+    pub fn override_color(&self, index: usize) -> Option<(f64, f64, f64)> {
+        self.overrides.get(&index).and_then(|o| o.color)
+    }
+
+    /// Multiplier on covalent radius for atom at `index` (defaults to 1.0).
+    pub fn override_radius_scale(&self, index: usize) -> f64 {
+        self.overrides
+            .get(&index)
+            .and_then(|o| o.radius_scale)
+            .unwrap_or(1.0)
+    }
+
+    /// Display label for atom at `index`, or `None` if unset.
+    pub fn override_label(&self, index: usize) -> Option<&str> {
+        self.overrides
+            .get(&index)
+            .and_then(|o| o.display_label.as_deref())
     }
 
     pub fn invalidate_bvs_cache(&mut self) {
@@ -178,33 +236,45 @@ impl AppState {
         }
     }
 
-    pub fn toggle_selection(&mut self, atom_index: usize) {
+    pub fn toggle_selection(&mut self, atom: SelectedAtom) {
         let tab = self.active_tab_mut();
-        if tab.interaction.selected_indices.contains(&atom_index) {
-            tab.interaction.selected_indices.remove(&atom_index);
-        } else {
-            tab.interaction.selected_indices.insert(atom_index);
+        if tab.interaction.selected.remove(&atom.unique_id).is_none() {
+            tab.interaction.selected.insert(atom.unique_id, atom);
         }
     }
 
     pub fn delete_selected(&mut self) -> String {
         let tab = self.active_tab_mut();
-        if tab.interaction.selected_indices.is_empty() {
+        if tab.interaction.selected.is_empty() {
             return "No atoms selected.".to_string();
         }
         if let Some(ref mut structure) = tab.structure {
             tab.interaction.undo_stack.push(structure.clone());
-            let mut indices: Vec<usize> =
-                tab.interaction.selected_indices.iter().copied().collect();
+
+            // Multiple ghost copies share an original_index — dedupe before deleting,
+            // otherwise we'd try to remove the same atom multiple times.
+            let mut indices: Vec<usize> = tab
+                .interaction
+                .selected
+                .values()
+                .map(|s| s.original_index)
+                .collect();
+            indices.sort_unstable();
+            indices.dedup();
+            let count = indices.len();
+            // Remove from highest index first to keep earlier indices valid.
             indices.sort_by(|a, b| b.cmp(a));
             for &idx in &indices {
                 if idx < structure.atoms.len() {
                     structure.atoms.remove(idx);
                 }
             }
-            tab.interaction.selected_indices.clear();
+            tab.interaction.selected.clear();
             tab.invalidate_bvs_cache();
-            format!("Deleted {} atom(s)", indices.len())
+            // Atom indices shifted — overrides keyed on those indices are no
+            // longer meaningful. Drop them rather than try to remap.
+            tab.overrides.clear();
+            format!("Deleted {} atom(s)", count)
         } else {
             "No structure loaded.".to_string()
         }
@@ -214,8 +284,12 @@ impl AppState {
         let tab = self.active_tab_mut();
         if let Some(prev_structure) = tab.interaction.undo_stack.pop() {
             tab.structure = Some(prev_structure);
-            tab.interaction.selected_indices.clear();
+            tab.interaction.selected.clear();
             tab.invalidate_bvs_cache();
+            // Same reasoning as `delete_selected`: undo can shift atom counts
+            // and indices, so any overrides that pointed to the post-delete
+            // arrangement are stale.
+            tab.overrides.clear();
             "Undo successful.".to_string()
         } else {
             "Nothing to undo.".to_string()

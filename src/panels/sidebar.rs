@@ -104,7 +104,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
     // SECTION 1: VIEW CONTROLS
     // ============================================================
     let controls_expander = Expander::new(Some("View Controls"));
-    controls_expander.set_expanded(true);
+    controls_expander.set_expanded(false);
 
     let controls_box = GtkBox::new(Orientation::Vertical, 15);
     controls_box.set_margin_top(10);
@@ -186,13 +186,14 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
     ));
 
     controls_expander.set_child(Some(&controls_box));
-    root_vbox.append(&controls_expander);
+    // The View Controls panel is appended below (after Appearance) so the
+    // sidebar reads Appearance → View Controls → Bond Valence top-down.
 
     // ============================================================
     // SECTION 2: APPEARANCE
     // ============================================================
     let style_expander = Expander::new(Some("Appearance"));
-    style_expander.set_expanded(false);
+    style_expander.set_expanded(true);
 
     let style_box = GtkBox::new(Orientation::Vertical, 15);
     style_box.set_margin_top(10);
@@ -383,6 +384,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
 
     style_expander.set_child(Some(&style_box));
     root_vbox.append(&style_expander);
+    root_vbox.append(&controls_expander);
 
     // ============================================================
     // SECTION 3: BOND VALENCE
@@ -451,45 +453,87 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
 
     bvs_box.append(&Separator::new(Orientation::Horizontal));
 
-    // Good Threshold Slider
-    let s_good = state.clone();
-    let nb_good = nb_weak.clone();
-    let cb_good = queue_active_draw;
-    bvs_box.append(&create_slider(
+    // The two BVS-coloring thresholds must satisfy `warn ≥ good + MIN_GAP` —
+    // otherwise the gradient zone (good→warn) inverts and the painter shows
+    // contradictory colors. We enforce this by linking the two scales: each
+    // callback nudges the other when the user crosses the boundary.
+    const STEP: f64 = 0.01;
+    const MIN_GAP: f64 = 0.05;
+
+    let mk_threshold_row =
+        |label: &str, min: f64, max: f64, val: f64| -> (GtkBox, Scale) {
+            let b = GtkBox::new(Orientation::Vertical, 2);
+            b.append(&Label::builder().label(label).halign(Align::Start).build());
+            let adj = Adjustment::new(val, min, max, STEP, STEP, 0.0);
+            let scale = Scale::new(Orientation::Horizontal, Some(&adj));
+            scale.add_css_class("thin-slider");
+            scale.set_digits(2);
+            scale.set_draw_value(true);
+            scale.set_value_pos(gtk4::PositionType::Right);
+            b.append(&scale);
+            (b, scale)
+        };
+
+    let (good_row, good_scale) = mk_threshold_row(
         "Good Threshold",
         0.05,
         0.30,
-        0.01,
         state.borrow().active_tab().style.bvs_threshold_good,
-        Box::new(move |v| {
-            s_good
-                .borrow_mut()
-                .active_tab_mut()
-                .style
-                .bvs_threshold_good = v;
-            cb_good(&nb_good);
-        }),
-    ));
-
-    // Warning Threshold Slider
-    let s_warn = state.clone();
-    let nb_warn = nb_weak.clone();
-    let cb_warn = queue_active_draw;
-    bvs_box.append(&create_slider(
+    );
+    let (warn_row, warn_scale) = mk_threshold_row(
         "Warning Threshold",
         0.20,
         0.60,
-        0.01,
         state.borrow().active_tab().style.bvs_threshold_warn,
-        Box::new(move |v| {
-            s_warn
-                .borrow_mut()
-                .active_tab_mut()
-                .style
-                .bvs_threshold_warn = v;
-            cb_warn(&nb_warn);
-        }),
-    ));
+    );
+
+    let s_good = state.clone();
+    let nb_good = nb_weak.clone();
+    let warn_scale_w = warn_scale.downgrade();
+    good_scale.connect_value_changed(move |sc| {
+        let raw = sc.value();
+        let snapped = (raw / STEP).round() * STEP;
+        if (raw - snapped).abs() > 0.0001 {
+            sc.set_value(snapped);
+            return;
+        }
+        // Enforce warn ≥ good + MIN_GAP by lifting warn if needed.
+        if let Some(warn_sc) = warn_scale_w.upgrade() {
+            if warn_sc.value() < snapped + MIN_GAP {
+                warn_sc.set_value(snapped + MIN_GAP);
+                // The warn callback will fire and persist its own state.
+            }
+        }
+        let mut st = s_good.borrow_mut();
+        st.active_tab_mut().style.bvs_threshold_good = snapped;
+        drop(st);
+        queue_active_draw(&nb_good);
+    });
+
+    let s_warn = state.clone();
+    let nb_warn = nb_weak.clone();
+    let good_scale_w = good_scale.downgrade();
+    warn_scale.connect_value_changed(move |sc| {
+        let raw = sc.value();
+        let snapped = (raw / STEP).round() * STEP;
+        if (raw - snapped).abs() > 0.0001 {
+            sc.set_value(snapped);
+            return;
+        }
+        // Enforce warn ≥ good + MIN_GAP by lowering good if needed.
+        if let Some(good_sc) = good_scale_w.upgrade() {
+            if good_sc.value() > snapped - MIN_GAP {
+                good_sc.set_value(snapped - MIN_GAP);
+            }
+        }
+        let mut st = s_warn.borrow_mut();
+        st.active_tab_mut().style.bvs_threshold_warn = snapped;
+        drop(st);
+        queue_active_draw(&nb_warn);
+    });
+
+    bvs_box.append(&good_row);
+    bvs_box.append(&warn_row);
 
     // Help Text
     // let help_text = Label::new(Some(

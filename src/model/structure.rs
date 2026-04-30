@@ -8,6 +8,17 @@ pub struct Atom {
     // but for the supercell we essentially create "new" atoms.
     #[serde(skip)]
     pub original_index: usize,
+    /// Formal oxidation state when known from the source file.
+    ///
+    /// `Some(n)` — the parser found an explicit charge (e.g. CIF
+    /// `_atom_site_type_symbol = "Fe3+"`, `"O2-"`). Consumers like the
+    /// Bond-Valence-Sum calculator use this directly instead of guessing.
+    ///
+    /// `None` — unknown; downstream code falls back to a priority-list of
+    /// plausible valences. Set by parsers that have no native field for
+    /// oxidation state (POSCAR, QE, XYZ).
+    #[serde(default)]
+    pub oxidation: Option<i32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

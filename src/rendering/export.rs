@@ -3,7 +3,7 @@
 // Publication-quality PNG, PDF, SVG exports with advanced features
 
 use super::{painter, scene};
-use crate::state::{AppState, TabState};
+use crate::state::{AppState, SelectedAtom, TabState};
 use gtk4::cairo;
 use gtk4::prelude::*;
 use gtk4::{DrawingArea, GestureClick, PropagationPhase};
@@ -143,22 +143,34 @@ pub fn setup_drawing(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) {
             None,
         );
 
-        let mut closest_index = None;
+        let show_ghosts = st.active_tab().view.show_full_unit_cell;
+        let mut closest: Option<SelectedAtom> = None;
         let mut min_dist = 40.0;
 
         for atom in render_atoms.iter() {
+            if atom.is_coord_only {
+                continue;
+            }
+            if atom.is_ghost && !show_ghosts {
+                continue;
+            }
             let dx = atom.screen_pos[0] - x;
             let dy = atom.screen_pos[1] - y;
             let dist = (dx * dx + dy * dy).sqrt();
 
             if dist < min_dist {
                 min_dist = dist;
-                closest_index = Some(atom.original_index);
+                closest = Some(SelectedAtom {
+                    unique_id: atom.unique_id,
+                    original_index: atom.original_index,
+                    cart_pos: atom.cart_pos,
+                    element: atom.element.clone(),
+                });
             }
         }
 
-        if let Some(idx) = closest_index {
-            st.toggle_selection(idx);
+        if let Some(sel) = closest {
+            st.toggle_selection(sel);
             da_clone.queue_draw();
         }
     });

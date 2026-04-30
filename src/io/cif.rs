@@ -43,6 +43,14 @@ pub fn parse(path: &str) -> io::Result<Structure> {
 
     let mut symmetry_ops: Vec<String> = Vec::new();
     let mut base_atoms: Vec<Atom> = Vec::new();
+    // Optional `_atom_type_*` loop side-table:
+    //   key   = `_atom_type_symbol` value as it appears in the CIF
+    //           (may include charge, e.g. "Fe3+", or be bare "Fe")
+    //   value = `_atom_type_oxidation_number` (integer, when present)
+    // Used as a *fallback* for atoms whose `_atom_site_type_symbol` carried
+    // no inline charge. Inline charge always wins.
+    let mut atom_type_ox: std::collections::HashMap<String, i32> =
+        std::collections::HashMap::new();
 
     let mut in_loop = false;
     let mut current_loop_headers: Vec<String> = Vec::new();
@@ -156,6 +164,17 @@ pub fn parse(path: &str) -> io::Result<Structure> {
                 || h.contains("_space_group_symop_operation_xyz")
         });
 
+        // _atom_type_* dictionary loop. Disambiguated from _atom_site_* by the
+        // absence of any _atom_site_ headers — _atom_type_ loops describe
+        // species, not coordinates.
+        let is_atom_type_loop = !is_atom_loop
+            && current_loop_headers
+                .iter()
+                .any(|h| h.contains("_atom_type_symbol"))
+            && current_loop_headers
+                .iter()
+                .any(|h| h.contains("_atom_type_oxidation_number"));
+
         if is_sym_loop {
             if let Some(op) = extract_symop_string(trimmed) {
                 symmetry_ops.push(op);
@@ -163,6 +182,27 @@ pub fn parse(path: &str) -> io::Result<Structure> {
         } else if is_atom_loop {
             if let Some(atom) = parse_atom_row(trimmed, &current_loop_headers) {
                 base_atoms.push(atom);
+            }
+        } else if is_atom_type_loop {
+            if let Some((sym, ox)) =
+                parse_atom_type_row(trimmed, &current_loop_headers)
+            {
+                atom_type_ox.insert(sym, ox);
+            }
+        }
+    }
+
+    // Apply _atom_type_oxidation_number fallback to atoms with no inline charge.
+    if !atom_type_ox.is_empty() {
+        for atom in base_atoms.iter_mut() {
+            if atom.oxidation.is_some() {
+                continue;
+            }
+            // Try a direct match against the bare element first; CIFs that use
+            // this loop typically key it on the bare symbol ("Fe" → 3) and
+            // leave _atom_site_type_symbol bare too.
+            if let Some(&ox) = atom_type_ox.get(&atom.element) {
+                atom.oxidation = Some(ox);
             }
         }
     }
@@ -214,6 +254,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
                     element: atom.element.clone(),
                     position: [wx, wy, wz],
                     original_index: idx,
+                    oxidation: atom.oxidation,
                 });
             }
         }
@@ -476,19 +517,144 @@ fn parse_atom_row(line: &str, headers: &[String]) -> Option<Atom> {
     };
 
     // IUCr rule: type_symbol takes precedence. Fall back to label component_0.
-    let element = if let Some(ts) = type_symbol_val {
-        normalize_element(ts)
+    // type_symbol carries the inline charge (e.g. "Fe3+"); label rarely does.
+    let (element, oxidation) = if let Some(ts) = type_symbol_val {
+        (normalize_element(ts), parse_oxidation_from_species(ts))
     } else if let Some(lbl) = label_val {
-        element_from_label(lbl)
+        (element_from_label(lbl), None)
     } else {
-        "X".to_string()
+        ("X".to_string(), None)
     };
 
     Some(Atom {
         element,
         position: [fx, fy, fz],
         original_index: 0,
+        oxidation,
     })
+}
+
+/// Parse one row of an `_atom_type_*` loop. Returns the (`_atom_type_symbol`,
+/// `_atom_type_oxidation_number`) pair when both columns are present and the
+/// oxidation column is an integer.
+fn parse_atom_type_row(line: &str, headers: &[String]) -> Option<(String, i32)> {
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    if parts.len() < 2 {
+        return None;
+    }
+
+    let mut symbol: Option<&str> = None;
+    let mut ox: Option<i32> = None;
+
+    for (i, header) in headers.iter().enumerate() {
+        if i >= parts.len() {
+            break;
+        }
+        let val = parts[i];
+        if header.contains("_atom_type_oxidation_number") {
+            // Integer or integral-valued float (CIFs often write "2.0").
+            let cleaned: String = val.chars().take_while(|c| *c != '(').collect();
+            ox = cleaned.parse::<i32>().ok().or_else(|| {
+                let f: f64 = cleaned.parse().ok()?;
+                if (f - f.round()).abs() < 1e-6 {
+                    Some(f.round() as i32)
+                } else {
+                    None
+                }
+            });
+        } else if header.contains("_atom_type_symbol") {
+            symbol = Some(val);
+        }
+    }
+
+    match (symbol, ox) {
+        (Some(s), Some(o)) => Some((s.to_string(), o)),
+        _ => None,
+    }
+}
+
+/// Extract the formal oxidation state from a CIF species string.
+///
+/// Accepts the canonical IUCr core-CIF form `Aa[n][s]` where `s ∈ {+, -}`
+/// (e.g. `"Fe3+"`, `"O2-"`), the inverted form `Aa[s][n]` (`"Fe+3"`,
+/// `"O-2"`), and parenthesized variants (`"Fe(3+)"`, `"Fe(+3)"`). A bare
+/// sign with no digit is treated as ±1 (`"Cl-"` → −1).
+///
+/// Returns `None` for:
+/// - no charge annotation,
+/// - non-integer oxidation states (`"Co3.5+"` mixed-valence shorthand),
+/// - Roman-numeral notation (`"Fe(III)"` — non-standard, locale-dependent),
+/// - any string that doesn't match the patterns above.
+fn parse_oxidation_from_species(s: &str) -> Option<i32> {
+    // Strip whitespace and one optional pair of surrounding parentheses around
+    // the charge segment. We handle "Fe(3+)" by removing parens around the
+    // trailing token only.
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // Drop the leading element letters (1–2 alphabetic chars).
+    let mut chars = trimmed.chars().peekable();
+    while let Some(&c) = chars.peek() {
+        if c.is_ascii_alphabetic() {
+            chars.next();
+        } else {
+            break;
+        }
+    }
+    let tail: String = chars.collect();
+    if tail.is_empty() {
+        return None;
+    }
+
+    // Strip a single pair of surrounding parentheses if present: "(3+)" → "3+".
+    let core = tail
+        .strip_prefix('(')
+        .and_then(|t| t.strip_suffix(')'))
+        .unwrap_or(&tail);
+
+    let bytes = core.as_bytes();
+    if bytes.is_empty() {
+        return None;
+    }
+
+    // Locate the sign character.
+    let (sign_idx, sign): (usize, i32) = match (
+        bytes.iter().position(|&b| b == b'+'),
+        bytes.iter().position(|&b| b == b'-'),
+    ) {
+        (Some(i), None) => (i, 1),
+        (None, Some(i)) => (i, -1),
+        // Both present, or neither: no parseable charge.
+        _ => return None,
+    };
+
+    // Magnitude is whatever digits surround the sign. Try after-sign first
+    // ("+3"), then before-sign ("3+"). Reject non-integer (decimal point).
+    let after = &core[sign_idx + 1..];
+    let before = &core[..sign_idx];
+
+    let parse_uint = |t: &str| -> Option<i32> {
+        let t = t.trim();
+        if t.is_empty() {
+            return None;
+        }
+        if t.contains('.') {
+            return None; // mixed-valence shorthand like "3.5"
+        }
+        t.parse::<i32>().ok().filter(|n| *n >= 0)
+    };
+
+    let magnitude: i32 = match (parse_uint(after), parse_uint(before)) {
+        (Some(n), _) => n,
+        (None, Some(n)) => n,
+        // Bare sign with no digit ("Cl-", "Na+") → ±1.
+        (None, None) if before.is_empty() && after.is_empty() => 1,
+        _ => return None,
+    };
+
+    Some(sign * magnitude)
 }
 
 /// Extract the element symbol from an `_atom_site_label` per IUCr component_0
@@ -622,4 +788,81 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_oxidation_inline_charge_n_then_sign() {
+        // Canonical IUCr form: element + magnitude + sign.
+        assert_eq!(parse_oxidation_from_species("Fe3+"), Some(3));
+        assert_eq!(parse_oxidation_from_species("O2-"), Some(-2));
+        assert_eq!(parse_oxidation_from_species("Ti4+"), Some(4));
+        assert_eq!(parse_oxidation_from_species("Ba2+"), Some(2));
+    }
+
+    #[test]
+    fn parse_oxidation_inline_charge_sign_then_n() {
+        // Inverted form some refinement programs emit.
+        assert_eq!(parse_oxidation_from_species("Fe+3"), Some(3));
+        assert_eq!(parse_oxidation_from_species("O-2"), Some(-2));
+    }
+
+    #[test]
+    fn parse_oxidation_bare_sign_means_one() {
+        assert_eq!(parse_oxidation_from_species("Cl-"), Some(-1));
+        assert_eq!(parse_oxidation_from_species("Na+"), Some(1));
+    }
+
+    #[test]
+    fn parse_oxidation_parens_tolerated() {
+        assert_eq!(parse_oxidation_from_species("Fe(3+)"), Some(3));
+        assert_eq!(parse_oxidation_from_species("O(2-)"), Some(-2));
+    }
+
+    #[test]
+    fn parse_oxidation_none_for_bare_or_fractional() {
+        assert_eq!(parse_oxidation_from_species("Fe"), None);
+        assert_eq!(parse_oxidation_from_species("O"), None);
+        // Mixed-valence shorthand isn't a single integer state.
+        assert_eq!(parse_oxidation_from_species("Co3.5+"), None);
+        // Roman numerals — non-standard, intentionally rejected.
+        assert_eq!(parse_oxidation_from_species("Fe(III)"), None);
+    }
+
+    #[test]
+    fn parses_batio3_with_inline_oxidation() {
+        // The repo ships BaTiO3.cif with inline charges in
+        // _atom_site_type_symbol. Verify the parser captures them.
+        let s = parse("../BaTiO3.cif").or_else(|_| parse("BaTiO3.cif"));
+        let s = match s {
+            Ok(s) => s,
+            Err(_) => return, // CIF not available in this run; test is opportunistic
+        };
+        // Every Ba/Ti/O in BaTiO3 should have an explicit oxidation state
+        // because the file uses Ba2+ / Ti4+ / O2- in _atom_site_type_symbol.
+        let mut seen_ba = false;
+        let mut seen_ti = false;
+        let mut seen_o = false;
+        for atom in &s.atoms {
+            match atom.element.as_str() {
+                "Ba" => {
+                    seen_ba = true;
+                    assert_eq!(atom.oxidation, Some(2), "Ba expected +2");
+                }
+                "Ti" => {
+                    seen_ti = true;
+                    assert_eq!(atom.oxidation, Some(4), "Ti expected +4");
+                }
+                "O" => {
+                    seen_o = true;
+                    assert_eq!(atom.oxidation, Some(-2), "O expected -2");
+                }
+                _ => {}
+            }
+        }
+        assert!(seen_ba && seen_ti && seen_o, "expected Ba/Ti/O atoms");
+    }
 }

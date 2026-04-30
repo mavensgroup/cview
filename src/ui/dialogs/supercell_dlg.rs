@@ -108,7 +108,7 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
                     if let Some(orig) = &tab.original_structure {
                         let new_s = supercell::transform(orig, mat);
                         tab.structure = Some(new_s);
-                        tab.interaction.selected_indices.clear();
+                        tab.interaction.selected.clear();
                         tab.invalidate_bvs_cache();
 
                         if let Some(nb) = notebook_weak.upgrade() {
@@ -121,7 +121,7 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
                 ResponseType::Reject => {
                     if let Some(orig) = &tab.original_structure {
                         tab.structure = Some(orig.clone());
-                        tab.interaction.selected_indices.clear();
+                        tab.interaction.selected.clear();
                         tab.invalidate_bvs_cache();
 
                         for (i, spin) in spins_final.iter().enumerate() {

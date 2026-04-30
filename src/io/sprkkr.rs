@@ -454,6 +454,7 @@ fn build_structure(data: SprkkrData) -> io::Result<Structure> {
                 element,
                 position,
                 original_index: atoms.len(),
+                oxidation: None,
             });
         }
     }
