@@ -66,7 +66,7 @@ pub fn analyze(structure: &Structure) -> Result<SymmetryInfo, String> {
 // =========================================================================
 // DATA: Space Group Symbols
 // =========================================================================
-const SG_SYMBOLS: [&str; 232] = [
+const SG_SYMBOLS: [&str; 231] = [
     "",
     "P1",
     "P-1",
@@ -282,7 +282,6 @@ const SG_SYMBOLS: [&str; 232] = [
     "P4_332",
     "P4_132",
     "I4_132",
-    "P4_132",
     "P-43m",
     "F-43m",
     "I-43m",
