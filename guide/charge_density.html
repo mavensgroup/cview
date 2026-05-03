@@ -56,7 +56,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3893ebfd.js";
+            window.path_to_searchindex_js = "../searchindex-d977ba75.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-dc41def0.js"></script>
@@ -224,6 +224,29 @@
 </blockquote>
 <h3 id="exporting"><a class="header" href="#exporting">Exporting</a></h3>
 <p>Slices can be instantly exported as high-resolution <code>png</code> or <code>pdf</code> images directly from the visualization tab, complete with isolines, heatmaps, and atomic projections.</p>
+<p><strong>Export Configuration</strong>: Settings (font sizes, colorbar tick labels, line thickness) are read <strong>live</strong> from the Preferences dialog at the moment you click export — not when the window opens. This ensures your exports always match your current preferences.</p>
+<hr>
+<h2 id="advanced-features"><a class="header" href="#advanced-features">Advanced Features</a></h2>
+<h3 id="picture-in-picture-3d-preview"><a class="header" href="#picture-in-picture-3d-preview">Picture-in-Picture 3D Preview</a></h3>
+<p>When viewing a 2D slice, CView displays a <strong>3D miniature</strong> of the full crystal structure in the corner of the canvas. This preview shows:</p>
+<ul>
+<li>The complete unit cell with atoms rendered</li>
+<li>The orientation of the current slice plane highlighted</li>
+<li>Real-time updates as you change the slice position or Miller indices</li>
+</ul>
+<p><strong>Purpose</strong>: Helps maintain spatial context when inspecting arbitrary $(hkl)$ planes — you always know where the slice is cutting through the structure.</p>
+<p><strong>Location</strong>: Top-right corner of the charge density window (semi-transparent overlay).</p>
+<h3 id="hkl-plane-polygon-clipping"><a class="header" href="#hkl-plane-polygon-clipping">HKL Plane Polygon Clipping</a></h3>
+<p>For <strong>Miller plane slices</strong> (non-orthogonal cuts), CView computes the exact intersection polygon:</p>
+<p><strong>Example</strong>: In a cubic cell, the $(111)$ plane intersects three edges → <strong>triangular slice region</strong></p>
+<p><strong>Implementation</strong>:</p>
+<ul>
+<li>Computes plane-cell boundary intersections geometrically</li>
+<li>Clips the heatmap and isolines to the polygon boundary</li>
+<li>Renders the polygon outline for clarity</li>
+</ul>
+<p>This ensures the 2D visualization accurately reflects the crystallographic geometry, not just a rectangular crop.</p>
+<p><strong>Visual cue</strong>: The slice boundary polygon is drawn in a contrasting color (e.g., white on dark background).</p>
 
                     </main>
 

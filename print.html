@@ -57,7 +57,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3893ebfd.js";
+            window.path_to_searchindex_js = "searchindex-d977ba75.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-dc41def0.js"></script>
@@ -222,7 +222,7 @@
 
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="cview-crystal-structure-visualization--analysis"><a class="header" href="#cview-crystal-structure-visualization--analysis">CView: Crystal Structure Visualization &amp; Analysis</a></h1>
-<p><img src="https://img.shields.io/badge/license-LGPLv3-blue.svg" alt="License">
+<p><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
 <img src="https://img.shields.io/badge/rust-1.70%2B-orange.svg" alt="Language">
 <img src="https://img.shields.io/badge/Toolkit-GTK4-46a946?logo=gtk&amp;logoColor=white" alt="GTK4">
 <img src="https://img.shields.io/badge/Linux-FCC624?logo=linux&amp;logoColor=black" alt="Linux">
@@ -289,7 +289,6 @@ cargo run --release
 <tbody>
 <tr><td style="text-align: left"><strong>Read</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td></tr>
 <tr><td style="text-align: left"><strong>Write</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟠</td><td style="text-align: center">🟠</td><td style="text-align: center">🟢</td></tr>
-<tr><td style="text-align: left"><strong>Relaxation</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🔴</td><td style="text-align: center">🔴</td></tr>
 </tbody>
 </table>
 </div>
@@ -387,8 +386,14 @@ cd cview
 cargo run --release
 
 </code></pre>
-<p>This will install <code>cview</code> in <code>~/bin</code> by default. For the subsequent run, just type <code>cview</code></p>
 <p>The first compilation may take a few minutes as it compiles the dependencies. Subsequent runs will be instant.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>To install <code>cview</code> as a system command (accessible from anywhere), use:</p>
+<pre><code class="language-bash">cargo install --path .
+</code></pre>
+<p>This places the binary in <code>~/.cargo/bin/</code> (ensure this is in your PATH).</p>
+</blockquote>
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
 <blockquote class="blockquote-tag blockquote-tag-caution">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M4.47.22A.749.749 0 0 1 5 0h6c.199 0 .389.079.53.22l4.25 4.25c.141.14.22.331.22.53v6a.749.749 0 0 1-.22.53l-4.25 4.25A.749.749 0 0 1 11 16H5a.749.749 0 0 1-.53-.22L.22 11.53A.749.749 0 0 1 0 11V5c0-.199.079-.389.22-.53Zm.84 1.28L1.5 5.31v5.38l3.81 3.81h5.38l3.81-3.81V5.31L10.69 1.5ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Caution</p>
@@ -475,6 +480,147 @@ CView automatically detects the file type based on extension and content. You ca
 <p>For publications and presentations, <code>CView</code> offers high-fidelity export options via the <code>File → Export (Ctrl + E)</code> menu.</p>
 <p>PNG Image: Renders a high-resolution raster image (default resolution: $2000\times 1500$ pixels). Ideal for slides and quick sharing.</p>
 <p>PDF Document: Exports the scene as a vector graphic. This is recommended for academic papers, as it allows for infinite scaling without loss of quality.</p>
+<hr>
+<h2 id="advanced-appearance-controls"><a class="header" href="#advanced-appearance-controls">Advanced Appearance Controls</a></h2>
+<h3 id="sidebar-overview"><a class="header" href="#sidebar-overview">Sidebar Overview</a></h3>
+<p>The <strong>Sidebar</strong> (right panel) is the primary control interface for customizing the visual representation. It contains several collapsible sections:</p>
+<ol>
+<li><strong>View Controls</strong>: Camera orientation, rotation center</li>
+<li><strong>Appearance</strong>: Atom size, bond thickness, colors</li>
+<li><strong>Bond Valence</strong>: BVS-based coloring (see <a href="#bond-valence-sum-bvs">BVS Guide</a>)</li>
+<li><strong>Atom List</strong>: Per-element visibility and transparency</li>
+</ol>
+<h3 id="color-modes"><a class="header" href="#color-modes">Color Modes</a></h3>
+<p>CView offers three distinct coloring schemes, accessible via the <strong>Color Mode</strong> dropdown in the sidebar:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Mode</th><th style="text-align: left">Description</th><th style="text-align: left">Use Case</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left"><strong>Element</strong></td><td style="text-align: left">Standard CPK colors (C=gray, O=red, etc.)</td><td style="text-align: left">General visualization, publication figures</td></tr>
+<tr><td style="text-align: left"><strong>Bond Valence</strong></td><td style="text-align: left">Heatmap based on oxidation state deviation</td><td style="text-align: left">Identifying strained bonds, charge transfer</td></tr>
+<tr><td style="text-align: left"><strong>Uniform</strong></td><td style="text-align: left">Single color for all atoms</td><td style="text-align: left">Minimalist renders, presentations</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Bond Valence Mode</strong>: Colors atoms by their BVS deviation:</p>
+<ul>
+<li><strong>Blue</strong>: Under-coordinated (BVS &lt; expected valence)</li>
+<li><strong>White</strong>: Ideal coordination (BVS ≈ expected valence)</li>
+<li><strong>Red</strong>: Over-coordinated (BVS &gt; expected valence)</li>
+</ul>
+<p>See the <a href="#bond-valence-sum-bvs">Bond Valence Sum Guide</a> for details on the calculation.</p>
+<h3 id="transparency-controls"><a class="header" href="#transparency-controls">Transparency Controls</a></h3>
+<p>Each element in the structure has an individual transparency slider in the <strong>Atom List</strong> section:</p>
+<ul>
+<li><strong>Use case</strong>: Highlight specific atomic species by making others semi-transparent</li>
+<li><strong>Example</strong>: In a LiCoO₂ battery cathode, make Li transparent to see the CoO₂ layers clearly</li>
+</ul>
+<p><strong>Tip</strong>: Combine transparency with polyhedra (see below) to visualize coordination environments.</p>
+<h3 id="bond-customization"><a class="header" href="#bond-customization">Bond Customization</a></h3>
+<p>The <strong>Bonds</strong> section in the sidebar controls:</p>
+<ul>
+<li><strong>Bond Radius</strong>: Thickness of bond cylinders (default: 0.1 Å)</li>
+<li><strong>Bond Cutoff</strong>: Maximum distance for drawing bonds (default: 2.5× covalent radius sum)</li>
+<li><strong>Bond Color</strong>: RGB picker for custom bond colors</li>
+</ul>
+<p>Bonds are drawn between atoms whose distance $d$ satisfies:
+$$
+d \leq \text{cutoff} \times (r_{\text{cov},A} + r_{\text{cov},B})
+$$
+where $r_{\text{cov}}$ are the covalent radii from the internal database.</p>
+<hr>
+<h2 id="coordination-polyhedra"><a class="header" href="#coordination-polyhedra">Coordination Polyhedra</a></h2>
+<p>CView can visualize <strong>coordination polyhedra</strong> around cation centers — a feature essential for understanding ionic and metal-oxide structures.</p>
+<h3 id="what-are-coordination-polyhedra"><a class="header" href="#what-are-coordination-polyhedra">What are Coordination Polyhedra?</a></h3>
+<p>A coordination polyhedron is the 3D shape formed by connecting the nearest-neighbor anions around a central cation. Common geometries include:</p>
+<ul>
+<li><strong>Tetrahedral</strong> (CN = 4): SiO₄ in silicates</li>
+<li><strong>Octahedral</strong> (CN = 6): TiO₆ in perovskites</li>
+<li><strong>Cubic</strong> (CN = 8): CsCl structure</li>
+</ul>
+<h3 id="accessing-polyhedra-controls"><a class="header" href="#accessing-polyhedra-controls">Accessing Polyhedra Controls</a></h3>
+<p><strong>Location</strong>: Sidebar → <strong>Appearance</strong> section → Polyhedra expander</p>
+<p><strong>Controls</strong>:</p>
+<ol>
+<li><strong>Auto-Detect</strong> button: Automatically enables polyhedra for elements with average coordination number 4–8</li>
+<li><strong>Per-element checkboxes</strong>: Manually enable/disable polyhedra for specific elements
+<ul>
+<li>Checkbox labels show the average CN (e.g., “Ti (CN 6)”)</li>
+</ul>
+</li>
+<li><strong>Transparency slider</strong>: Adjust polyhedra opacity (0–100%)</li>
+</ol>
+<h3 id="how-polyhedra-are-computed"><a class="header" href="#how-polyhedra-are-computed">How Polyhedra are Computed</a></h3>
+<p><strong>Algorithm</strong> (implemented in <code>rendering/polyhedra.rs</code>):</p>
+<ol>
+<li>Identify cation centers (user-selected or auto-detected)</li>
+<li>Find nearest anion neighbors within the bond cutoff distance</li>
+<li>Compute the <strong>convex hull</strong> of the anion positions</li>
+<li>Filter degenerate faces (coplanar vertices)</li>
+<li>Render with proper depth sorting (Polyhedra → Bonds → Atoms)</li>
+</ol>
+<p><strong>Critical detail</strong>: Polyhedra vertices are restricted to <strong>anions only</strong>. This prevents chemically meaningless polyhedra (e.g., around O in oxides).</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The two-tier ghost system ensures polyhedra are correctly computed across periodic boundaries — ghost atoms used for coordination detection are different from those rendered visually.</p>
+</blockquote>
+<h3 id="settings"><a class="header" href="#settings">Settings</a></h3>
+<p><strong>Coordination Number Filter</strong> (in <code>Preferences</code>):</p>
+<ul>
+<li><strong>Min CN</strong>: Minimum coordination to display (default: 4)</li>
+<li><strong>Max CN</strong>: Maximum coordination to display (default: 12)</li>
+<li>Filters out isolated atoms or highly over-coordinated sites</li>
+</ul>
+<p><strong>Color Mode</strong>:</p>
+<ul>
+<li><strong>Element</strong>: Polyhedra inherit the color of the central cation</li>
+<li><strong>Coordination</strong>: Color-coded by CN (e.g., CN=4 → yellow, CN=6 → blue)</li>
+</ul>
+<p><strong>Max Bond Distance</strong>: Hard cutoff in Ångströms for coordination bonds (overrides covalent radius heuristic)</p>
+<h3 id="practical-example-batio₃"><a class="header" href="#practical-example-batio₃">Practical Example: BaTiO₃</a></h3>
+<p>In the cubic perovskite BaTiO₃:</p>
+<ul>
+<li><strong>Ti⁴⁺</strong> is octahedrally coordinated by 6 oxygen atoms → <strong>TiO₆ octahedra</strong></li>
+<li><strong>Ba²⁺</strong> has 12-fold coordination → <strong>Cuboctahedral</strong> (can be hidden if noisy)</li>
+</ul>
+<p><strong>Workflow</strong>:</p>
+<ol>
+<li>Load BaTiO₃ structure</li>
+<li>Click “Auto-Detect” in the sidebar</li>
+<li>Ti polyhedra appear as blue octahedra</li>
+<li>Adjust transparency to see through to the unit cell</li>
+</ol>
+<p>This visualization immediately reveals the corner-sharing connectivity characteristic of perovskites.</p>
+<hr>
+<h2 id="keyboard-shortcuts"><a class="header" href="#keyboard-shortcuts">Keyboard Shortcuts</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Shortcut</th><th style="text-align: left">Action</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left"><code>Ctrl + O</code></td><td style="text-align: left">Open file</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + S</code></td><td style="text-align: left">Save structure</td></tr>
+<tr><td style="text-align: left"><code>Shift + Ctrl + S</code></td><td style="text-align: left">Save structure as…</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + E</code></td><td style="text-align: left">Export image (PNG/PDF)</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + T</code></td><td style="text-align: left">Toggle Primitive ↔ Conventional cell</td></tr>
+<tr><td style="text-align: left"><strong>Mouse scroll</strong></td><td style="text-align: left">Zoom in/out</td></tr>
+<tr><td style="text-align: left"><strong>Left-click drag</strong></td><td style="text-align: left">Rotate structure</td></tr>
+<tr><td style="text-align: left"><strong>Shift + click</strong></td><td style="text-align: left">Multi-select atoms</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="performance-notes"><a class="header" href="#performance-notes">Performance Notes</a></h2>
+<p>CView is optimized for <strong>CPU-based rendering</strong> using GTK4/Cairo:</p>
+<ul>
+<li>Smooth interaction up to ~5000 atoms</li>
+<li>Real-time rotation and zoom</li>
+<li>No GPU drivers required (runs on any laptop)</li>
+</ul>
+<p>For larger systems (e.g., nanoparticles, proteins), consider specialized GPU-accelerated tools like OVITO.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="analysis-tools"><a class="header" href="#analysis-tools">Analysis Tools</a></h1>
 <p>The Analysis module in CView aggregates tools designed to characterize the geometric, symmetric, and diffraction properties of the loaded crystal structure. Unlike simple visualization, these tools perform computational tasks to extract physical descriptors suitable for comparison with experimental data or preparation for <em>ab initio</em> calculations.</p>
@@ -578,7 +724,7 @@ I_{calc} &amp;= |F_{hkl}|^2 \times LP(\theta)
 <p>In powder diffraction, symmetry-equivalent planes (e.g., $(100)$ and $(010)$ in cubic systems) diffract at the same angle. The code algorithmically sorts peaks by $2\theta$ and merges peaks falling within a narrow tolerance ($0.05^\circ$), summing their intensities to account for multiplicity.</p>
 <h3 id="6-match-with-experiment"><a class="header" href="#6-match-with-experiment">6. Match with Experiment</a></h3>
 <p>You can load the experimental ascii/xlsx file to compare the xrd using the “<code>Load Experiment</code>” button.</p>
-<h2 id="settings"><a class="header" href="#settings">Settings</a></h2>
+<h2 id="settings-1"><a class="header" href="#settings-1">Settings</a></h2>
 <ul>
 <li><strong>Wavelength</strong>: Default fixed to Cu K$\alpha$ ($1.5406 Å$).</li>
 <li><strong>Range</strong>: $10^\circ$ to $90^\circ$ $2\theta$.</li>
@@ -635,8 +781,126 @@ $$D_{surf} &gt; R_{probe}$$</p>
 <p>The void fraction is calculated as:
 $$\phi = \frac{N_{void}}{N_{total}} \times 100%$$</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="miller-plane"><a class="header" href="#miller-plane">Miller Plane</a></h1>
-<p>To update later, but see <code>menu-&gt;tools</code></p>
+<h1 id="miller-planes"><a class="header" href="#miller-planes">Miller Planes</a></h1>
+<p>Miller indices $(hkl)$ are a standard notation for describing crystallographic planes. CView allows you to visualize these planes directly in the viewport and use them as input for <a href="#surface-slabs-building">slab generation</a>.</p>
+<hr>
+<h2 id="miller-index-notation"><a class="header" href="#miller-index-notation">Miller Index Notation</a></h2>
+<p>A Miller plane $(hkl)$ is defined by its intercepts with the lattice vectors $\mathbf{a}$, $\mathbf{b}$, $\mathbf{c}$:</p>
+<ul>
+<li>The plane intersects the <strong>a</strong>-axis at $\mathbf{a}/h$</li>
+<li>The plane intersects the <strong>b</strong>-axis at $\mathbf{b}/k$</li>
+<li>The plane intersects the <strong>c</strong>-axis at $\mathbf{c}/l$</li>
+</ul>
+<p><strong>Special cases</strong>:</p>
+<ul>
+<li>$h = 0$: Plane is parallel to the <strong>a</strong>-axis (intersects at infinity)</li>
+<li>Negative indices: Written with a bar, e.g., $(1\bar{1}0)$ for $h=1, k=-1, l=0$</li>
+</ul>
+<h3 id="common-low-index-planes"><a class="header" href="#common-low-index-planes">Common Low-Index Planes</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Plane</th><th style="text-align: left">Description</th><th style="text-align: left">Example (Cubic)</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left">$(100)$</td><td style="text-align: left">Perpendicular to a-axis</td><td style="text-align: left">Cube face</td></tr>
+<tr><td style="text-align: left">$(110)$</td><td style="text-align: left">Diagonal through two axes</td><td style="text-align: left">Edge-sharing</td></tr>
+<tr><td style="text-align: left">$(111)$</td><td style="text-align: left">Diagonal through all three axes</td><td style="text-align: left">Close-packed</td></tr>
+</tbody>
+</table>
+</div>
+<p>In cubic systems, $(100)$, $(010)$, and $(001)$ are equivalent by symmetry. In lower-symmetry systems (e.g., orthorhombic, hexagonal), they are distinct.</p>
+<hr>
+<h2 id="visualizing-miller-planes"><a class="header" href="#visualizing-miller-planes">Visualizing Miller Planes</a></h2>
+<p><strong>Access</strong>: <code>Tools → Miller Planes</code></p>
+<h3 id="how-to-use"><a class="header" href="#how-to-use">How to Use</a></h3>
+<ol>
+<li>Open the Miller Planes dialog</li>
+<li>Enter the desired indices $(h, k, l)$
+<ul>
+<li>Example: <code>1</code>, <code>1</code>, <code>1</code> for the $(111)$ plane</li>
+</ul>
+</li>
+<li>Click “Show Plane”</li>
+</ol>
+<p><strong>What you see</strong>:</p>
+<ul>
+<li>A semi-transparent plane rendered in the viewport</li>
+<li>The plane intersects the unit cell edges</li>
+<li>If the structure is periodic, the plane extends across multiple cells</li>
+</ul>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>The plane geometry is computed using the <strong>Diophantine algorithm</strong> implemented in <code>physics/operations/miller_algo.rs</code>. This ensures the plane is positioned exactly at integer linear combinations of lattice vectors.</p>
+</blockquote>
+<h3 id="plane-shape"><a class="header" href="#plane-shape">Plane Shape</a></h3>
+<p>The visible plane is a <strong>polygon</strong> formed by the intersection of the $(hkl)$ plane with the unit cell boundaries.</p>
+<p><strong>Example</strong>: In a cubic unit cell:</p>
+<ul>
+<li>$(100)$ plane → <strong>Square</strong> (intersects 4 edges)</li>
+<li>$(110)$ plane → <strong>Rectangle</strong></li>
+<li>$(111)$ plane → <strong>Triangle</strong> (intersects 3 edges)</li>
+</ul>
+<p>The shape reflects the actual crystallographic geometry, not just a generic overlay.</p>
+<hr>
+<h2 id="algorithmic-details"><a class="header" href="#algorithmic-details">Algorithmic Details</a></h2>
+<h3 id="finding-the-plane-basis"><a class="header" href="#finding-the-plane-basis">Finding the Plane Basis</a></h3>
+<p>CView solves for two in-plane vectors $\mathbf{u}$, $\mathbf{v}$ that:</p>
+<ol>
+<li>Lie entirely within the $(hkl)$ plane</li>
+<li>Are expressed as integer combinations of $\mathbf{a}$, $\mathbf{b}$, $\mathbf{c}$</li>
+<li>Have minimal length (primitive surface cell)</li>
+</ol>
+<p><strong>Implementation</strong>: <code>find_plane_basis()</code> in <code>miller_algo.rs</code></p>
+<p>This is the same algorithm used internally for <a href="#surface-slabs-building">slab generation</a> — when you create a slab along $(hkl)$, these vectors become the new in-plane lattice vectors.</p>
+<h3 id="plane-position"><a class="header" href="#plane-position">Plane Position</a></h3>
+<p>By default, the plane passes through the origin. For slab generation, you can specify:</p>
+<ul>
+<li><strong>Number of atomic layers</strong> to include</li>
+<li><strong>Vacuum thickness</strong> above and below</li>
+</ul>
+<hr>
+<h2 id="connection-to-slab-generation"><a class="header" href="#connection-to-slab-generation">Connection to Slab Generation</a></h2>
+<p>Miller planes are the primary input for creating surface structures:</p>
+<ol>
+<li><strong>Select a plane</strong>: Use the Miller Planes tool to visualize candidates</li>
+<li><strong>Generate slab</strong>: <code>Analysis → Slab</code> (uses the same $(hkl)$ indices)</li>
+<li><strong>Add vacuum</strong>: Specified in Ångströms</li>
+<li><strong>Repeat layers</strong>: Control slab thickness</li>
+</ol>
+<p>See the <a href="#surface-slabs-building">Slab Generation Guide</a> for details.</p>
+<hr>
+<h2 id="practical-examples"><a class="header" href="#practical-examples">Practical Examples</a></h2>
+<h3 id="example-1-tio₂-rutile-110-surface"><a class="header" href="#example-1-tio₂-rutile-110-surface">Example 1: TiO₂ Rutile (110) Surface</a></h3>
+<p>The $(110)$ plane of rutile TiO₂ is the most stable surface.</p>
+<p><strong>Workflow</strong>:</p>
+<ol>
+<li>Load rutile TiO₂ structure</li>
+<li>Open <code>Tools → Miller Planes</code></li>
+<li>Enter <code>1</code>, <code>1</code>, <code>0</code></li>
+<li>Observe the plane cutting through rows of oxygen atoms</li>
+</ol>
+<p>This helps you understand which atoms will be exposed in a slab calculation.</p>
+<h3 id="example-2-graphene-0001-plane"><a class="header" href="#example-2-graphene-0001-plane">Example 2: Graphene (0001) Plane</a></h3>
+<p>For hexagonal structures like graphite, the $(0001)$ plane (also called the “c-plane”) is perpendicular to the stacking direction.</p>
+<p><strong>Indices</strong>: <code>0</code>, <code>0</code>, <code>0</code>, <code>1</code> (four-index notation for hexagonal)</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>CView uses the three-index $(hkl)$ convention. For hexagonal systems, convert from Miller-Bravais $(hkil)$ by dropping the third index.</p>
+</blockquote>
+<hr>
+<h2 id="keyboard-shortcuts-1"><a class="header" href="#keyboard-shortcuts-1">Keyboard Shortcuts</a></h2>
+<ul>
+<li><strong>Show Plane</strong>: No dedicated shortcut — use <code>Tools → Miller Planes</code></li>
+<li><strong>Clear Plane</strong>: Closing the dialog removes the overlay</li>
+</ul>
+<hr>
+<h2 id="related-features"><a class="header" href="#related-features">Related Features</a></h2>
+<ul>
+<li><a href="#surface-slabs-building">Slab Generation</a>: Create vacuum-separated surfaces along $(hkl)$</li>
+<li><a href="#charge-density-visualization">Charge Density</a>: Slice CHGCAR along Miller planes</li>
+<li><a href="#symmetry-analysis">Symmetry</a>: Identify symmetry-equivalent planes</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="bond-valence-sum-bvs"><a class="header" href="#bond-valence-sum-bvs">Bond Valence Sum (BVS)</a></h1>
 <p>The Bond Valence Sum (BVS) module is an empirical analytical tool used to estimate the oxidation states of atoms in a crystal structure and evaluate the physical plausibility of their coordination environments.</p>
@@ -662,6 +926,38 @@ Where:</p>
 <p>Unlike basic implementations that use a simple minimum-image convention (which can fail for high-coordination sites like Barium in perovskites where $CN=12$), CView loops over <strong>all</strong> periodic images within a defined spherical cutoff. This ensures mathematically rigorous summation for complex and tightly packed lattices.</p>
 <h3 id="automatic-valence-matching"><a class="header" href="#automatic-valence-matching">Automatic Valence Matching</a></h3>
 <p>Valences are not hardcoded. The algorithm iteratively tests a sequence of plausible valences from the IUCr table (prioritizing the most specific matches first, followed by average sentinel values) to find the best fit for your structure.</p>
+<hr>
+<h2 id="using-bvs-in-cview"><a class="header" href="#using-bvs-in-cview">Using BVS in CView</a></h2>
+<h3 id="accessing-bvs-values"><a class="header" href="#accessing-bvs-values">Accessing BVS Values</a></h3>
+<p><strong>Location</strong>: Sidebar → <strong>Bond Valence</strong> expander</p>
+<p>When you expand this section, CView automatically:</p>
+<ol>
+<li>Computes BVS for all atoms using the current bond cutoff</li>
+<li>Assigns oxidation states based on best-fit valences</li>
+<li>Displays the results in a scrollable list</li>
+</ol>
+<p><strong>Output format</strong> (per atom):</p>
+<pre><code>Fe(1): BVS = 2.93 [expected: 3+]
+O(2):  BVS = -1.98 [expected: 2-]
+</code></pre>
+<h3 id="bvs-color-mode"><a class="header" href="#bvs-color-mode">BVS Color Mode</a></h3>
+<p><strong>How to enable</strong>: Sidebar → <strong>Appearance</strong> → <strong>Color Mode</strong> dropdown → Select <strong>Bond Valence</strong></p>
+<p><strong>Effect</strong>: Atoms are colored by their BVS deviation:</p>
+<ul>
+<li><strong>Blue</strong>: Under-coordinated (BVS &lt; formal valence) — vacancies nearby, surface atoms</li>
+<li><strong>White</strong>: Ideal coordination (BVS ≈ formal valence)</li>
+<li><strong>Red</strong>: Over-coordinated (BVS &gt; formal valence) — interstitials, compressed regions</li>
+</ul>
+<p>This heatmap is particularly useful for:</p>
+<ul>
+<li>Identifying structurally strained sites in defective crystals</li>
+<li>Validating relaxed DFT geometries (all sites should be near-white)</li>
+<li>Spotting charge transfer in interfaces or heterostructures</li>
+</ul>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>Combine BVS coloring with <a href="#coordination-polyhedra">polyhedra visualization</a> to simultaneously see coordination geometry and electronic state.</p>
+</blockquote>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="charge-density-visualization"><a class="header" href="#charge-density-visualization">Charge Density Visualization</a></h1>
 <p>The Charge Density module allows for the visual analysis of 3D volumetric data generated by <em>ab-initio</em> codes, specifically targeting VASP <code>CHGCAR</code> formats. This tool bridges the gap between raw electronic structure outputs and qualitative chemical bonding analysis.</p>
@@ -689,10 +985,244 @@ Where:</p>
 </blockquote>
 <h3 id="exporting"><a class="header" href="#exporting">Exporting</a></h3>
 <p>Slices can be instantly exported as high-resolution <code>png</code> or <code>pdf</code> images directly from the visualization tab, complete with isolines, heatmaps, and atomic projections.</p>
+<p><strong>Export Configuration</strong>: Settings (font sizes, colorbar tick labels, line thickness) are read <strong>live</strong> from the Preferences dialog at the moment you click export — not when the window opens. This ensures your exports always match your current preferences.</p>
+<hr>
+<h2 id="advanced-features"><a class="header" href="#advanced-features">Advanced Features</a></h2>
+<h3 id="picture-in-picture-3d-preview"><a class="header" href="#picture-in-picture-3d-preview">Picture-in-Picture 3D Preview</a></h3>
+<p>When viewing a 2D slice, CView displays a <strong>3D miniature</strong> of the full crystal structure in the corner of the canvas. This preview shows:</p>
+<ul>
+<li>The complete unit cell with atoms rendered</li>
+<li>The orientation of the current slice plane highlighted</li>
+<li>Real-time updates as you change the slice position or Miller indices</li>
+</ul>
+<p><strong>Purpose</strong>: Helps maintain spatial context when inspecting arbitrary $(hkl)$ planes — you always know where the slice is cutting through the structure.</p>
+<p><strong>Location</strong>: Top-right corner of the charge density window (semi-transparent overlay).</p>
+<h3 id="hkl-plane-polygon-clipping"><a class="header" href="#hkl-plane-polygon-clipping">HKL Plane Polygon Clipping</a></h3>
+<p>For <strong>Miller plane slices</strong> (non-orthogonal cuts), CView computes the exact intersection polygon:</p>
+<p><strong>Example</strong>: In a cubic cell, the $(111)$ plane intersects three edges → <strong>triangular slice region</strong></p>
+<p><strong>Implementation</strong>:</p>
+<ul>
+<li>Computes plane-cell boundary intersections geometrically</li>
+<li>Clips the heatmap and isolines to the polygon boundary</li>
+<li>Renders the polygon outline for clarity</li>
+</ul>
+<p>This ensures the 2D visualization accurately reflects the crystallographic geometry, not just a rectangular crop.</p>
+<p><strong>Visual cue</strong>: The slice boundary polygon is drawn in a contrasting color (e.g., white on dark background).</p>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="building-structures"><a href="#building-structures" class="header">Building Structures</a></h1>
+<h1 id="building-structures"><a class="header" href="#building-structures">Building Structures</a></h1>
+<p>CView provides several tools to manipulate and construct crystal structures. These operations are accessible via the <strong>Tools</strong> menu and enable you to prepare input geometries for <em>ab-initio</em> calculations.</p>
+<hr>
+<h2 id="basis-operations"><a class="header" href="#basis-operations">Basis Operations</a></h2>
+<p>The <strong>Basis</strong> dialog (<code>Tools → Geometry → Basis/Chemistry</code>) allows you to perform chemical modifications to your structure.</p>
+<h3 id="element-substitution"><a class="header" href="#element-substitution">Element Substitution</a></h3>
+<p><strong>Global Replacement</strong>: Replace all instances of one element with another throughout the entire structure.</p>
+<p><strong>Use Cases</strong>:</p>
+<ul>
+<li>Alloying studies (e.g., replacing Ni with Co in Ni₂MnGa)</li>
+<li>Doping simulations (e.g., substituting Ca with Sr in perovskites)</li>
+<li>Creating hypothetical structures for screening</li>
+</ul>
+<p><strong>How to use</strong>:</p>
+<ol>
+<li>Open <code>Tools → Geometry → Basis/Chemistry</code></li>
+<li>Select the target element from the dropdown</li>
+<li>Enter the new element symbol</li>
+<li>Click “Apply Global Substitution”</li>
+</ol>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>This operation preserves all atomic positions and lattice parameters — only the element identity changes.</p>
+</blockquote>
+<h3 id="selection-based-editing"><a class="header" href="#selection-based-editing">Selection-Based Editing</a></h3>
+<p><strong>Selective Modification</strong>: Change the element type of specific atoms rather than all instances.</p>
+<p><strong>Workflow</strong>:</p>
+<ol>
+<li>Select atoms in the viewport (click + Shift to multi-select)</li>
+<li>Open the Basis dialog</li>
+<li>The selected atoms will be highlighted</li>
+<li>Choose the new element and apply</li>
+</ol>
+<p><strong>Atom Removal</strong>: You can also delete selected atoms to create vacancies or remove unwanted species.</p>
+<hr>
+<h2 id="cell-type-conversion"><a class="header" href="#cell-type-conversion">Cell Type Conversion</a></h2>
+<h3 id="primitive-vs-conventional-cells"><a class="header" href="#primitive-vs-conventional-cells">Primitive vs. Conventional Cells</a></h3>
+<p>Crystallographic structures can be represented in two standard forms:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Cell Type</th><th style="text-align: left">Description</th><th style="text-align: left">Use Case</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left"><strong>Primitive</strong></td><td style="text-align: left">Minimum volume unit containing one formula unit</td><td style="text-align: left">Electronic structure calculations (smaller = faster)</td></tr>
+<tr><td style="text-align: left"><strong>Conventional</strong></td><td style="text-align: left">Standard IUCr representation matching symmetry axes</td><td style="text-align: left">Visualization, publication figures</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Example</strong>: Face-centered cubic (FCC) structures:</p>
+<ul>
+<li><strong>Conventional</strong>: Cubic cell with atoms at corners + face centers (4 atoms)</li>
+<li><strong>Primitive</strong>: Rhombohedral cell (1 atom)</li>
+</ul>
+<h3 id="toggling-cell-type"><a class="header" href="#toggling-cell-type">Toggling Cell Type</a></h3>
+<p><strong>Keyboard Shortcut</strong>: Press <code>Ctrl + T</code> to toggle between primitive and conventional representations.</p>
+<p><strong>Menu Access</strong>: <code>Tools → Toggle Cell View</code></p>
+<p><strong>What happens</strong>:</p>
+<ul>
+<li>CView uses the <code>moyo</code> library (spglib wrapper) to detect space group symmetry</li>
+<li>Atomic positions are transformed to the new basis</li>
+<li>The structure is reloaded in the active tab</li>
+</ul>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>Use <strong>primitive cells</strong> for DFT calculations to minimize computational cost. Use <strong>conventional cells</strong> for visualizing crystallographic relationships and comparing to literature structures.</p>
+</blockquote>
+<h3 id="standardization"><a class="header" href="#standardization">Standardization</a></h3>
+<p>When you load a CIF file with arbitrary lattice vectors, CView can standardize the cell to match the IUCr conventions:</p>
+<ol>
+<li>Detection of space group symmetry</li>
+<li>Rotation to standard orientation (e.g., c-axis vertical for hexagonal)</li>
+<li>Choice of conventional or primitive representation</li>
+</ol>
+<p>This ensures your structure matches reference databases like ICSD or Materials Project.</p>
+<hr>
+<h2 id="atom-instance-management"><a class="header" href="#atom-instance-management">Atom Instance Management</a></h2>
+<p>The <strong>Atom Instances</strong> dialog controls how periodic images (ghost atoms) are displayed.</p>
+<p><strong>Purpose</strong>: When visualizing a unit cell, atoms near boundaries may have periodic images partially inside the cell. This tool lets you:</p>
+<ul>
+<li>Show/hide ghost atoms outside the central unit cell</li>
+<li>Expand to show neighboring cells (useful for understanding connectivity)</li>
+<li>Clean up cluttered visualizations</li>
+</ul>
+<p><strong>Access</strong>: <code>Tools → Atom Instances</code></p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Ghost atoms are always computed for physics calculations (BVS, polyhedra) even when hidden — the “show” setting only affects rendering.</p>
+</blockquote>
+<hr>
+<h2 id="related-operations"><a class="header" href="#related-operations">Related Operations</a></h2>
+<p>For creating larger structures from unit cells, see:</p>
+<ul>
+<li><a href="#supercells">Supercells</a> — Expand periodicity (NxMxP repetitions)</li>
+<li><a href="#surface-slabs-building">Slab Generation</a> — Create surfaces with vacuum padding</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
-<h1 id="supercells"><a href="#supercells" class="header">Supercells</a></h1>
+<h1 id="supercells"><a class="header" href="#supercells">Supercells</a></h1>
+<p>A <strong>supercell</strong> is an expanded version of the unit cell, created by replicating the structure along the lattice vectors. This is essential for modeling defects, surfaces, interfaces, and finite-size effects in <em>ab-initio</em> calculations.</p>
+<hr>
+<h2 id="what-is-a-supercell"><a class="header" href="#what-is-a-supercell">What is a Supercell?</a></h2>
+<p>The supercell transformation multiplies the lattice vectors by integer factors:</p>
+<p>$$
+\mathbf{a}<em>{super} = N_a \cdot \mathbf{a}, \quad
+\mathbf{b}</em>{super} = N_b \cdot \mathbf{b}, \quad
+\mathbf{c}_{super} = N_c \cdot \mathbf{c}
+$$</p>
+<p>All atoms in the original unit cell are replicated at positions:
+$$
+\mathbf{r}<em>{new} = \mathbf{r}</em>{original} + n_a\mathbf{a} + n_b\mathbf{b} + n_c\mathbf{c}
+$$
+where $n_a \in [0, N_a-1]$, $n_b \in [0, N_b-1]$, $n_c \in [0, N_c-1]$.</p>
+<p><strong>Result</strong>: A structure with $(N_a \times N_b \times N_c)$ times more atoms than the original unit cell.</p>
+<hr>
+<h2 id="when-to-use-supercells"><a class="header" href="#when-to-use-supercells">When to Use Supercells</a></h2>
+<h3 id="1-point-defects"><a class="header" href="#1-point-defects">1. <strong>Point Defects</strong></a></h3>
+<p>To model vacancies, interstitials, or substitutional dopants, you need sufficient spacing between periodic images to avoid spurious interactions.</p>
+<p><strong>Example</strong>: A single oxygen vacancy in TiO₂:</p>
+<ul>
+<li>Unit cell: 6 atoms → Too small (vacancy concentration = 16.7%)</li>
+<li>2×2×3 supercell: 72 atoms → Realistic dilute defect (1.4%)</li>
+</ul>
+<p><strong>Rule of thumb</strong>: Aim for at least 10 Å separation between defects.</p>
+<h3 id="2-surface-calculations"><a class="header" href="#2-surface-calculations">2. <strong>Surface Calculations</strong></a></h3>
+<p>When combined with <a href="#surface-slabs-building">slab generation</a>, supercells allow you to model surface reconstructions, adsorbates, or step edges without artificial periodicity.</p>
+<p><strong>Typical workflow</strong>:</p>
+<ol>
+<li>Create a 1×1×1 slab (surface + vacuum)</li>
+<li>Expand to 2×2×1 or 3×3×1 supercell</li>
+<li>Add adsorbate at specific site</li>
+</ol>
+<h3 id="3-alloying--disorder"><a class="header" href="#3-alloying--disorder">3. <strong>Alloying &amp; Disorder</strong></a></h3>
+<p>To simulate random alloys (e.g., Ni₀.₅Co₀.₅) or partially occupied sites, you need enough atoms to represent the composition statistically.</p>
+<p><strong>Example</strong>: 50% Ni / 50% Co substitution:</p>
+<ul>
+<li>2×2×2 FCC supercell: 32 atoms → 16 Ni + 16 Co</li>
+</ul>
+<h3 id="4-phonons--finite-temperature"><a class="header" href="#4-phonons--finite-temperature">4. <strong>Phonons &amp; Finite-Temperature</strong></a></h3>
+<p>Phonon calculations (via DFPT or frozen phonons) often require supercells to sample specific q-points or to avoid interactions between atomic displacements.</p>
+<hr>
+<h2 id="using-the-supercell-tool"><a class="header" href="#using-the-supercell-tool">Using the Supercell Tool</a></h2>
+<p><strong>Access</strong>: <code>Tools → Supercell</code> (or from the application menu)</p>
+<h3 id="interface"><a class="header" href="#interface">Interface</a></h3>
+<p>The supercell dialog presents three integer input fields:</p>
+<ul>
+<li><strong>N_a</strong>: Repetitions along the <strong>a</strong>-axis</li>
+<li><strong>N_b</strong>: Repetitions along the <strong>b</strong>-axis</li>
+<li><strong>N_c</strong>: Repetitions along the <strong>c</strong>-axis</li>
+</ul>
+<p><strong>Default</strong>: <code>1×1×1</code> (no expansion)</p>
+<h3 id="workflow"><a class="header" href="#workflow">Workflow</a></h3>
+<ol>
+<li>Load your structure (e.g., a primitive cell)</li>
+<li>Open <code>Tools → Supercell</code></li>
+<li>Enter desired dimensions (e.g., <code>2</code>, <code>2</code>, <code>3</code>)</li>
+<li>Click “Generate Supercell”</li>
+<li>The new structure replaces the current tab</li>
+</ol>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>The supercell is generated instantly for typical dimensions (up to ~5×5×5). For very large expansions, expect a few seconds of computation.</p>
+</blockquote>
+<h3 id="example-batio₃-222-supercell"><a class="header" href="#example-batio₃-222-supercell">Example: BaTiO₃ 2×2×2 Supercell</a></h3>
+<ul>
+<li><strong>Original</strong>: 5 atoms (Ba, Ti, 3×O) in perovskite unit cell</li>
+<li><strong>After 2×2×2</strong>: 40 atoms</li>
+<li><strong>Use case</strong>: Model a single Ti → Zr substitutional defect</li>
+</ul>
+<p>You can now use the <a href="#building-structures">Basis Operations</a> to selectively replace one Ti atom with Zr.</p>
+<hr>
+<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
+<h3 id="memory-limits"><a class="header" href="#memory-limits">Memory Limits</a></h3>
+<p>CView is optimized for structures up to <strong>~5000 atoms</strong>. Beyond this, rendering may slow down:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Supercell Size</th><th style="text-align: right">Atoms (BaTiO₃)</th><th style="text-align: left">Performance</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left">2×2×2</td><td style="text-align: right">40</td><td style="text-align: left">Instant</td></tr>
+<tr><td style="text-align: left">5×5×5</td><td style="text-align: right">625</td><td style="text-align: left">Smooth</td></tr>
+<tr><td style="text-align: left">10×10×10</td><td style="text-align: right">5000</td><td style="text-align: left">Acceptable</td></tr>
+<tr><td style="text-align: left">20×20×20</td><td style="text-align: right">40000</td><td style="text-align: left">Not recommended</td></tr>
+</tbody>
+</table>
+</div>
+<blockquote class="blockquote-tag blockquote-tag-caution">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M4.47.22A.749.749 0 0 1 5 0h6c.199 0 .389.079.53.22l4.25 4.25c.141.14.22.331.22.53v6a.749.749 0 0 1-.22.53l-4.25 4.25A.749.749 0 0 1 11 16H5a.749.749 0 0 1-.53-.22L.22 11.53A.749.749 0 0 1 0 11V5c0-.199.079-.389.22-.53Zm.84 1.28L1.5 5.31v5.38l3.81 3.81h5.38l3.81-3.81V5.31L10.69 1.5ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Caution</p>
+<p>CView uses CPU-based rendering. For molecular dynamics trajectories or nanoparticles with &gt;10,000 atoms, consider specialized tools like OVITO or VMD.</p>
+</blockquote>
+<h3 id="dft-calculation-cost"><a class="header" href="#dft-calculation-cost">DFT Calculation Cost</a></h3>
+<p>Remember that DFT cost scales as $O(N^3)$ with atom count. A 2×2×2 supercell (8× atoms) will be <strong>~500× slower</strong> than the primitive cell.</p>
+<p><strong>Optimization strategy</strong>:</p>
+<ol>
+<li>Always use the smallest supercell that captures your physics</li>
+<li>For defects: Check convergence of formation energy with supercell size</li>
+<li>For surfaces: 2×2 or 3×3 is typically sufficient</li>
+</ol>
+<hr>
+<h2 id="output-formats"><a class="header" href="#output-formats">Output Formats</a></h2>
+<p>After generating a supercell, you can export it via <code>File → Save Structure As</code>:</p>
+<ul>
+<li><strong>VASP (POSCAR)</strong>: Commonly used for DFT</li>
+<li><strong>Quantum Espresso</strong>: Automatically adjusts <code>nat</code> parameter</li>
+<li><strong>CIF</strong>: For archival or database submission</li>
+</ul>
+<p>The lattice vectors are correctly scaled, and all atomic coordinates are in fractional form.</p>
+<hr>
+<h2 id="related-tools"><a class="header" href="#related-tools">Related Tools</a></h2>
+<ul>
+<li><a href="#surface-slabs-building">Slab Generation</a>: Create surfaces by cutting along Miller planes</li>
+<li><a href="#building-structures">Basis Operations</a>: Modify atoms after supercell creation</li>
+<li><a href="#symmetry-analysis">Symmetry Detection</a>: Check if expansion breaks symmetry</li>
+</ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="surface-slabs-building"><a class="header" href="#surface-slabs-building">Surface Slabs (Building)</a></h1>
 <p>Creating surface models from bulk crystals is a prerequisite for surface science calculations (catalysis, work function, surface energy). The Slab Builder mathematically transforms the unit cell to expose a specific Miller Index plane $(hkl)$.</p>

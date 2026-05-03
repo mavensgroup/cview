@@ -56,7 +56,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3893ebfd.js";
+            window.path_to_searchindex_js = "../searchindex-d977ba75.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-dc41def0.js"></script>
@@ -222,6 +222,38 @@ Where:</p>
 <p>Unlike basic implementations that use a simple minimum-image convention (which can fail for high-coordination sites like Barium in perovskites where $CN=12$), CView loops over <strong>all</strong> periodic images within a defined spherical cutoff. This ensures mathematically rigorous summation for complex and tightly packed lattices.</p>
 <h3 id="automatic-valence-matching"><a class="header" href="#automatic-valence-matching">Automatic Valence Matching</a></h3>
 <p>Valences are not hardcoded. The algorithm iteratively tests a sequence of plausible valences from the IUCr table (prioritizing the most specific matches first, followed by average sentinel values) to find the best fit for your structure.</p>
+<hr>
+<h2 id="using-bvs-in-cview"><a class="header" href="#using-bvs-in-cview">Using BVS in CView</a></h2>
+<h3 id="accessing-bvs-values"><a class="header" href="#accessing-bvs-values">Accessing BVS Values</a></h3>
+<p><strong>Location</strong>: Sidebar → <strong>Bond Valence</strong> expander</p>
+<p>When you expand this section, CView automatically:</p>
+<ol>
+<li>Computes BVS for all atoms using the current bond cutoff</li>
+<li>Assigns oxidation states based on best-fit valences</li>
+<li>Displays the results in a scrollable list</li>
+</ol>
+<p><strong>Output format</strong> (per atom):</p>
+<pre><code>Fe(1): BVS = 2.93 [expected: 3+]
+O(2):  BVS = -1.98 [expected: 2-]
+</code></pre>
+<h3 id="bvs-color-mode"><a class="header" href="#bvs-color-mode">BVS Color Mode</a></h3>
+<p><strong>How to enable</strong>: Sidebar → <strong>Appearance</strong> → <strong>Color Mode</strong> dropdown → Select <strong>Bond Valence</strong></p>
+<p><strong>Effect</strong>: Atoms are colored by their BVS deviation:</p>
+<ul>
+<li><strong>Blue</strong>: Under-coordinated (BVS &lt; formal valence) — vacancies nearby, surface atoms</li>
+<li><strong>White</strong>: Ideal coordination (BVS ≈ formal valence)</li>
+<li><strong>Red</strong>: Over-coordinated (BVS &gt; formal valence) — interstitials, compressed regions</li>
+</ul>
+<p>This heatmap is particularly useful for:</p>
+<ul>
+<li>Identifying structurally strained sites in defective crystals</li>
+<li>Validating relaxed DFT geometries (all sites should be near-white)</li>
+<li>Spotting charge transfer in interfaces or heterostructures</li>
+</ul>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>Combine BVS coloring with <a href="visualization.html#coordination-polyhedra">polyhedra visualization</a> to simultaneously see coordination geometry and electronic state.</p>
+</blockquote>
 
                     </main>
 

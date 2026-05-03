@@ -56,7 +56,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3893ebfd.js";
+            window.path_to_searchindex_js = "../searchindex-d977ba75.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-dc41def0.js"></script>
@@ -198,8 +198,126 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="miller-plane"><a class="header" href="#miller-plane">Miller Plane</a></h1>
-<p>To update later, but see <code>menu-&gt;tools</code></p>
+                        <h1 id="miller-planes"><a class="header" href="#miller-planes">Miller Planes</a></h1>
+<p>Miller indices $(hkl)$ are a standard notation for describing crystallographic planes. CView allows you to visualize these planes directly in the viewport and use them as input for <a href="slabs.html">slab generation</a>.</p>
+<hr>
+<h2 id="miller-index-notation"><a class="header" href="#miller-index-notation">Miller Index Notation</a></h2>
+<p>A Miller plane $(hkl)$ is defined by its intercepts with the lattice vectors $\mathbf{a}$, $\mathbf{b}$, $\mathbf{c}$:</p>
+<ul>
+<li>The plane intersects the <strong>a</strong>-axis at $\mathbf{a}/h$</li>
+<li>The plane intersects the <strong>b</strong>-axis at $\mathbf{b}/k$</li>
+<li>The plane intersects the <strong>c</strong>-axis at $\mathbf{c}/l$</li>
+</ul>
+<p><strong>Special cases</strong>:</p>
+<ul>
+<li>$h = 0$: Plane is parallel to the <strong>a</strong>-axis (intersects at infinity)</li>
+<li>Negative indices: Written with a bar, e.g., $(1\bar{1}0)$ for $h=1, k=-1, l=0$</li>
+</ul>
+<h3 id="common-low-index-planes"><a class="header" href="#common-low-index-planes">Common Low-Index Planes</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Plane</th><th style="text-align: left">Description</th><th style="text-align: left">Example (Cubic)</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left">$(100)$</td><td style="text-align: left">Perpendicular to a-axis</td><td style="text-align: left">Cube face</td></tr>
+<tr><td style="text-align: left">$(110)$</td><td style="text-align: left">Diagonal through two axes</td><td style="text-align: left">Edge-sharing</td></tr>
+<tr><td style="text-align: left">$(111)$</td><td style="text-align: left">Diagonal through all three axes</td><td style="text-align: left">Close-packed</td></tr>
+</tbody>
+</table>
+</div>
+<p>In cubic systems, $(100)$, $(010)$, and $(001)$ are equivalent by symmetry. In lower-symmetry systems (e.g., orthorhombic, hexagonal), they are distinct.</p>
+<hr>
+<h2 id="visualizing-miller-planes"><a class="header" href="#visualizing-miller-planes">Visualizing Miller Planes</a></h2>
+<p><strong>Access</strong>: <code>Tools → Miller Planes</code></p>
+<h3 id="how-to-use"><a class="header" href="#how-to-use">How to Use</a></h3>
+<ol>
+<li>Open the Miller Planes dialog</li>
+<li>Enter the desired indices $(h, k, l)$
+<ul>
+<li>Example: <code>1</code>, <code>1</code>, <code>1</code> for the $(111)$ plane</li>
+</ul>
+</li>
+<li>Click “Show Plane”</li>
+</ol>
+<p><strong>What you see</strong>:</p>
+<ul>
+<li>A semi-transparent plane rendered in the viewport</li>
+<li>The plane intersects the unit cell edges</li>
+<li>If the structure is periodic, the plane extends across multiple cells</li>
+</ul>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>The plane geometry is computed using the <strong>Diophantine algorithm</strong> implemented in <code>physics/operations/miller_algo.rs</code>. This ensures the plane is positioned exactly at integer linear combinations of lattice vectors.</p>
+</blockquote>
+<h3 id="plane-shape"><a class="header" href="#plane-shape">Plane Shape</a></h3>
+<p>The visible plane is a <strong>polygon</strong> formed by the intersection of the $(hkl)$ plane with the unit cell boundaries.</p>
+<p><strong>Example</strong>: In a cubic unit cell:</p>
+<ul>
+<li>$(100)$ plane → <strong>Square</strong> (intersects 4 edges)</li>
+<li>$(110)$ plane → <strong>Rectangle</strong></li>
+<li>$(111)$ plane → <strong>Triangle</strong> (intersects 3 edges)</li>
+</ul>
+<p>The shape reflects the actual crystallographic geometry, not just a generic overlay.</p>
+<hr>
+<h2 id="algorithmic-details"><a class="header" href="#algorithmic-details">Algorithmic Details</a></h2>
+<h3 id="finding-the-plane-basis"><a class="header" href="#finding-the-plane-basis">Finding the Plane Basis</a></h3>
+<p>CView solves for two in-plane vectors $\mathbf{u}$, $\mathbf{v}$ that:</p>
+<ol>
+<li>Lie entirely within the $(hkl)$ plane</li>
+<li>Are expressed as integer combinations of $\mathbf{a}$, $\mathbf{b}$, $\mathbf{c}$</li>
+<li>Have minimal length (primitive surface cell)</li>
+</ol>
+<p><strong>Implementation</strong>: <code>find_plane_basis()</code> in <code>miller_algo.rs</code></p>
+<p>This is the same algorithm used internally for <a href="slabs.html">slab generation</a> — when you create a slab along $(hkl)$, these vectors become the new in-plane lattice vectors.</p>
+<h3 id="plane-position"><a class="header" href="#plane-position">Plane Position</a></h3>
+<p>By default, the plane passes through the origin. For slab generation, you can specify:</p>
+<ul>
+<li><strong>Number of atomic layers</strong> to include</li>
+<li><strong>Vacuum thickness</strong> above and below</li>
+</ul>
+<hr>
+<h2 id="connection-to-slab-generation"><a class="header" href="#connection-to-slab-generation">Connection to Slab Generation</a></h2>
+<p>Miller planes are the primary input for creating surface structures:</p>
+<ol>
+<li><strong>Select a plane</strong>: Use the Miller Planes tool to visualize candidates</li>
+<li><strong>Generate slab</strong>: <code>Analysis → Slab</code> (uses the same $(hkl)$ indices)</li>
+<li><strong>Add vacuum</strong>: Specified in Ångströms</li>
+<li><strong>Repeat layers</strong>: Control slab thickness</li>
+</ol>
+<p>See the <a href="slabs.html">Slab Generation Guide</a> for details.</p>
+<hr>
+<h2 id="practical-examples"><a class="header" href="#practical-examples">Practical Examples</a></h2>
+<h3 id="example-1-tio₂-rutile-110-surface"><a class="header" href="#example-1-tio₂-rutile-110-surface">Example 1: TiO₂ Rutile (110) Surface</a></h3>
+<p>The $(110)$ plane of rutile TiO₂ is the most stable surface.</p>
+<p><strong>Workflow</strong>:</p>
+<ol>
+<li>Load rutile TiO₂ structure</li>
+<li>Open <code>Tools → Miller Planes</code></li>
+<li>Enter <code>1</code>, <code>1</code>, <code>0</code></li>
+<li>Observe the plane cutting through rows of oxygen atoms</li>
+</ol>
+<p>This helps you understand which atoms will be exposed in a slab calculation.</p>
+<h3 id="example-2-graphene-0001-plane"><a class="header" href="#example-2-graphene-0001-plane">Example 2: Graphene (0001) Plane</a></h3>
+<p>For hexagonal structures like graphite, the $(0001)$ plane (also called the “c-plane”) is perpendicular to the stacking direction.</p>
+<p><strong>Indices</strong>: <code>0</code>, <code>0</code>, <code>0</code>, <code>1</code> (four-index notation for hexagonal)</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>CView uses the three-index $(hkl)$ convention. For hexagonal systems, convert from Miller-Bravais $(hkil)$ by dropping the third index.</p>
+</blockquote>
+<hr>
+<h2 id="keyboard-shortcuts"><a class="header" href="#keyboard-shortcuts">Keyboard Shortcuts</a></h2>
+<ul>
+<li><strong>Show Plane</strong>: No dedicated shortcut — use <code>Tools → Miller Planes</code></li>
+<li><strong>Clear Plane</strong>: Closing the dialog removes the overlay</li>
+</ul>
+<hr>
+<h2 id="related-features"><a class="header" href="#related-features">Related Features</a></h2>
+<ul>
+<li><a href="slabs.html">Slab Generation</a>: Create vacuum-separated surfaces along $(hkl)$</li>
+<li><a href="charge_density.html">Charge Density</a>: Slice CHGCAR along Miller planes</li>
+<li><a href="symmetry.html">Symmetry</a>: Identify symmetry-equivalent planes</li>
+</ul>
 
                     </main>
 

@@ -56,7 +56,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3893ebfd.js";
+            window.path_to_searchindex_js = "../searchindex-d977ba75.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-dc41def0.js"></script>
@@ -198,7 +198,124 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        
+                        <h1 id="supercells"><a class="header" href="#supercells">Supercells</a></h1>
+<p>A <strong>supercell</strong> is an expanded version of the unit cell, created by replicating the structure along the lattice vectors. This is essential for modeling defects, surfaces, interfaces, and finite-size effects in <em>ab-initio</em> calculations.</p>
+<hr>
+<h2 id="what-is-a-supercell"><a class="header" href="#what-is-a-supercell">What is a Supercell?</a></h2>
+<p>The supercell transformation multiplies the lattice vectors by integer factors:</p>
+<p>$$
+\mathbf{a}<em>{super} = N_a \cdot \mathbf{a}, \quad
+\mathbf{b}</em>{super} = N_b \cdot \mathbf{b}, \quad
+\mathbf{c}_{super} = N_c \cdot \mathbf{c}
+$$</p>
+<p>All atoms in the original unit cell are replicated at positions:
+$$
+\mathbf{r}<em>{new} = \mathbf{r}</em>{original} + n_a\mathbf{a} + n_b\mathbf{b} + n_c\mathbf{c}
+$$
+where $n_a \in [0, N_a-1]$, $n_b \in [0, N_b-1]$, $n_c \in [0, N_c-1]$.</p>
+<p><strong>Result</strong>: A structure with $(N_a \times N_b \times N_c)$ times more atoms than the original unit cell.</p>
+<hr>
+<h2 id="when-to-use-supercells"><a class="header" href="#when-to-use-supercells">When to Use Supercells</a></h2>
+<h3 id="1-point-defects"><a class="header" href="#1-point-defects">1. <strong>Point Defects</strong></a></h3>
+<p>To model vacancies, interstitials, or substitutional dopants, you need sufficient spacing between periodic images to avoid spurious interactions.</p>
+<p><strong>Example</strong>: A single oxygen vacancy in TiO₂:</p>
+<ul>
+<li>Unit cell: 6 atoms → Too small (vacancy concentration = 16.7%)</li>
+<li>2×2×3 supercell: 72 atoms → Realistic dilute defect (1.4%)</li>
+</ul>
+<p><strong>Rule of thumb</strong>: Aim for at least 10 Å separation between defects.</p>
+<h3 id="2-surface-calculations"><a class="header" href="#2-surface-calculations">2. <strong>Surface Calculations</strong></a></h3>
+<p>When combined with <a href="slabs.html">slab generation</a>, supercells allow you to model surface reconstructions, adsorbates, or step edges without artificial periodicity.</p>
+<p><strong>Typical workflow</strong>:</p>
+<ol>
+<li>Create a 1×1×1 slab (surface + vacuum)</li>
+<li>Expand to 2×2×1 or 3×3×1 supercell</li>
+<li>Add adsorbate at specific site</li>
+</ol>
+<h3 id="3-alloying--disorder"><a class="header" href="#3-alloying--disorder">3. <strong>Alloying &amp; Disorder</strong></a></h3>
+<p>To simulate random alloys (e.g., Ni₀.₅Co₀.₅) or partially occupied sites, you need enough atoms to represent the composition statistically.</p>
+<p><strong>Example</strong>: 50% Ni / 50% Co substitution:</p>
+<ul>
+<li>2×2×2 FCC supercell: 32 atoms → 16 Ni + 16 Co</li>
+</ul>
+<h3 id="4-phonons--finite-temperature"><a class="header" href="#4-phonons--finite-temperature">4. <strong>Phonons &amp; Finite-Temperature</strong></a></h3>
+<p>Phonon calculations (via DFPT or frozen phonons) often require supercells to sample specific q-points or to avoid interactions between atomic displacements.</p>
+<hr>
+<h2 id="using-the-supercell-tool"><a class="header" href="#using-the-supercell-tool">Using the Supercell Tool</a></h2>
+<p><strong>Access</strong>: <code>Tools → Supercell</code> (or from the application menu)</p>
+<h3 id="interface"><a class="header" href="#interface">Interface</a></h3>
+<p>The supercell dialog presents three integer input fields:</p>
+<ul>
+<li><strong>N_a</strong>: Repetitions along the <strong>a</strong>-axis</li>
+<li><strong>N_b</strong>: Repetitions along the <strong>b</strong>-axis</li>
+<li><strong>N_c</strong>: Repetitions along the <strong>c</strong>-axis</li>
+</ul>
+<p><strong>Default</strong>: <code>1×1×1</code> (no expansion)</p>
+<h3 id="workflow"><a class="header" href="#workflow">Workflow</a></h3>
+<ol>
+<li>Load your structure (e.g., a primitive cell)</li>
+<li>Open <code>Tools → Supercell</code></li>
+<li>Enter desired dimensions (e.g., <code>2</code>, <code>2</code>, <code>3</code>)</li>
+<li>Click “Generate Supercell”</li>
+<li>The new structure replaces the current tab</li>
+</ol>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>The supercell is generated instantly for typical dimensions (up to ~5×5×5). For very large expansions, expect a few seconds of computation.</p>
+</blockquote>
+<h3 id="example-batio₃-222-supercell"><a class="header" href="#example-batio₃-222-supercell">Example: BaTiO₃ 2×2×2 Supercell</a></h3>
+<ul>
+<li><strong>Original</strong>: 5 atoms (Ba, Ti, 3×O) in perovskite unit cell</li>
+<li><strong>After 2×2×2</strong>: 40 atoms</li>
+<li><strong>Use case</strong>: Model a single Ti → Zr substitutional defect</li>
+</ul>
+<p>You can now use the <a href="building.html">Basis Operations</a> to selectively replace one Ti atom with Zr.</p>
+<hr>
+<h2 id="performance-considerations"><a class="header" href="#performance-considerations">Performance Considerations</a></h2>
+<h3 id="memory-limits"><a class="header" href="#memory-limits">Memory Limits</a></h3>
+<p>CView is optimized for structures up to <strong>~5000 atoms</strong>. Beyond this, rendering may slow down:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Supercell Size</th><th style="text-align: right">Atoms (BaTiO₃)</th><th style="text-align: left">Performance</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left">2×2×2</td><td style="text-align: right">40</td><td style="text-align: left">Instant</td></tr>
+<tr><td style="text-align: left">5×5×5</td><td style="text-align: right">625</td><td style="text-align: left">Smooth</td></tr>
+<tr><td style="text-align: left">10×10×10</td><td style="text-align: right">5000</td><td style="text-align: left">Acceptable</td></tr>
+<tr><td style="text-align: left">20×20×20</td><td style="text-align: right">40000</td><td style="text-align: left">Not recommended</td></tr>
+</tbody>
+</table>
+</div>
+<blockquote class="blockquote-tag blockquote-tag-caution">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M4.47.22A.749.749 0 0 1 5 0h6c.199 0 .389.079.53.22l4.25 4.25c.141.14.22.331.22.53v6a.749.749 0 0 1-.22.53l-4.25 4.25A.749.749 0 0 1 11 16H5a.749.749 0 0 1-.53-.22L.22 11.53A.749.749 0 0 1 0 11V5c0-.199.079-.389.22-.53Zm.84 1.28L1.5 5.31v5.38l3.81 3.81h5.38l3.81-3.81V5.31L10.69 1.5ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Caution</p>
+<p>CView uses CPU-based rendering. For molecular dynamics trajectories or nanoparticles with &gt;10,000 atoms, consider specialized tools like OVITO or VMD.</p>
+</blockquote>
+<h3 id="dft-calculation-cost"><a class="header" href="#dft-calculation-cost">DFT Calculation Cost</a></h3>
+<p>Remember that DFT cost scales as $O(N^3)$ with atom count. A 2×2×2 supercell (8× atoms) will be <strong>~500× slower</strong> than the primitive cell.</p>
+<p><strong>Optimization strategy</strong>:</p>
+<ol>
+<li>Always use the smallest supercell that captures your physics</li>
+<li>For defects: Check convergence of formation energy with supercell size</li>
+<li>For surfaces: 2×2 or 3×3 is typically sufficient</li>
+</ol>
+<hr>
+<h2 id="output-formats"><a class="header" href="#output-formats">Output Formats</a></h2>
+<p>After generating a supercell, you can export it via <code>File → Save Structure As</code>:</p>
+<ul>
+<li><strong>VASP (POSCAR)</strong>: Commonly used for DFT</li>
+<li><strong>Quantum Espresso</strong>: Automatically adjusts <code>nat</code> parameter</li>
+<li><strong>CIF</strong>: For archival or database submission</li>
+</ul>
+<p>The lattice vectors are correctly scaled, and all atomic coordinates are in fractional form.</p>
+<hr>
+<h2 id="related-tools"><a class="header" href="#related-tools">Related Tools</a></h2>
+<ul>
+<li><a href="slabs.html">Slab Generation</a>: Create surfaces by cutting along Miller planes</li>
+<li><a href="building.html">Basis Operations</a>: Modify atoms after supercell creation</li>
+<li><a href="symmetry.html">Symmetry Detection</a>: Check if expansion breaks symmetry</li>
+</ul>
+
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">

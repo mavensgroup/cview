@@ -56,7 +56,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3893ebfd.js";
+            window.path_to_searchindex_js = "../searchindex-d977ba75.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-dc41def0.js"></script>
@@ -267,6 +267,147 @@ CView automatically detects the file type based on extension and content. You ca
 <p>For publications and presentations, <code>CView</code> offers high-fidelity export options via the <code>File → Export (Ctrl + E)</code> menu.</p>
 <p>PNG Image: Renders a high-resolution raster image (default resolution: $2000\times 1500$ pixels). Ideal for slides and quick sharing.</p>
 <p>PDF Document: Exports the scene as a vector graphic. This is recommended for academic papers, as it allows for infinite scaling without loss of quality.</p>
+<hr>
+<h2 id="advanced-appearance-controls"><a class="header" href="#advanced-appearance-controls">Advanced Appearance Controls</a></h2>
+<h3 id="sidebar-overview"><a class="header" href="#sidebar-overview">Sidebar Overview</a></h3>
+<p>The <strong>Sidebar</strong> (right panel) is the primary control interface for customizing the visual representation. It contains several collapsible sections:</p>
+<ol>
+<li><strong>View Controls</strong>: Camera orientation, rotation center</li>
+<li><strong>Appearance</strong>: Atom size, bond thickness, colors</li>
+<li><strong>Bond Valence</strong>: BVS-based coloring (see <a href="bvs.html">BVS Guide</a>)</li>
+<li><strong>Atom List</strong>: Per-element visibility and transparency</li>
+</ol>
+<h3 id="color-modes"><a class="header" href="#color-modes">Color Modes</a></h3>
+<p>CView offers three distinct coloring schemes, accessible via the <strong>Color Mode</strong> dropdown in the sidebar:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Mode</th><th style="text-align: left">Description</th><th style="text-align: left">Use Case</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left"><strong>Element</strong></td><td style="text-align: left">Standard CPK colors (C=gray, O=red, etc.)</td><td style="text-align: left">General visualization, publication figures</td></tr>
+<tr><td style="text-align: left"><strong>Bond Valence</strong></td><td style="text-align: left">Heatmap based on oxidation state deviation</td><td style="text-align: left">Identifying strained bonds, charge transfer</td></tr>
+<tr><td style="text-align: left"><strong>Uniform</strong></td><td style="text-align: left">Single color for all atoms</td><td style="text-align: left">Minimalist renders, presentations</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Bond Valence Mode</strong>: Colors atoms by their BVS deviation:</p>
+<ul>
+<li><strong>Blue</strong>: Under-coordinated (BVS &lt; expected valence)</li>
+<li><strong>White</strong>: Ideal coordination (BVS ≈ expected valence)</li>
+<li><strong>Red</strong>: Over-coordinated (BVS &gt; expected valence)</li>
+</ul>
+<p>See the <a href="bvs.html">Bond Valence Sum Guide</a> for details on the calculation.</p>
+<h3 id="transparency-controls"><a class="header" href="#transparency-controls">Transparency Controls</a></h3>
+<p>Each element in the structure has an individual transparency slider in the <strong>Atom List</strong> section:</p>
+<ul>
+<li><strong>Use case</strong>: Highlight specific atomic species by making others semi-transparent</li>
+<li><strong>Example</strong>: In a LiCoO₂ battery cathode, make Li transparent to see the CoO₂ layers clearly</li>
+</ul>
+<p><strong>Tip</strong>: Combine transparency with polyhedra (see below) to visualize coordination environments.</p>
+<h3 id="bond-customization"><a class="header" href="#bond-customization">Bond Customization</a></h3>
+<p>The <strong>Bonds</strong> section in the sidebar controls:</p>
+<ul>
+<li><strong>Bond Radius</strong>: Thickness of bond cylinders (default: 0.1 Å)</li>
+<li><strong>Bond Cutoff</strong>: Maximum distance for drawing bonds (default: 2.5× covalent radius sum)</li>
+<li><strong>Bond Color</strong>: RGB picker for custom bond colors</li>
+</ul>
+<p>Bonds are drawn between atoms whose distance $d$ satisfies:
+$$
+d \leq \text{cutoff} \times (r_{\text{cov},A} + r_{\text{cov},B})
+$$
+where $r_{\text{cov}}$ are the covalent radii from the internal database.</p>
+<hr>
+<h2 id="coordination-polyhedra"><a class="header" href="#coordination-polyhedra">Coordination Polyhedra</a></h2>
+<p>CView can visualize <strong>coordination polyhedra</strong> around cation centers — a feature essential for understanding ionic and metal-oxide structures.</p>
+<h3 id="what-are-coordination-polyhedra"><a class="header" href="#what-are-coordination-polyhedra">What are Coordination Polyhedra?</a></h3>
+<p>A coordination polyhedron is the 3D shape formed by connecting the nearest-neighbor anions around a central cation. Common geometries include:</p>
+<ul>
+<li><strong>Tetrahedral</strong> (CN = 4): SiO₄ in silicates</li>
+<li><strong>Octahedral</strong> (CN = 6): TiO₆ in perovskites</li>
+<li><strong>Cubic</strong> (CN = 8): CsCl structure</li>
+</ul>
+<h3 id="accessing-polyhedra-controls"><a class="header" href="#accessing-polyhedra-controls">Accessing Polyhedra Controls</a></h3>
+<p><strong>Location</strong>: Sidebar → <strong>Appearance</strong> section → Polyhedra expander</p>
+<p><strong>Controls</strong>:</p>
+<ol>
+<li><strong>Auto-Detect</strong> button: Automatically enables polyhedra for elements with average coordination number 4–8</li>
+<li><strong>Per-element checkboxes</strong>: Manually enable/disable polyhedra for specific elements
+<ul>
+<li>Checkbox labels show the average CN (e.g., “Ti (CN 6)”)</li>
+</ul>
+</li>
+<li><strong>Transparency slider</strong>: Adjust polyhedra opacity (0–100%)</li>
+</ol>
+<h3 id="how-polyhedra-are-computed"><a class="header" href="#how-polyhedra-are-computed">How Polyhedra are Computed</a></h3>
+<p><strong>Algorithm</strong> (implemented in <code>rendering/polyhedra.rs</code>):</p>
+<ol>
+<li>Identify cation centers (user-selected or auto-detected)</li>
+<li>Find nearest anion neighbors within the bond cutoff distance</li>
+<li>Compute the <strong>convex hull</strong> of the anion positions</li>
+<li>Filter degenerate faces (coplanar vertices)</li>
+<li>Render with proper depth sorting (Polyhedra → Bonds → Atoms)</li>
+</ol>
+<p><strong>Critical detail</strong>: Polyhedra vertices are restricted to <strong>anions only</strong>. This prevents chemically meaningless polyhedra (e.g., around O in oxides).</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The two-tier ghost system ensures polyhedra are correctly computed across periodic boundaries — ghost atoms used for coordination detection are different from those rendered visually.</p>
+</blockquote>
+<h3 id="settings"><a class="header" href="#settings">Settings</a></h3>
+<p><strong>Coordination Number Filter</strong> (in <code>Preferences</code>):</p>
+<ul>
+<li><strong>Min CN</strong>: Minimum coordination to display (default: 4)</li>
+<li><strong>Max CN</strong>: Maximum coordination to display (default: 12)</li>
+<li>Filters out isolated atoms or highly over-coordinated sites</li>
+</ul>
+<p><strong>Color Mode</strong>:</p>
+<ul>
+<li><strong>Element</strong>: Polyhedra inherit the color of the central cation</li>
+<li><strong>Coordination</strong>: Color-coded by CN (e.g., CN=4 → yellow, CN=6 → blue)</li>
+</ul>
+<p><strong>Max Bond Distance</strong>: Hard cutoff in Ångströms for coordination bonds (overrides covalent radius heuristic)</p>
+<h3 id="practical-example-batio₃"><a class="header" href="#practical-example-batio₃">Practical Example: BaTiO₃</a></h3>
+<p>In the cubic perovskite BaTiO₃:</p>
+<ul>
+<li><strong>Ti⁴⁺</strong> is octahedrally coordinated by 6 oxygen atoms → <strong>TiO₆ octahedra</strong></li>
+<li><strong>Ba²⁺</strong> has 12-fold coordination → <strong>Cuboctahedral</strong> (can be hidden if noisy)</li>
+</ul>
+<p><strong>Workflow</strong>:</p>
+<ol>
+<li>Load BaTiO₃ structure</li>
+<li>Click “Auto-Detect” in the sidebar</li>
+<li>Ti polyhedra appear as blue octahedra</li>
+<li>Adjust transparency to see through to the unit cell</li>
+</ol>
+<p>This visualization immediately reveals the corner-sharing connectivity characteristic of perovskites.</p>
+<hr>
+<h2 id="keyboard-shortcuts"><a class="header" href="#keyboard-shortcuts">Keyboard Shortcuts</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Shortcut</th><th style="text-align: left">Action</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left"><code>Ctrl + O</code></td><td style="text-align: left">Open file</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + S</code></td><td style="text-align: left">Save structure</td></tr>
+<tr><td style="text-align: left"><code>Shift + Ctrl + S</code></td><td style="text-align: left">Save structure as…</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + E</code></td><td style="text-align: left">Export image (PNG/PDF)</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + T</code></td><td style="text-align: left">Toggle Primitive ↔ Conventional cell</td></tr>
+<tr><td style="text-align: left"><strong>Mouse scroll</strong></td><td style="text-align: left">Zoom in/out</td></tr>
+<tr><td style="text-align: left"><strong>Left-click drag</strong></td><td style="text-align: left">Rotate structure</td></tr>
+<tr><td style="text-align: left"><strong>Shift + click</strong></td><td style="text-align: left">Multi-select atoms</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="performance-notes"><a class="header" href="#performance-notes">Performance Notes</a></h2>
+<p>CView is optimized for <strong>CPU-based rendering</strong> using GTK4/Cairo:</p>
+<ul>
+<li>Smooth interaction up to ~5000 atoms</li>
+<li>Real-time rotation and zoom</li>
+<li>No GPU drivers required (runs on any laptop)</li>
+</ul>
+<p>For larger systems (e.g., nanoparticles, proteins), consider specialized GPU-accelerated tools like OVITO.</p>
 
                     </main>
 
