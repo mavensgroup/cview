@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Bi₂Se₃ Topological Insulator - CView</title>
+        <title>Bond Valence Sum - CView</title>
 
 
         <!-- Custom HTML head -->
@@ -49,7 +49,6 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="../ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
-        <link rel="stylesheet" href="../src/mdbook-admonish.css">
         <link rel="stylesheet" href="../src/custom.css">
         <link rel="stylesheet" href=".././mdbook-admonish.css">
 
@@ -201,16 +200,40 @@
 
                 <div id="content" class="content">
                     <main>
-                        
+                        <h1 id="bond-valence-sum-bvs"><a class="header" href="#bond-valence-sum-bvs">Bond Valence Sum (BVS)</a></h1>
+<p>The Bond Valence Sum (BVS) module is an empirical analytical tool used to estimate the oxidation states of atoms in a crystal structure and evaluate the physical plausibility of their coordination environments.</p>
+<h2 id="physical-model"><a class="header" href="#physical-model">Physical Model</a></h2>
+<p>The core principle of BVS is that the valence of an atom ($V_i$) is equal to the sum of the individual bond valences ($s_{ij}$) from all its surrounding nearest neighbors:
+$$BVS_i = \sum_{j} s_{ij}$$</p>
+<p>The individual bond valences are calculated using the standard exponential relationship:
+$$s_{ij} = \exp\left(\frac{R_0 - R_{ij}}{B}\right)$$
+Where:</p>
+<ul>
+<li>$R_{ij}$: The actual measured distance between atom $i$ and atom $j$.</li>
+<li>$R_0$: The tabulated ideal bond length for the specific atom pair and oxidation state.</li>
+<li>$B$: An empirical constant, typically $0.37 \text{\AA}$.</li>
+</ul>
+<h3 id="parameter-database"><a class="header" href="#parameter-database">Parameter Database</a></h3>
+<p>CView does not require you to input $R_0$ parameters manually. The internal engine strictly implements:</p>
+<ol>
+<li><strong>Primary Database</strong>: The modern <strong>IUCr 2020</strong> (<code>bvparm2020.cif</code>) table containing over 1000 oxidation-state-specific element pairs.</li>
+<li><strong>Fallback Database</strong>: The empirical Brese &amp; O'Keeffe (1991) parameters for untabulated pairs.</li>
+</ol>
+<h2 id="algorithmic-implementation"><a class="header" href="#algorithmic-implementation">Algorithmic Implementation</a></h2>
+<h3 id="full-periodic-image-search"><a class="header" href="#full-periodic-image-search">Full Periodic Image Search</a></h3>
+<p>Unlike basic implementations that use a simple minimum-image convention (which can fail for high-coordination sites like Barium in perovskites where $CN=12$), CView loops over <strong>all</strong> periodic images within a defined spherical cutoff. This ensures mathematically rigorous summation for complex and tightly packed lattices.</p>
+<h3 id="automatic-valence-matching"><a class="header" href="#automatic-valence-matching">Automatic Valence Matching</a></h3>
+<p>Valences are not hardcoded. The algorithm iteratively tests a sequence of plausible valences from the IUCr table (prioritizing the most specific matches first, followed by average sentinel values) to find the best fit for your structure.</p>
+
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../todo.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../guide/miller.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../tutorials/surface.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../guide/charge_density.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -220,11 +243,11 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../todo.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../guide/miller.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../tutorials/surface.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../guide/charge_density.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
