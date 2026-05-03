@@ -20,6 +20,6 @@
     - [Slab generation](guide/slabs.md)
 - [To Do](todo.md)
 
-# Tutorials
-- [Bi₂Se₃ Topological Insulator](tutorials/bi2se3.md)
-- [Surface Reconstruction](tutorials/surface.md)
+<!-- # Tutorials -->
+<!-- - [Bi₂Se₃ Topological Insulator](tutorials/bi2se3.md) -->
+<!-- - [Surface Reconstruction](tutorials/surface.md) -->

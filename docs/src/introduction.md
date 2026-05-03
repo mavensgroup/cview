@@ -92,6 +92,6 @@ Contributions from testers and developers are welcome.
 
 ## 📜 License & Citation
 
-**CView** is open-source software licensed under the **LGPLv3**.
+**CView** is open-source software licensed under the **MIT** Licence.
 
 If you use CView in your research, please cite the [repository](https://github.com/mavensgroup/cview).

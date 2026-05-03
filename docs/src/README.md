@@ -6,7 +6,7 @@
 <div class="cover-meta">
 <p><a href="https://mavens-group.github.io/author/rudra-banerjee/"><strong>Rudra Banerjee</strong></a></p>
 <p><a href="https://mavens-group.github.io/">The Mavens Group</a></p>
-<p class="version">v0.8.0 (2026)</p>
+<p class="version">v0.8.3 (2026)</p>
 </div>
 <a href="introduction.html" class="cover-button">Get Started</a>
 </div>
