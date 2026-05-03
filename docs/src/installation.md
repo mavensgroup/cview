@@ -101,9 +101,14 @@ cargo run --release
 
 ```
 
-This will install `cview` in `~/bin` by default. For the subsequent run, just type `cview`
-
 The first compilation may take a few minutes as it compiles the dependencies. Subsequent runs will be instant.
+
+>[!NOTE]
+>To install `cview` as a system command (accessible from anywhere), use:
+>```bash
+>cargo install --path .
+>```
+>This places the binary in `~/.cargo/bin/` (ensure this is in your PATH).
 
 
 

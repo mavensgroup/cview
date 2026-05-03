@@ -28,3 +28,39 @@ Unlike basic implementations that use a simple minimum-image convention (which c
 
 ### Automatic Valence Matching
 Valences are not hardcoded. The algorithm iteratively tests a sequence of plausible valences from the IUCr table (prioritizing the most specific matches first, followed by average sentinel values) to find the best fit for your structure.
+
+---
+
+## Using BVS in CView
+
+### Accessing BVS Values
+
+**Location**: Sidebar → **Bond Valence** expander
+
+When you expand this section, CView automatically:
+1. Computes BVS for all atoms using the current bond cutoff
+2. Assigns oxidation states based on best-fit valences
+3. Displays the results in a scrollable list
+
+**Output format** (per atom):
+```
+Fe(1): BVS = 2.93 [expected: 3+]
+O(2):  BVS = -1.98 [expected: 2-]
+```
+
+### BVS Color Mode
+
+**How to enable**: Sidebar → **Appearance** → **Color Mode** dropdown → Select **Bond Valence**
+
+**Effect**: Atoms are colored by their BVS deviation:
+- **Blue**: Under-coordinated (BVS < formal valence) — vacancies nearby, surface atoms
+- **White**: Ideal coordination (BVS ≈ formal valence)
+- **Red**: Over-coordinated (BVS > formal valence) — interstitials, compressed regions
+
+This heatmap is particularly useful for:
+- Identifying structurally strained sites in defective crystals
+- Validating relaxed DFT geometries (all sites should be near-white)
+- Spotting charge transfer in interfaces or heterostructures
+
+>[!TIP]
+>Combine BVS coloring with [polyhedra visualization](visualization.md#coordination-polyhedra) to simultaneously see coordination geometry and electronic state.

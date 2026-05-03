@@ -1,6 +1,6 @@
 # CView: Crystal Structure Visualization & Analysis
 
-![License](https://img.shields.io/badge/license-LGPLv3-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Language](https://img.shields.io/badge/rust-1.70%2B-orange.svg)
 ![GTK4](https://img.shields.io/badge/Toolkit-GTK4-46a946?logo=gtk&logoColor=white)
 ![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)
@@ -66,7 +66,6 @@ Format | VASP | Quantum Espresso | SPRKKR | CIF / XYZ |
 | :--- | :---: | :---: | :---: | :---: |
 | **Read** | 🟢 | 🟢 | 🟢 | 🟢 |
 | **Write** | 🟢 | 🟠 | 🟠 | 🟢 |
-| **Relaxation** | 🟢 | 🟢 | 🔴 | 🔴 |
 
 ---
 

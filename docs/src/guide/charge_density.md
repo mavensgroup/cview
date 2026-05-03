@@ -29,3 +29,36 @@ The software calculates $\\Delta\\rho(r) = \\rho_A(r) - \\rho_B(r)$ on the fly, 
 
 ### Exporting
 Slices can be instantly exported as high-resolution `png` or `pdf` images directly from the visualization tab, complete with isolines, heatmaps, and atomic projections.
+
+**Export Configuration**: Settings (font sizes, colorbar tick labels, line thickness) are read **live** from the Preferences dialog at the moment you click export — not when the window opens. This ensures your exports always match your current preferences.
+
+---
+
+## Advanced Features
+
+### Picture-in-Picture 3D Preview
+
+When viewing a 2D slice, CView displays a **3D miniature** of the full crystal structure in the corner of the canvas. This preview shows:
+
+- The complete unit cell with atoms rendered
+- The orientation of the current slice plane highlighted
+- Real-time updates as you change the slice position or Miller indices
+
+**Purpose**: Helps maintain spatial context when inspecting arbitrary $(hkl)$ planes — you always know where the slice is cutting through the structure.
+
+**Location**: Top-right corner of the charge density window (semi-transparent overlay).
+
+### HKL Plane Polygon Clipping
+
+For **Miller plane slices** (non-orthogonal cuts), CView computes the exact intersection polygon:
+
+**Example**: In a cubic cell, the $(111)$ plane intersects three edges → **triangular slice region**
+
+**Implementation**:
+- Computes plane-cell boundary intersections geometrically
+- Clips the heatmap and isolines to the polygon boundary
+- Renders the polygon outline for clarity
+
+This ensures the 2D visualization accurately reflects the crystallographic geometry, not just a rectangular crop.
+
+**Visual cue**: The slice boundary polygon is drawn in a contrasting color (e.g., white on dark background).
