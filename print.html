@@ -33,25 +33,23 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon.svg">
-        <link rel="shortcut icon" href="favicon.png">
-        <link rel="stylesheet" href="css/variables.css">
-        <link rel="stylesheet" href="css/general.css">
-        <link rel="stylesheet" href="css/chrome.css">
-        <link rel="stylesheet" href="css/print.css" media="print">
+        <link rel="icon" href="favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="favicon-8114d1fc.png">
+        <link rel="stylesheet" href="css/variables-8adf115d.css">
+        <link rel="stylesheet" href="css/general-2459343d.css">
+        <link rel="stylesheet" href="css/chrome-ae938929.css">
+        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="fonts/fonts.css">
+        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="highlight-css" href="highlight.css">
-        <link rel="stylesheet" id="tomorrow-night-css" href="tomorrow-night.css">
-        <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
-        <link rel="stylesheet" href="src/custom.css">
-        <link rel="stylesheet" href="./mdbook-admonish.css">
+        <link rel="stylesheet" href="src/custom-6ac2dfa5.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -59,10 +57,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex.js";
+            window.path_to_searchindex_js = "searchindex-cdaa801a.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc.js"></script>
+        <script src="toc-dc41def0.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -76,7 +74,7 @@
             </div>
         </div>
     </div>
-    <div id="body-container">
+    <div id="mdbook-body-container">
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
         <script>
             try {
@@ -105,12 +103,12 @@
             html.classList.add("js");
         </script>
 
-        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
 
         <!-- Hide / unhide sidebar before it is displayed -->
         <script>
             let sidebar = null;
-            const sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
             if (document.body.clientWidth >= 1080) {
                 try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
                 sidebar = sidebar || 'visible';
@@ -125,39 +123,39 @@
             }
         </script>
 
-        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
                 <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
             </noscript>
-            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
             </div>
         </nav>
 
-        <div id="page-wrapper" class="page-wrapper">
+        <div id="mdbook-page-wrapper" class="page-wrapper">
 
             <div class="page">
-                <div id="menu-bar-hover-placeholder"></div>
-                <div id="menu-bar" class="menu-bar sticky">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
                     <div class="left-buttons">
-                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
-                            <i class="fa fa-bars"></i>
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
                         </label>
-                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
-                            <i class="fa fa-paint-brush"></i>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
                         </button>
-                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
-                            <li role="none"><button role="menuitem" class="theme" id="default_theme">Auto</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
-                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
                         </ul>
-                        <button id="search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="searchbar">
-                            <i class="fa fa-search"></i>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
                         </button>
                     </div>
 
@@ -165,98 +163,114 @@
 
                     <div class="right-buttons">
                         <a href="print.html" title="Print this book" aria-label="Print this book">
-                            <i id="print-button" class="fa fa-print"></i>
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
                         <a href="https://github.com/mavensgroup/cview" title="Git repository" aria-label="Git repository">
-                            <i id="git-repository-button" class="fa fa-github"></i>
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
                         </a>
 
                     </div>
                 </div>
 
-                <div id="search-wrapper" class="hidden">
-                    <form id="searchbar-outer" class="searchbar-outer">
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
                         <div class="search-wrapper">
-                            <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
                             <div class="spinner-wrapper">
-                                <i class="fa fa-spinner fa-spin"></i>
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
                             </div>
                         </div>
                     </form>
-                    <div id="searchresults-outer" class="searchresults-outer hidden">
-                        <div id="searchresults-header" class="searchresults-header"></div>
-                        <ul id="searchresults">
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
                         </ul>
                     </div>
                 </div>
 
                 <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
                 <script>
-                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
-                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
-                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
                         link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
                     });
                 </script>
 
-                <div id="content" class="content">
+                <div id="mdbook-content" class="content">
                     <main>
-                        <div id="cover-page">
+                        <h1 id="cover"><a href="#cover" class="header">Cover</a></h1>
+<div id="cover-page">
 <img src="images/cview.svg" class="cover-logo" alt="CView Logo">
-<h1 id="cview" class="cover-title"><a class="header" href="#cview">CView</a></h1>
-<p class="cover-subtitle">Crystal Structure Visualization & Analysis</p>
+<h1 class="cover-title">CView</h1>
+
+<p class="cover-subtitle">Crystal Structure Visualization &amp; Analysis</p>
+
 <div class="cover-divider"></div>
+
 <div class="cover-meta">
 <p><a href="https://mavens-group.github.io/author/rudra-banerjee/"><strong>Rudra Banerjee</strong></a></p>
+
 <p><a href="https://mavens-group.github.io/">The Mavens Group</a></p>
+
 <p class="version">v0.8.3 (2026)</p>
+
 </div>
-<a href="introduction.html" class="cover-button">Get Started</a>
+
+<a href="#cview-crystal-structure-visualization--analysis" class="cover-button">Get Started</a>
 </div>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="cview-crystal-structure-visualization--analysis"><a class="header" href="#cview-crystal-structure-visualization--analysis">CView: Crystal Structure Visualization &amp; Analysis</a></h1>
-<p><img src="https://img.shields.io/badge/license-LGPLv3-blue.svg" alt="License" />
-<img src="https://img.shields.io/badge/rust-1.70%2B-orange.svg" alt="Language" />
-<img src="https://img.shields.io/badge/Toolkit-GTK4-46a946?logo=gtk&amp;logoColor=white" alt="GTK4" />
-<img src="https://img.shields.io/badge/Linux-FCC624?logo=linux&amp;logoColor=black" alt="Linux" />
-<img src="https://img.shields.io/badge/Windows-fcc624?logo=microsoft&amp;logoColor=white" alt="Windows" />
-<img src="https://img.shields.io/badge/macOS-fcc624?logo=apple&amp;logoColor=black" alt="macOS" /></p>
+
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="cview-crystal-structure-visualization--analysis"><a class="header" href="#cview-crystal-structure-visualization--analysis">CView: Crystal Structure Visualization &amp; Analysis</a></h1>
+<p><img src="https://img.shields.io/badge/license-LGPLv3-blue.svg" alt="License">
+<img src="https://img.shields.io/badge/rust-1.70%2B-orange.svg" alt="Language">
+<img src="https://img.shields.io/badge/Toolkit-GTK4-46a946?logo=gtk&amp;logoColor=white" alt="GTK4">
+<img src="https://img.shields.io/badge/Linux-FCC624?logo=linux&amp;logoColor=black" alt="Linux">
+<img src="https://img.shields.io/badge/Windows-fcc624?logo=microsoft&amp;logoColor=white" alt="Windows">
+<img src="https://img.shields.io/badge/macOS-fcc624?logo=apple&amp;logoColor=black" alt="macOS"></p>
 <p><strong>CView</strong> is a high-performance crystallographic tool written in <strong>Rust</strong> and <strong>GTK4</strong>. It bridges the gap between structure visualization and <em>ab-initio</em> calculation setup (VASP, QE, SPRKKR).</p>
-<blockquote>
-<p>[!IMPORTANT]
-This version of <code>CView</code> is built on <strong>GTK4</strong>, which primarily utilizes the CPU for rendering.<br>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p>This version of <code>CView</code> is built on <strong>GTK4</strong>, which primarily utilizes the CPU for rendering.<br>
 While the engine is optimized, it is designed for <strong>crystal structures</strong> (unit cells, supercells, slabs). It handles systems up to $\approx 5000$ atoms with ease, but it is <strong>not suitable</strong> for visualizing massive biological macromolecules (e.g., proteins, DNA) containing millions of atoms.<br>
 The largest molecule we have tested is of $6000$ atoms core shell polymer.</p>
 </blockquote>
-<blockquote>
-<p>[!TIP]
-CView is not just a viewer; it is a <strong>pre-calculation validator</strong>. It focuses on Reciprocal Space and Geometric consistency to prevent wasted CPU hours on incorrect VASP/QE inputs.</p>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>CView is not just a viewer; it is a <strong>pre-calculation validator</strong>. It focuses on Reciprocal Space and Geometric consistency to prevent wasted CPU hours on incorrect VASP/QE inputs.</p>
 </blockquote>
-<p><img src="images/screenshot_main.png" alt="Screenshot of CView" /></p>
-<hr />
+<p><img src="images/screenshot_main.png" alt="Screenshot of CView"></p>
+<hr>
 <h2 id="why-cview"><a class="header" href="#why-cview">Why CView?</a></h2>
-<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Feature</th><th style="text-align: left">Description</th></tr></thead><tbody>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Feature</th><th style="text-align: left">Description</th></tr>
+</thead>
+<tbody>
 <tr><td style="text-align: left"><strong>Fast &amp; Lightweight</strong></td><td style="text-align: left">Built on Rust/GTK4. No GPU drivers required. Runs on any laptop.</td></tr>
-<tr><td style="text-align: left"><strong>Analysis First</strong></td><td style="text-align: left">Dedicated tools for <a href="guide/kpath.html">K-Paths</a>, <a href="guide/slabs.html">Slabs</a>, and <a href="guide/voids.html">Void Analysis</a>.</td></tr>
+<tr><td style="text-align: left"><strong>Analysis First</strong></td><td style="text-align: left">Dedicated tools for <a href="#high-symmetry-k-points-and-k-path">K-Paths</a>, <a href="#surface-slabs-building">Slabs</a>, and <a href="#voids-analysis">Void Analysis</a>.</td></tr>
 <tr><td style="text-align: left"><strong>DFT Ready</strong></td><td style="text-align: left">Native support for VASP, Quantum Espresso, and SPRKKR formats.</td></tr>
 <tr><td style="text-align: left"><strong>Publication Quality</strong></td><td style="text-align: left">Export high-resolution, transparent PNGs and PDFs using PBR rendering.</td></tr>
-</tbody></table>
+</tbody>
+</table>
 </div>
-<hr />
+<hr>
 <h2 id="documentation-overview"><a class="header" href="#documentation-overview">Documentation Overview</a></h2>
 <p>This manual is divided into three parts:</p>
 <ol>
-<li><strong><a href="installation.html">Installation</a></strong>: Get CView running on Linux, Windows, or macOS.</li>
-<li><strong><a href="guide/analysis.html">User Guide</a></strong>: Deep dive into the scientific methodology.
+<li><strong><a href="#installation">Installation</a></strong>: Get CView running on Linux, Windows, or macOS.</li>
+<li><strong><a href="#analysis-tools">User Guide</a></strong>: Deep dive into the scientific methodology.
 <ul>
-<li><strong><a href="guide/kpath.html">K-Path Visualization</a></strong>: Brillouin zone construction and HSP selection.</li>
-<li><strong><a href="guide/xrd.html">XRD Simulation</a></strong>: Structure factors and powder diffraction patterns.</li>
-<li><strong><a href="guide/slabs.html">Surface Slabs</a></strong>: Creating vacuum-padded slabs for surface science.</li>
-<li><strong><a href="guide/charge_density.html">Charge Density</a></strong>: Charge Density analysis</li>
+<li><strong><a href="#high-symmetry-k-points-and-k-path">K-Path Visualization</a></strong>: Brillouin zone construction and HSP selection.</li>
+<li><strong><a href="#xrd-simulation">XRD Simulation</a></strong>: Structure factors and powder diffraction patterns.</li>
+<li><strong><a href="#surface-slabs-building">Surface Slabs</a></strong>: Creating vacuum-padded slabs for surface science.</li>
+<li><strong><a href="#charge-density-visualization">Charge Density</a></strong>: Charge Density analysis</li>
 </ul>
 </li>
 <li><strong><a href="tutorials">Tutorials</a></strong>: To Do.</li>
 </ol>
-<hr />
+<hr>
 <h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
 <p>Get up and running in seconds.</p>
 <h3 id="clone-and-run"><a class="header" href="#clone-and-run">Clone and Run</a></h3>
@@ -264,20 +278,26 @@ CView is not just a viewer; it is a <strong>pre-calculation validator</strong>. 
 cd cview
 cargo run --release
 </code></pre>
-<p>See the <a href="installation.html">Installation Page</a> for detailed OS-specific instructions.</p>
-<hr />
+<p>See the <a href="#installation">Installation Page</a> for detailed OS-specific instructions.</p>
+<hr>
 <h2 id="supported-formats"><a class="header" href="#supported-formats">Supported Formats</a></h2>
-<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Format</th><th style="text-align: center">VASP</th><th style="text-align: center">Quantum Espresso</th><th style="text-align: center">SPRKKR</th><th style="text-align: center">CIF / XYZ</th></tr></thead><tbody>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Format</th><th style="text-align: center">VASP</th><th style="text-align: center">Quantum Espresso</th><th style="text-align: center">SPRKKR</th><th style="text-align: center">CIF / XYZ</th></tr>
+</thead>
+<tbody>
 <tr><td style="text-align: left"><strong>Read</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td></tr>
 <tr><td style="text-align: left"><strong>Write</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟠</td><td style="text-align: center">🟠</td><td style="text-align: center">🟢</td></tr>
 <tr><td style="text-align: left"><strong>Relaxation</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🔴</td><td style="text-align: center">🔴</td></tr>
-</tbody></table>
+</tbody>
+</table>
 </div>
-<hr />
+<hr>
 <h2 id="links"><a class="header" href="#links">Links</a></h2>
-<blockquote>
-<p>[!WARNING]
-This is a beta release. While the core functionality is operational, the software may contain incomplete features, bugs, or unstable behaviour.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>This is a beta release. While the core functionality is operational, the software may contain incomplete features, bugs, or unstable behaviour.</p>
 </blockquote>
 <p>Contributions from testers and developers are welcome.</p>
 <ul>
@@ -288,20 +308,21 @@ This is a beta release. While the core functionality is operational, the softwar
 <h2 id="license--citation"><a class="header" href="#license--citation">License &amp; Citation</a></h2>
 <p><strong>CView</strong> is open-source software licensed under the <strong>MIT</strong> Licence.</p>
 <p>If you use CView in your research, please cite the <a href="https://github.com/mavensgroup/cview">repository</a>.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
-<blockquote>
-<p>[!TIP]
-If you have <code>cargo</code> installed, then jump to <a href="installation.html#3-build-from-source">Build from source</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>If you have <code>cargo</code> installed, then jump to <a href="#3-build-from-source">Build from source</a>.</p>
 </blockquote>
 <p>CView is a cross-platform application built on <strong>Rust</strong> and <strong>GTK4</strong>. Because it uses the native GTK4 libraries for rendering, the installation process involves two steps:</p>
 <ol>
 <li>Installing the system dependencies (GTK4).</li>
 <li>Compiling the application using Cargo.</li>
 </ol>
-<hr />
+<hr>
 <h2 id="1-install-dependencies"><a class="header" href="#1-install-dependencies">1. Install Dependencies</a></h2>
 <p>Select your operating system below to set up the required libraries.</p>
-<h3 id="linux"><a class="header" href="#linux"><i class="fab fa-linux"></i> Linux</a></h3>
+<h3 id="linux"><a class="header" href="#linux"><span class="fa-svg"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M220.8 123.3c1 .5 1.8 1.7 3 1.7 1.1 0 2.8-.4 2.9-1.5.2-1.4-1.9-2.3-3.2-2.9-1.7-.7-3.9-1-5.5-.1-.4.2-.8.7-.6 1.1.3 1.3 2.3 1.1 3.4 1.7zm-21.9 1.7c1.2 0 2-1.2 3-1.7 1.1-.6 3.1-.4 3.5-1.6.2-.4-.2-.9-.6-1.1-1.6-.9-3.8-.6-5.5.1-1.3.6-3.4 1.5-3.2 2.9.1 1 1.8 1.5 2.8 1.4zM420 403.8c-3.6-4-5.3-11.6-7.2-19.7-1.8-8.1-3.9-16.8-10.5-22.4-1.3-1.1-2.6-2.1-4-2.9-1.3-.8-2.7-1.5-4.1-2 9.2-27.3 5.6-54.5-3.7-79.1-11.4-30.1-31.3-56.4-46.5-74.4-17.1-21.5-33.7-41.9-33.4-72C311.1 85.4 315.7.1 234.8 0 132.4-.2 158 103.4 156.9 135.2c-1.7 23.4-6.4 41.8-22.5 64.7-18.9 22.5-45.5 58.8-58.1 96.7-6 17.9-8.8 36.1-6.2 53.3-6.5 5.8-11.4 14.7-16.6 20.2-4.2 4.3-10.3 5.9-17 8.3s-14 6-18.5 14.5c-2.1 3.9-2.8 8.1-2.8 12.4 0 3.9.6 7.9 1.2 11.8 1.2 8.1 2.5 15.7.8 20.8-5.2 14.4-5.9 24.4-2.2 31.7 3.8 7.3 11.4 10.5 20.1 12.3 17.3 3.6 40.8 2.7 59.3 12.5 19.8 10.4 39.9 14.1 55.9 10.4 11.6-2.6 21.1-9.6 25.9-20.2 12.5-.1 26.3-5.4 48.3-6.6 14.9-1.2 33.6 5.3 55.1 4.1.6 2.3 1.4 4.6 2.5 6.7v.1c8.3 16.7 23.8 24.3 40.3 23 16.6-1.3 34.1-11 48.3-27.9 13.6-16.4 36-23.2 50.9-32.2 7.4-4.5 13.4-10.1 13.9-18.3.4-8.2-4.4-17.3-15.5-29.7zM223.7 87.3c9.8-22.2 34.2-21.8 44-.4 6.5 14.2 3.6 30.9-4.3 40.4-1.6-.8-5.9-2.6-12.6-4.9 1.1-1.2 3.1-2.7 3.9-4.6 4.8-11.8-.2-27-9.1-27.3-7.3-.5-13.9 10.8-11.8 23-4.1-2-9.4-3.5-13-4.4-1-6.9-.3-14.6 2.9-21.8zM183 75.8c10.1 0 20.8 14.2 19.1 33.5-3.5 1-7.1 2.5-10.2 4.6 1.2-8.9-3.3-20.1-9.6-19.6-8.4.7-9.8 21.2-1.8 28.1 1 .8 1.9-.2-5.9 5.5-15.6-14.6-10.5-52.1 8.4-52.1zm-13.6 60.7c6.2-4.6 13.6-10 14.1-10.5 4.7-4.4 13.5-14.2 27.9-14.2 7.1 0 15.6 2.3 25.9 8.9 6.3 4.1 11.3 4.4 22.6 9.3 8.4 3.5 13.7 9.7 10.5 18.2-2.6 7.1-11 14.4-22.7 18.1-11.1 3.6-19.8 16-38.2 14.9-3.9-.2-7-1-9.6-2.1-8-3.5-12.2-10.4-20-15-8.6-4.8-13.2-10.4-14.7-15.3-1.4-4.9 0-9 4.2-12.3zm3.3 334c-2.7 35.1-43.9 34.4-75.3 18-29.9-15.8-68.6-6.5-76.5-21.9-2.4-4.7-2.4-12.7 2.6-26.4v-.2c2.4-7.6.6-16-.6-23.9-1.2-7.8-1.8-15 .9-20 3.5-6.7 8.5-9.1 14.8-11.3 10.3-3.7 11.8-3.4 19.6-9.9 5.5-5.7 9.5-12.9 14.3-18 5.1-5.5 10-8.1 17.7-6.9 8.1 1.2 15.1 6.8 21.9 16l19.6 35.6c9.5 19.9 43.1 48.4 41 68.9zm-1.4-25.9c-4.1-6.6-9.6-13.6-14.4-19.6 7.1 0 14.2-2.2 16.7-8.9 2.3-6.2 0-14.9-7.4-24.9-13.5-18.2-38.3-32.5-38.3-32.5-13.5-8.4-21.1-18.7-24.6-29.9s-3-23.3-.3-35.2c5.2-22.9 18.6-45.2 27.2-59.2 2.3-1.7.8 3.2-8.7 20.8-8.5 16.1-24.4 53.3-2.6 82.4.6-20.7 5.5-41.8 13.8-61.5 12-27.4 37.3-74.9 39.3-112.7 1.1.8 4.6 3.2 6.2 4.1 4.6 2.7 8.1 6.7 12.6 10.3 12.4 10 28.5 9.2 42.4 1.2 6.2-3.5 11.2-7.5 15.9-9 9.9-3.1 17.8-8.6 22.3-15 7.7 30.4 25.7 74.3 37.2 95.7 6.1 11.4 18.3 35.5 23.6 64.6 3.3-.1 7 .4 10.9 1.4 13.8-35.7-11.7-74.2-23.3-84.9-4.7-4.6-4.9-6.6-2.6-6.5 12.6 11.2 29.2 33.7 35.2 59 2.8 11.6 3.3 23.7.4 35.7 16.4 6.8 35.9 17.9 30.7 34.8-2.2-.1-3.2 0-4.2 0 3.2-10.1-3.9-17.6-22.8-26.1-19.6-8.6-36-8.6-38.3 12.5-12.1 4.2-18.3 14.7-21.4 27.3-2.8 11.2-3.6 24.7-4.4 39.9-.5 7.7-3.6 18-6.8 29-32.1 22.9-76.7 32.9-114.3 7.2zm257.4-11.5c-.9 16.8-41.2 19.9-63.2 46.5-13.2 15.7-29.4 24.4-43.6 25.5s-26.5-4.8-33.7-19.3c-4.7-11.1-2.4-23.1 1.1-36.3 3.7-14.2 9.2-28.8 9.9-40.6.8-15.2 1.7-28.5 4.2-38.7 2.6-10.3 6.6-17.2 13.7-21.1.3-.2.7-.3 1-.5.8 13.2 7.3 26.6 18.8 29.5 12.6 3.3 30.7-7.5 38.4-16.3 9-.3 15.7-.9 22.6 5.1 9.9 8.5 7.1 30.3 17.1 41.6 10.6 11.6 14 19.5 13.7 24.6zM173.3 148.7c2 1.9 4.7 4.5 8 7.1 6.6 5.2 15.8 10.6 27.3 10.6 11.6 0 22.5-5.9 31.8-10.8 4.9-2.6 10.9-7 14.8-10.4s5.9-6.3 3.1-6.6-2.6 2.6-6 5.1c-4.4 3.2-9.7 7.4-13.9 9.8-7.4 4.2-19.5 10.2-29.9 10.2s-18.7-4.8-24.9-9.7c-3.1-2.5-5.7-5-7.7-6.9-1.5-1.4-1.9-4.6-4.3-4.9-1.4-.1-1.8 3.7 1.7 6.5z"/></svg></span> Linux</a></h3>
 <p>You need the GTK4 development headers and the standard build tools (gcc/clang).</p>
 <p><strong>Fedora / RHEL</strong></p>
 <pre><code class="language-bash">sudo dnf install gcc gtk4-devel libadwaita-devel
@@ -316,7 +337,7 @@ sudo apt install build-essential libgtk-4-dev libadwaita-1-dev
 <pre><code class="language-bash">sudo pacman -S base-devel gtk4 libadwaita
 
 </code></pre>
-<h3 id="macos"><a class="header" href="#macos"><i class="fab fa-apple"></i> macOS</a></h3>
+<h3 id="macos"><a class="header" href="#macos"><span class="fa-svg"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z"/></svg></span> macOS</a></h3>
 <p>The easiest way to install GTK4 on macOS is via <strong>Homebrew</strong>.</p>
 <pre><code class="language-bash"># 1. Install Homebrew if you haven't already
 /bin/bash -c "$(curl -fsSL [https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh](https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh))"
@@ -325,7 +346,7 @@ sudo apt install build-essential libgtk-4-dev libadwaita-1-dev
 brew install rust gtk4 libadwaita adwaita-icon-theme
 
 </code></pre>
-<h3 id="windows"><a class="header" href="#windows"><i class="fab fa-windows"></i> Windows</a></h3>
+<h3 id="windows"><a class="header" href="#windows"><span class="fa-svg"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 93.7l183.6-25.3v177.4H0V93.7zm0 324.6l183.6 25.3V268.4H0v149.9zm203.8 28L448 480V268.4H203.8v177.9zm0-380.6v180.1H448V32L203.8 65.7z"/></svg></span> Windows</a></h3>
 <p>For Windows, we recommend using the <strong>MSYS2</strong> environment to manage the native GTK4 libraries.</p>
 <ol>
 <li><strong>Install MSYS2:</strong> Download the installer from <a href="https://www.msys2.org/">msys2.org</a>.</li>
@@ -341,16 +362,16 @@ Run this command <em>inside the MSYS2 terminal</em>:
 </ul>
 </li>
 </ol>
-<blockquote>
-<p>[!IMPORTANT]
-The <code>pacman</code> command above works <strong>only</strong> inside the MSYS2 terminal. It will fail if you try to run it in PowerShell or Command Prompt.</p>
+<blockquote class="blockquote-tag blockquote-tag-important">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 1.75C0 .784.784 0 1.75 0h12.5C15.216 0 16 .784 16 1.75v9.5A1.75 1.75 0 0 1 14.25 13H8.06l-2.573 2.573A1.458 1.458 0 0 1 3 14.543V13H1.75A1.75 1.75 0 0 1 0 11.25Zm1.75-.25a.25.25 0 0 0-.25.25v9.5c0 .138.112.25.25.25h2a.75.75 0 0 1 .75.75v2.19l2.72-2.72a.749.749 0 0 1 .53-.22h6.5a.25.25 0 0 0 .25-.25v-9.5a.25.25 0 0 0-.25-.25Zm7 2.25v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 9a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Important</p>
+<p>The <code>pacman</code> command above works <strong>only</strong> inside the MSYS2 terminal. It will fail if you try to run it in PowerShell or Command Prompt.</p>
 </blockquote>
-<hr />
+<hr>
 <h2 id="2-install-rust"><a class="header" href="#2-install-rust">2. Install Rust</a></h2>
 <p>If you do not have the Rust compiler installed, the recommended way is via <code>rustup</code>.</p>
-<blockquote>
-<p>[!NOTE]
-CView requires <strong>Rust 1.70</strong> or higher.
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>CView requires <strong>Rust 1.70</strong> or higher.
 Check your version with: <code>cargo --version</code></p>
 </blockquote>
 <p><strong>Command (Linux / macOS / Windows PowerShell):</strong></p>
@@ -369,45 +390,52 @@ cargo run --release
 <p>This will install <code>cview</code> in <code>~/bin</code> by default. For the subsequent run, just type <code>cview</code></p>
 <p>The first compilation may take a few minutes as it compiles the dependencies. Subsequent runs will be instant.</p>
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
-<blockquote>
-<p>[!CAUTION]
-If the build fails claiming it cannot find <code>gtk4</code> or <code>pkg-config</code>, it means the development headers are missing.</p>
+<blockquote class="blockquote-tag blockquote-tag-caution">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M4.47.22A.749.749 0 0 1 5 0h6c.199 0 .389.079.53.22l4.25 4.25c.141.14.22.331.22.53v6a.749.749 0 0 1-.22.53l-4.25 4.25A.749.749 0 0 1 11 16H5a.749.749 0 0 1-.53-.22L.22 11.53A.749.749 0 0 1 0 11V5c0-.199.079-.389.22-.53Zm.84 1.28L1.5 5.31v5.38l3.81 3.81h5.38l3.81-3.81V5.31L10.69 1.5ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Caution</p>
+<p>If the build fails claiming it cannot find <code>gtk4</code> or <code>pkg-config</code>, it means the development headers are missing.</p>
 <ul>
 <li><strong>Linux:</strong> Ensure you installed the <code>-dev</code> or <code>-devel</code> packages (e.g., <code>libgtk-4-dev</code>), not just the runtime library.</li>
 <li><strong>macOS:</strong> Try running <code>brew link gtk4</code>.</li>
 </ul>
 </blockquote>
-<blockquote>
-<p>[!CAUTION]
-If you see errors related to <code>cc</code> or <code>ld</code>:</p>
+<blockquote class="blockquote-tag blockquote-tag-caution">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M4.47.22A.749.749 0 0 1 5 0h6c.199 0 .389.079.53.22l4.25 4.25c.141.14.22.331.22.53v6a.749.749 0 0 1-.22.53l-4.25 4.25A.749.749 0 0 1 11 16H5a.749.749 0 0 1-.53-.22L.22 11.53A.749.749 0 0 1 0 11V5c0-.199.079-.389.22-.53Zm.84 1.28L1.5 5.31v5.38l3.81 3.81h5.38l3.81-3.81V5.31L10.69 1.5ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Caution</p>
+<p>If you see errors related to <code>cc</code> or <code>ld</code>:</p>
 <ul>
 <li>Ensure you have <code>build-essential</code> (Linux) or Xcode Command Line Tools (macOS) installed.</li>
 </ul>
 </blockquote>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="loading--visualization"><a class="header" href="#loading--visualization">Loading &amp; Visualization</a></h1>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="loading--visualization"><a class="header" href="#loading--visualization">Loading &amp; Visualization</a></h1>
 <p>This section outlines the core workflows for importing structure files, managing the workspace, and controlling the visual representation of crystal structures.</p>
 <h2 id="file-operations"><a class="header" href="#file-operations">File Operations</a></h2>
 <h3 id="opening-files"><a class="header" href="#opening-files">Opening Files</a></h3>
 <p>To load a structure, navigate to <code>File → Open (Ctrl + O)</code> in the application menu. CView utilizes the native file chooser of your operating system to ensure a familiar experience.</p>
 <p><strong>Supported Formats:</strong>
 CView automatically detects the file type based on extension and content. You can open the following formats:</p>
-<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Format</th><th style="text-align: left">Extensions</th><th style="text-align: left">Description</th></tr></thead><tbody>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Format</th><th style="text-align: left">Extensions</th><th style="text-align: left">Description</th></tr>
+</thead>
+<tbody>
 <tr><td style="text-align: left"><strong>CIF</strong></td><td style="text-align: left"><code>.cif</code></td><td style="text-align: left">Standard Crystallographic Information Files.</td></tr>
 <tr><td style="text-align: left"><strong>VASP</strong></td><td style="text-align: left"><code>POSCAR</code>, <code>CONTCAR</code>, <code>.vasp</code></td><td style="text-align: left">Standard VASP structure inputs and outputs.</td></tr>
 <tr><td style="text-align: left"><strong>Quantum Espresso</strong></td><td style="text-align: left"><code>.in</code>, <code>.out</code>, <code>.pwi</code>, <code>.qe</code></td><td style="text-align: left">Reads atomic positions and cell parameters from input/output logs.</td></tr>
 <tr><td style="text-align: left"><strong>SPR-KKR</strong></td><td style="text-align: left"><code>.pot</code>, <code>.sys</code></td><td style="text-align: left">Munich SPR-KKR potential and system files.</td></tr>
 <tr><td style="text-align: left"><strong>XYZ</strong></td><td style="text-align: left"><code>.xyz</code></td><td style="text-align: left">Cartesian coordinates (Standard and Extended XYZ).</td></tr>
-</tbody></table>
+</tbody>
+</table>
 </div>
 <h3 id="tab-management"><a class="header" href="#tab-management">Tab Management</a></h3>
 <p>CView uses a tabbed interface to handle multiple structures simultaneously. The application employs a <strong>smart loading strategy</strong> to keep the workspace clean:</p>
 <ul>
-<li><strong>Replacement Mode:</strong> If the current active tab is empty (labelled "Untitled" with no structure), opening a file will replace this tab.</li>
+<li><strong>Replacement Mode:</strong> If the current active tab is empty (labelled “Untitled” with no structure), opening a file will replace this tab.</li>
 <li><strong>New Tab Mode:</strong> If a structure is already loaded, the new file will open in a separate, closable tab.</li>
 </ul>
-<blockquote>
-<p>[!NOTE]
-Upon successfully loading a file, the application logs the event in the <strong>Interaction Log</strong> and automatically refreshes the <strong>Sidebar</strong> to display the atom list for the new structure.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Upon successfully loading a file, the application logs the event in the <strong>Interaction Log</strong> and automatically refreshes the <strong>Sidebar</strong> to display the atom list for the new structure.</p>
 </blockquote>
 <h3 id="saving--exporting"><a class="header" href="#saving--exporting">Saving &amp; Exporting</a></h3>
 <h4 id="saving-data"><a class="header" href="#saving-data">Saving Data</a></h4>
@@ -432,16 +460,23 @@ Upon successfully loading a file, the application logs the event in the <strong>
 </ul>
 <h3 id="rotation-modes"><a class="header" href="#rotation-modes">Rotation Modes</a></h3>
 <p>You can customize the pivot point around which the camera rotates, depending on whether you are inspecting the atomic cluster or the lattice boundaries.</p>
-<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Mode</th><th style="text-align: left">Description</th></tr></thead><tbody>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Mode</th><th style="text-align: left">Description</th></tr>
+</thead>
+<tbody>
 <tr><td style="text-align: left">Centroid</td><td style="text-align: left">Rotates around the geometric centre of the atoms. Best for inspecting molecules or specific bonding environments.</td></tr>
 <tr><td style="text-align: left">Unit Cell</td><td style="text-align: left">Rotates around the centre of the unit cell box. Best for understanding the lattice boundaries relative to the origin.</td></tr>
-</tbody></table>
+</tbody>
+</table>
 </div>
 <h3 id="exporting-visuals"><a class="header" href="#exporting-visuals">Exporting Visuals</a></h3>
 <p>For publications and presentations, <code>CView</code> offers high-fidelity export options via the <code>File → Export (Ctrl + E)</code> menu.</p>
 <p>PNG Image: Renders a high-resolution raster image (default resolution: $2000\times 1500$ pixels). Ideal for slides and quick sharing.</p>
 <p>PDF Document: Exports the scene as a vector graphic. This is recommended for academic papers, as it allows for infinite scaling without loss of quality.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="analysis-tools"><a class="header" href="#analysis-tools">Analysis Tools</a></h1>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="analysis-tools"><a class="header" href="#analysis-tools">Analysis Tools</a></h1>
 <p>The Analysis module in CView aggregates tools designed to characterize the geometric, symmetric, and diffraction properties of the loaded crystal structure. Unlike simple visualization, these tools perform computational tasks to extract physical descriptors suitable for comparison with experimental data or preparation for <em>ab initio</em> calculations.</p>
 <h2 id="accessing-analysis-tools"><a class="header" href="#accessing-analysis-tools">Accessing Analysis Tools</a></h2>
 <p>The analysis suite is accessible via the <strong>Analysis</strong> menu in the main application window. This triggers the centralized Analysis Window (<code>actions_analysis.rs</code>), which provides tabbed access to the following modules:</p>
@@ -454,41 +489,42 @@ Upon successfully loading a file, the application logs the event in the <strong>
 <h2 id="documentation-modules"><a class="header" href="#documentation-modules">Documentation Modules</a></h2>
 <p>Detailed physical derivation and algorithmic implementation for each tool are provided below:</p>
 <ul>
-<li><strong><a href="guide/symmetry.html">Symmetry Analysis</a></strong>
+<li><strong><a href="#symmetry-analysis">Symmetry Analysis</a></strong>
 <ul>
 <li><em>Engine</em>: Moyo (Rust implementation of Spglib).</li>
 <li><em>Output</em>: Space Group symbols, numbers, and crystal systems.</li>
 </ul>
 </li>
-<li><strong><a href="guide/xrd.html">XRD Simulation</a></strong>
+<li><strong><a href="#xrd-simulation">XRD Simulation</a></strong>
 <ul>
 <li><em>Theory</em>: Kinematic Diffraction Theory.</li>
 <li><em>Features</em>: Powder patterns, Cu-K$\alpha$ radiation, Lorentz-Polarization corrections.</li>
 </ul>
 </li>
-<li><strong><a href="guide/voids.html">Void &amp; Intercalation</a></strong>
+<li><strong><a href="#voids-analysis">Void &amp; Intercalation</a></strong>
 <ul>
 <li><em>Method</em>: Grid-based geometric insertion.</li>
 <li><em>Application</em>: Porosity calculation and battery ion insertion sites.</li>
 </ul>
 </li>
-<li><strong><a href="guide/kpath.html">Reciprocal Space (K-Path)</a></strong>
+<li><strong><a href="#high-symmetry-k-points-and-k-path">Reciprocal Space (K-Path)</a></strong>
 <ul>
 <li><em>Method</em>: High-symmetry path standardization (Setyawan-Curtarolo).</li>
 <li><em>Application</em>: Band structure calculation inputs.</li>
 </ul>
 </li>
 </ul>
-<hr />
+<hr>
 <p><em>Note: While <strong>Surface Slabs</strong> are technically a structural building operation, their documentation regarding miller index transformation is provided here for completeness.</em></p>
 <ul>
-<li><strong><a href="guide/slabs.html">Surface Slabs</a></strong>
+<li><strong><a href="#surface-slabs-building">Surface Slabs</a></strong>
 <ul>
 <li><em>Method</em>: Lattice transformation via planar basis searching.</li>
 </ul>
 </li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="symmetry-analysis"><a class="header" href="#symmetry-analysis">Symmetry Analysis</a></h1>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="symmetry-analysis"><a class="header" href="#symmetry-analysis">Symmetry Analysis</a></h1>
 <p>The Symmetry module identifies the underlying crystallographic space group of the loaded structure. It is essential for reducing computational cost in DFT calculations and validating experimental structures.</p>
 <h2 id="algorithmic-implementation"><a class="header" href="#algorithmic-implementation">Algorithmic Implementation</a></h2>
 <p>CView utilizes the <strong>Moyo</strong> library (a Rust ecosystem equivalent to Spglib) to perform symmetry determination. The analysis pipeline proceeds as follows:</p>
@@ -497,8 +533,8 @@ Upon successfully loading a file, the application logs the event in the <strong>
 <li><strong>Coordinate Transformation</strong>: Atomic positions are transformed from Cartesian ($r_{cart}$) to Fractional ($r_{frac}$) coordinates via the inverse lattice matrix:
 $$r_{frac} = M_{lattice}^{-1} \cdot r_{cart}$$</li>
 <li><strong>Symmetry Search</strong>: The algorithm searches for symmetry operations (rotations $R$ and translations $t$) that map the crystal onto itself:
-$$R \cdot r + t \equiv r' \pmod 1$$
-where $r$ and $r'$ are atomic positions of the same species.</li>
+$$R \cdot r + t \equiv r’ \pmod 1$$
+where $r$ and $r’$ are atomic positions of the same species.</li>
 </ol>
 <h3 id="tolerance-symprec"><a class="header" href="#tolerance-symprec">Tolerance (<code>SYMPREC</code>)</a></h3>
 <p>The code applies a default symmetry precision (<code>SYMPREC</code>) of <strong>1e-3 Å</strong>. This tolerance accommodates minor numerical noise common in file formats like <code>.cif</code> or <code>.xyz</code>, ensuring that slightly distorted experimental structures are correctly identified.</p>
@@ -510,8 +546,9 @@ where $r$ and $r'$ are atomic positions of the same species.</li>
 <li><strong>Crystal System</strong>: The classification (Triclinic, Monoclinic, Orthorhombic, Tetragonal, Trigonal, Hexagonal, or Cubic).</li>
 </ul>
 <h2 id="usage-reference"><a class="header" href="#usage-reference">Usage Reference</a></h2>
-<p>This analysis is performed "read-only" regarding the structure; it calculates descriptors without altering the atomic coordinates of the active tab.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="xrd-simulation"><a class="header" href="#xrd-simulation">XRD Simulation</a></h1>
+<p>This analysis is performed “read-only” regarding the structure; it calculates descriptors without altering the atomic coordinates of the active tab.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="xrd-simulation"><a class="header" href="#xrd-simulation">XRD Simulation</a></h1>
 <p>The X-Ray Diffraction (XRD) module simulates the powder diffraction pattern for the loaded structure. It utilizes <strong>Kinematic Diffraction Theory</strong>, assuming ideal interactions without primary extinction or multiple scattering events.</p>
 <h2 id="physical-model"><a class="header" href="#physical-model">Physical Model</a></h2>
 <h3 id="1-lattice-physics"><a class="header" href="#1-lattice-physics">1. Lattice Physics</a></h3>
@@ -530,9 +567,9 @@ $$F_{hkl} = \sum_{j=1}^{N} f_j(\theta) \exp\left[2\pi i (hx_j + ky_j + lz_j)\rig
 <li>$x_j, y_j, z_j$: Fractional coordinates of atom $j$.</li>
 <li>$f_j(\theta)$: The atomic scattering factor.</li>
 </ul>
-<blockquote>
-<p>[!NOTE]
-The atomic scattering factor ($f_j(\theta)$) has been calculated using Cromer-Mann coefficient (<code>model/elements.rs</code>)</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The atomic scattering factor ($f_j(\theta)$) has been calculated using Cromer-Mann coefficient (<code>model/elements.rs</code>)</p>
 </blockquote>
 <h3 id="4-intensity-correction"><a class="header" href="#4-intensity-correction">4. Intensity Correction</a></h3>
 <p>The raw squared structure factor $|F_{hkl}|^2$ is corrected to obtain the observed intensity $I$. The primary correction applied in <code>xrd.rs</code> is the <strong>Lorentz-Polarization (LP) Factor</strong> for unpolarized radiation (standard laboratory diffractometer):</p>
@@ -544,18 +581,19 @@ I_{calc} &amp;= |F_{hkl}|^2 \times LP(\theta)
 <h3 id="5-multiplicity-and-merging"><a class="header" href="#5-multiplicity-and-merging">5. Multiplicity and Merging</a></h3>
 <p>In powder diffraction, symmetry-equivalent planes (e.g., $(100)$ and $(010)$ in cubic systems) diffract at the same angle. The code algorithmically sorts peaks by $2\theta$ and merges peaks falling within a narrow tolerance ($0.05^\circ$), summing their intensities to account for multiplicity.</p>
 <h3 id="6-match-with-experiment"><a class="header" href="#6-match-with-experiment">6. Match with Experiment</a></h3>
-<p>You can load the experimental ascii/xlsx file to compare the xrd using the "<code>Load Experiment</code>" button.</p>
+<p>You can load the experimental ascii/xlsx file to compare the xrd using the “<code>Load Experiment</code>” button.</p>
 <h2 id="settings"><a class="header" href="#settings">Settings</a></h2>
 <ul>
 <li><strong>Wavelength</strong>: Default fixed to Cu K$\alpha$ ($1.5406 Å$).</li>
 <li><strong>Range</strong>: $10^\circ$ to $90^\circ$ $2\theta$.</li>
 <li><strong>Filtering</strong>: Peaks with intensity $\leq 10^{-4}$ relative to the maximum are discarded to reduce noise.</li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="high-symmetry-k-points-and-k-path"><a class="header" href="#high-symmetry-k-points-and-k-path">High symmetry <em>k-points</em> and <em>k-path</em></a></h1>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="high-symmetry-k-points-and-k-path"><a class="header" href="#high-symmetry-k-points-and-k-path">High symmetry <em>k-points</em> and <em>k-path</em></a></h1>
 <p>Electronic structure calculations (Band Structures) requires sampling the energy eigenvalues along specific high-symmetry lines in the first Brillouin Zone. This module automates the generation of these paths.</p>
 <h2 id="implementation"><a class="header" href="#implementation">Implementation</a></h2>
 <h3 id="1-brillouin-zone-standardization"><a class="header" href="#1-brillouin-zone-standardization">1. Brillouin Zone Standardization</a></h3>
-<p>The code relies on the <strong>Moyo</strong> library to first determine the Bravais lattice type (e.g., FCC, BCC, HEX). This step is crucial because the definition of "High Symmetry Points" depends entirely on the lattice symmetry.</p>
+<p>The code relies on the <strong>Moyo</strong> library to first determine the Bravais lattice type (e.g., FCC, BCC, HEX). This step is crucial because the definition of “High Symmetry Points” depends entirely on the lattice symmetry.</p>
 <h3 id="2-high-symmetry-points"><a class="header" href="#2-high-symmetry-points">2. High Symmetry Points</a></h3>
 <p>CView implements standard K-point definitions (typically following the <strong>Setyawan-Curtarolo</strong> convention).</p>
 <ul>
@@ -575,7 +613,8 @@ I_{calc} &amp;= |F_{hkl}|^2 \times LP(\theta)
 <li><strong>Fractional Reciprocal Coordinates</strong>: Used for DFT inputs (e.g., KPOINTS file).</li>
 <li><strong>Cartesian Reciprocal Coordinates</strong>: Used for the 3D wireframe visualization in CView.</li>
 </ul>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="voids-analysis"><a class="header" href="#voids-analysis">Voids Analysis</a></h1>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="voids-analysis"><a class="header" href="#voids-analysis">Voids Analysis</a></h1>
 <p>This module performs geometric analysis to identify empty space within the crystal lattice. It is critical for research into battery materials (ion intercalation), porous frameworks (MOFs/Zeolites), and defect analysis.</p>
 <h2 id="algorithm-grid-based-geometric-insertion"><a class="header" href="#algorithm-grid-based-geometric-insertion">Algorithm: Grid-Based Geometric Insertion</a></h2>
 <p>The analysis does not rely on Voronoi decomposition but rather a robust <strong>Grid Probe Method</strong>.</p>
@@ -587,7 +626,7 @@ $$P_{grid} = u \cdot a + v \cdot b + w \cdot c \quad \text{where } u,v,w \in [0,
 $$D_{surf} = \min_{atoms} (||P_{grid} - P_{atom}|| - R_{vdw})$$
 Where $R_{vdw}$ is the Van der Waals radius of the atom.</p>
 <h3 id="3-probe-insertion"><a class="header" href="#3-probe-insertion">3. Probe Insertion</a></h3>
-<p>A geometric probe (representing a gas molecule or ion) with radius $R_{probe}$ is tested at each grid point. A point is considered a "Void" if:
+<p>A geometric probe (representing a gas molecule or ion) with radius $R_{probe}$ is tested at each grid point. A point is considered a “Void” if:
 $$D_{surf} &gt; R_{probe}$$</p>
 <h3 id="4-clustering-largest-sphere"><a class="header" href="#4-clustering-largest-sphere">4. Clustering (Largest Sphere)</a></h3>
 <p>To find discrete void centers (e.g., for <code>max_sphere_center</code>), the algorithm aggregates contiguous void points. The implementation explicitly identifies the point with the maximum clearance radius to locate the largest cavity center.</p>
@@ -599,9 +638,11 @@ $$D_{surf} &gt; R_{probe}$$</p>
 </ul>
 <p>The void fraction is calculated as:
 $$\phi = \frac{N_{void}}{N_{total}} \times 100%$$</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="miller-plane"><a class="header" href="#miller-plane">Miller Plane</a></h1>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="miller-plane"><a class="header" href="#miller-plane">Miller Plane</a></h1>
 <p>To update later, but see <code>menu-&gt;tools</code></p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="bond-valence-sum-bvs"><a class="header" href="#bond-valence-sum-bvs">Bond Valence Sum (BVS)</a></h1>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="bond-valence-sum-bvs"><a class="header" href="#bond-valence-sum-bvs">Bond Valence Sum (BVS)</a></h1>
 <p>The Bond Valence Sum (BVS) module is an empirical analytical tool used to estimate the oxidation states of atoms in a crystal structure and evaluate the physical plausibility of their coordination environments.</p>
 <h2 id="physical-model-1"><a class="header" href="#physical-model-1">Physical Model</a></h2>
 <p>The core principle of BVS is that the valence of an atom ($V_i$) is equal to the sum of the individual bond valences ($s_{ij}$) from all its surrounding nearest neighbors:
@@ -618,14 +659,15 @@ Where:</p>
 <p>CView does not require you to input $R_0$ parameters manually. The internal engine strictly implements:</p>
 <ol>
 <li><strong>Primary Database</strong>: The modern <strong>IUCr 2020</strong> (<code>bvparm2020.cif</code>) table containing over 1000 oxidation-state-specific element pairs.</li>
-<li><strong>Fallback Database</strong>: The empirical Brese &amp; O'Keeffe (1991) parameters for untabulated pairs.</li>
+<li><strong>Fallback Database</strong>: The empirical Brese &amp; O’Keeffe (1991) parameters for untabulated pairs.</li>
 </ol>
 <h2 id="algorithmic-implementation-1"><a class="header" href="#algorithmic-implementation-1">Algorithmic Implementation</a></h2>
 <h3 id="full-periodic-image-search"><a class="header" href="#full-periodic-image-search">Full Periodic Image Search</a></h3>
 <p>Unlike basic implementations that use a simple minimum-image convention (which can fail for high-coordination sites like Barium in perovskites where $CN=12$), CView loops over <strong>all</strong> periodic images within a defined spherical cutoff. This ensures mathematically rigorous summation for complex and tightly packed lattices.</p>
 <h3 id="automatic-valence-matching"><a class="header" href="#automatic-valence-matching">Automatic Valence Matching</a></h3>
 <p>Valences are not hardcoded. The algorithm iteratively tests a sequence of plausible valences from the IUCr table (prioritizing the most specific matches first, followed by average sentinel values) to find the best fit for your structure.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="charge-density-visualization"><a class="header" href="#charge-density-visualization">Charge Density Visualization</a></h1>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="charge-density-visualization"><a class="header" href="#charge-density-visualization">Charge Density Visualization</a></h1>
 <p>The Charge Density module allows for the visual analysis of 3D volumetric data generated by <em>ab-initio</em> codes, specifically targeting VASP <code>CHGCAR</code> formats. This tool bridges the gap between raw electronic structure outputs and qualitative chemical bonding analysis.</p>
 <h2 id="core-features"><a class="header" href="#core-features">Core Features</a></h2>
 <h3 id="2d-slice-extraction"><a class="header" href="#2d-slice-extraction">2D Slice Extraction</a></h3>
@@ -645,13 +687,18 @@ Where:</p>
 <h2 id="difference-density-maps"><a class="header" href="#difference-density-maps">Difference Density Maps</a></h2>
 <p>A powerful feature of the module is the <strong>Difference Mode</strong>. You can load two distinct <code>CHGCAR</code> files (e.g., a combined system and an isolated adatom) to compute and visualize charge transfer.</p>
 <p>The software calculates $\Delta\rho(r) = \rho_A(r) - \rho_B(r)$ on the fly, allowing you to visually identify regions of electron accumulation and depletion.</p>
-<blockquote>
-<p>[!TIP]
-CView utilizes Cairo for high-fidelity 2D rendering. When a slice is drawn, atoms near the slice plane are geometrically projected onto the 2D canvas, using standard CPK colors for easy chemical identification.</p>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>CView utilizes Cairo for high-fidelity 2D rendering. When a slice is drawn, atoms near the slice plane are geometrically projected onto the 2D canvas, using standard CPK colors for easy chemical identification.</p>
 </blockquote>
 <h3 id="exporting"><a class="header" href="#exporting">Exporting</a></h3>
 <p>Slices can be instantly exported as high-resolution <code>png</code> or <code>pdf</code> images directly from the visualization tab, complete with isolines, heatmaps, and atomic projections.</p>
-<div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><h1 id="surface-slabs-building"><a class="header" href="#surface-slabs-building">Surface Slabs (Building)</a></h1>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="building-structures"><a href="#building-structures" class="header">Building Structures</a></h1>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="supercells"><a href="#supercells" class="header">Supercells</a></h1>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="surface-slabs-building"><a class="header" href="#surface-slabs-building">Surface Slabs (Building)</a></h1>
 <p>Creating surface models from bulk crystals is a prerequisite for surface science calculations (catalysis, work function, surface energy). The Slab Builder mathematically transforms the unit cell to expose a specific Miller Index plane $(hkl)$.</p>
 <h2 id="mathematical-formulation"><a class="header" href="#mathematical-formulation">Mathematical Formulation</a></h2>
 <h3 id="1-basis-transformation"><a class="header" href="#1-basis-transformation">1. Basis Transformation</a></h3>
@@ -670,11 +717,11 @@ This isolates the slab in the z-direction, preventing spurious interactions betw
 </ol>
 <h3 id="duplicate-removal"><a class="header" href="#duplicate-removal">Duplicate Removal</a></h3>
 <p>The code includes a proximity check (<code>remove_duplicate_atoms</code> with <code>TOLERANCE = 1e-5</code>) to ensure that atoms lying exactly on cell boundaries are not double-counted during the wrapping process.</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="to-do"><a class="header" href="#to-do">To Do</a></h1>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="to-do"><a class="header" href="#to-do">To Do</a></h1>
 <h2 id="high-priority-list-of-implementation"><a class="header" href="#high-priority-list-of-implementation">High priority list of implementation</a></h2>
 <ul>
-<li><input disabled="" type="checkbox"/>
-List  Brillouin zones for all 230 space group (in <code>src/model/bs_data.rs</code>)</li>
+<li><input disabled="" type="checkbox"> List  Brillouin zones for all 230 space group (in <code>src/model/bs_data.rs</code>)</li>
 </ul>
 
                     </main>
@@ -694,6 +741,11 @@ List  Brillouin zones for all 230 space group (in <code>src/model/bs_data.rs</co
 
         </div>
 
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
 
 
@@ -702,16 +754,16 @@ List  Brillouin zones for all 230 space group (in <code>src/model/bs_data.rs</co
         </script>
 
 
-        <script src="elasticlunr.min.js"></script>
-        <script src="mark.min.js"></script>
-        <script src="searcher.js"></script>
+        <script src="elasticlunr-ef4e11c1.min.js"></script>
+        <script src="mark-09e88c2c.min.js"></script>
+        <script src="searcher-c2a407aa.js"></script>
 
-        <script src="clipboard.min.js"></script>
-        <script src="highlight.js"></script>
-        <script src="book.js"></script>
+        <script src="clipboard-1626706a.min.js"></script>
+        <script src="highlight-abc7f01d.js"></script>
+        <script src="book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
-        <script src="src/custom.js"></script>
+        <script src="src/custom-526988bf.js"></script>
 
         <script>
         window.addEventListener('load', function() {
