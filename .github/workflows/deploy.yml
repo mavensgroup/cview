@@ -11,20 +11,19 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           profile: minimal
           override: true
-
+      - name: Cache mdBook
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/mdbook
+          key: mdbook-0.5.2-${{ runner.os }}
       - name: Install mdBook
-        run: cargo install mdbook --version 0.4.52
-
-      - name: Install mdbook-admonish
-        run: cargo install mdbook-admonish
-
+        run: command -v mdbook || cargo install mdbook --version 0.5.2
       # Check initial state
       - name: Check initial structure
         run: |
@@ -34,25 +33,10 @@ jobs:
           ls -la docs/src/
           echo "=== book.toml content ==="
           cat docs/book.toml
-
-      # Setup mdbook-admonish
-      - name: Setup mdbook-admonish
-        working-directory: docs
-        run: mdbook-admonish install .
-
-      # Check after install
-      - name: Check after admonish install
-        run: |
-          echo "=== docs/ after install ==="
-          ls -la docs/
-          echo "=== Looking for CSS files ==="
-          find docs/ -name "*.css"
-
       # Build the book with verbose output
       - name: Build Book
         working-directory: docs
         run: RUST_LOG=debug mdbook build .
-
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
