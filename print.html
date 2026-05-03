@@ -221,32 +221,19 @@
 <img src="https://img.shields.io/badge/Windows-fcc624?logo=microsoft&amp;logoColor=white" alt="Windows" />
 <img src="https://img.shields.io/badge/macOS-fcc624?logo=apple&amp;logoColor=black" alt="macOS" /></p>
 <p><strong>CView</strong> is a high-performance crystallographic tool written in <strong>Rust</strong> and <strong>GTK4</strong>. It bridges the gap between structure visualization and <em>ab-initio</em> calculation setup (VASP, QE, SPRKKR).</p>
-<div id="admonition-performance-limitation-macromolecules" class="admonition admonish-warning" role="note" aria-labelledby="admonition-performance-limitation-macromolecules-title">
-<div class="admonition-title">
-<div id="admonition-performance-limitation-macromolecules-title">
-<p>Performance Limitation: Macromolecules</p>
-</div>
-<a class="admonition-anchor-link" href="introduction.html#admonition-performance-limitation-macromolecules"></a>
-</div>
-<div>
-<p>This version of <code>CView</code> is built on <strong>GTK4</strong>, which primarily utilizes the CPU for rendering.</p>
-<p>While the engine is optimized, it is designed for <strong>crystal structures</strong> (unit cells, supercells, slabs). It handles systems up to $\approx 1000$ atoms with ease, but it is <strong>not suitable</strong> for visualizing massive biological macromolecules (e.g., proteins, DNA) containing millions of atoms.</p>
-</div>
-</div>
-<div id="admonition-philosophy" class="admonition admonish-note" role="note" aria-labelledby="admonition-philosophy-title">
-<div class="admonition-title">
-<div id="admonition-philosophy-title">
-<p>Philosophy</p>
-</div>
-<a class="admonition-anchor-link" href="introduction.html#admonition-philosophy"></a>
-</div>
-<div>
-<p>CView is not just a viewer; it is a <strong>pre-calculation validator</strong>. It focuses on Reciprocal Space and Geometric consistency to prevent wasted CPU hours on incorrect VASP/QE inputs.</p>
-</div>
-</div>
+<blockquote>
+<p>[!IMPORTANT]
+This version of <code>CView</code> is built on <strong>GTK4</strong>, which primarily utilizes the CPU for rendering.<br>
+While the engine is optimized, it is designed for <strong>crystal structures</strong> (unit cells, supercells, slabs). It handles systems up to $\approx 5000$ atoms with ease, but it is <strong>not suitable</strong> for visualizing massive biological macromolecules (e.g., proteins, DNA) containing millions of atoms.<br>
+The largest molecule we have tested is of $6000$ atoms core shell polymer.</p>
+</blockquote>
+<blockquote>
+<p>[!TIP]
+CView is not just a viewer; it is a <strong>pre-calculation validator</strong>. It focuses on Reciprocal Space and Geometric consistency to prevent wasted CPU hours on incorrect VASP/QE inputs.</p>
+</blockquote>
 <p><img src="images/screenshot_main.png" alt="Screenshot of CView" /></p>
 <hr />
-<h2 id="-why-cview"><a class="header" href="#-why-cview">⚡ Why CView?</a></h2>
+<h2 id="why-cview"><a class="header" href="#why-cview">Why CView?</a></h2>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Feature</th><th style="text-align: left">Description</th></tr></thead><tbody>
 <tr><td style="text-align: left"><strong>Fast &amp; Lightweight</strong></td><td style="text-align: left">Built on Rust/GTK4. No GPU drivers required. Runs on any laptop.</td></tr>
 <tr><td style="text-align: left"><strong>Analysis First</strong></td><td style="text-align: left">Dedicated tools for <a href="guide/kpath.html">K-Paths</a>, <a href="guide/slabs.html">Slabs</a>, and <a href="guide/voids.html">Void Analysis</a>.</td></tr>
@@ -264,28 +251,19 @@
 <li><strong><a href="guide/kpath.html">K-Path Visualization</a></strong>: Brillouin zone construction and HSP selection.</li>
 <li><strong><a href="guide/xrd.html">XRD Simulation</a></strong>: Structure factors and powder diffraction patterns.</li>
 <li><strong><a href="guide/slabs.html">Surface Slabs</a></strong>: Creating vacuum-padded slabs for surface science.</li>
+<li><strong><a href="guide/charge_density.html">Charge Density</a></strong>: Charge Density analysis</li>
 </ul>
 </li>
-<li><strong><a href="tutorials/bi2se3.html">Tutorials</a></strong>: Step-by-step walkthroughs for real materials (e.g., Bi₂Se₃).</li>
+<li><strong><a href="tutorials">Tutorials</a></strong>: To Do.</li>
 </ol>
 <hr />
 <h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
 <p>Get up and running in seconds.</p>
-<div id="admonition-installation" class="admonition admonish-success" role="note" aria-labelledby="admonition-installation-title">
-<div class="admonition-title">
-<div id="admonition-installation-title">
-<p>Installation</p>
-</div>
-<a class="admonition-anchor-link" href="introduction.html#admonition-installation"></a>
-</div>
-<div>
-<pre><code># Clone and Run
-git clone https://github.com/mavensgroup/cview.git
+<h3 id="clone-and-run"><a class="header" href="#clone-and-run">Clone and Run</a></h3>
+<pre><code class="language-bash">git clone https://github.com/mavensgroup/cview.git
 cd cview
 cargo run --release
 </code></pre>
-</div>
-</div>
 <p>See the <a href="installation.html">Installation Page</a> for detailed OS-specific instructions.</p>
 <hr />
 <h2 id="supported-formats"><a class="header" href="#supported-formats">Supported Formats</a></h2>
@@ -297,40 +275,24 @@ cargo run --release
 </div>
 <hr />
 <h2 id="links"><a class="header" href="#links">Links</a></h2>
-<div id="admonition-contribute" class="admonition admonish-tip" role="note" aria-labelledby="admonition-contribute-title">
-<div class="admonition-title">
-<div id="admonition-contribute-title">
-<p>Contribute</p>
-</div>
-<a class="admonition-anchor-link" href="introduction.html#admonition-contribute"></a>
-</div>
-<div>
-<p>This is an α (alpha) release. While the core functionality is operational, the software may contain
-incomplete features, bugs, or unstable behaviour.</p>
+<blockquote>
+<p>[!WARNING]
+This is a beta release. While the core functionality is operational, the software may contain incomplete features, bugs, or unstable behaviour.</p>
+</blockquote>
 <p>Contributions from testers and developers are welcome.</p>
 <ul>
 <li><a href="https://github.com/mavensgroup/cview">Source Code</a></li>
 <li><a href="https://github.com/mavensgroup/cview/issues">Bug Report</a></li>
 <li><a href="https://github.com/mavensgroup/cview/pulls">PR</a></li>
 </ul>
-</div>
-</div>
-<hr />
-<h2 id="-license--citation"><a class="header" href="#-license--citation">📜 License &amp; Citation</a></h2>
+<h2 id="license--citation"><a class="header" href="#license--citation">License &amp; Citation</a></h2>
 <p><strong>CView</strong> is open-source software licensed under the <strong>MIT</strong> Licence.</p>
 <p>If you use CView in your research, please cite the <a href="https://github.com/mavensgroup/cview">repository</a>.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
-<div id="admonition-quick-install" class="admonition admonish-tip" role="note" aria-labelledby="admonition-quick-install-title">
-<div class="admonition-title">
-<div id="admonition-quick-install-title">
-<p>Quick Install</p>
-</div>
-<a class="admonition-anchor-link" href="installation.html#admonition-quick-install"></a>
-</div>
-<div>
-<p>If you have <code>cargo</code> installed, then jump to <a href="installation.html#3-build-from-source">Build from source</a>.</p>
-</div>
-</div>
+<blockquote>
+<p>[!TIP]
+If you have <code>cargo</code> installed, then jump to <a href="installation.html#3-build-from-source">Build from source</a>.</p>
+</blockquote>
 <p>CView is a cross-platform application built on <strong>Rust</strong> and <strong>GTK4</strong>. Because it uses the native GTK4 libraries for rendering, the installation process involves two steps:</p>
 <ol>
 <li>Installing the system dependencies (GTK4).</li>
@@ -379,37 +341,21 @@ Run this command <em>inside the MSYS2 terminal</em>:
 </ul>
 </li>
 </ol>
-<div id="admonition-do-not-use-powershell-yet" class="admonition admonish-warning" role="note" aria-labelledby="admonition-do-not-use-powershell-yet-title">
-<div class="admonition-title">
-<div id="admonition-do-not-use-powershell-yet-title">
-<p>Do not use PowerShell yet</p>
-</div>
-<a class="admonition-anchor-link" href="installation.html#admonition-do-not-use-powershell-yet"></a>
-</div>
-<div>
-<p>The <code>pacman</code> command above works <strong>only</strong> inside the MSYS2 terminal. It will fail if you try to run it in PowerShell or Command Prompt.</p>
-</div>
-</div>
+<blockquote>
+<p>[!IMPORTANT]
+The <code>pacman</code> command above works <strong>only</strong> inside the MSYS2 terminal. It will fail if you try to run it in PowerShell or Command Prompt.</p>
+</blockquote>
 <hr />
 <h2 id="2-install-rust"><a class="header" href="#2-install-rust">2. Install Rust</a></h2>
 <p>If you do not have the Rust compiler installed, the recommended way is via <code>rustup</code>.</p>
-<div id="admonition-check-your-version" class="admonition admonish-note" role="note" aria-labelledby="admonition-check-your-version-title">
-<div class="admonition-title">
-<div id="admonition-check-your-version-title">
-<p>Check your version</p>
-</div>
-<a class="admonition-anchor-link" href="installation.html#admonition-check-your-version"></a>
-</div>
-<div>
-<p>CView requires <strong>Rust 1.70</strong> or higher.
+<blockquote>
+<p>[!NOTE]
+CView requires <strong>Rust 1.70</strong> or higher.
 Check your version with: <code>cargo --version</code></p>
-</div>
-</div>
+</blockquote>
 <p><strong>Command (Linux / macOS / Windows PowerShell):</strong></p>
 <pre><code class="language-bash">curl --proto '=https' --tlsv1.2 -sSf [https://sh.rustup.rs](https://sh.rustup.rs) | sh
-
 </code></pre>
-<hr />
 <h2 id="3-build-from-source"><a class="header" href="#3-build-from-source">3. Build from Source</a></h2>
 <p>Once the dependencies are ready, you can compile CView directly from the repository.</p>
 <pre><code class="language-bash"># 1. Clone the repository
@@ -422,40 +368,24 @@ cargo run --release
 </code></pre>
 <p>This will install <code>cview</code> in <code>~/bin</code> by default. For the subsequent run, just type <code>cview</code></p>
 <p>The first compilation may take a few minutes as it compiles the dependencies. Subsequent runs will be instant.</p>
-<hr />
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
-<div id="admonition-error-pkg-config-not-found" class="admonition admonish-failure" role="note" aria-labelledby="admonition-error-pkg-config-not-found-title">
-<div class="admonition-title">
-<div id="admonition-error-pkg-config-not-found-title">
-<p>Error: pkg-config not found</p>
-</div>
-<a class="admonition-anchor-link" href="installation.html#admonition-error-pkg-config-not-found"></a>
-</div>
-<div>
-<p>If the build fails claiming it cannot find <code>gtk4</code> or <code>pkg-config</code>, it means the development headers are missing.</p>
+<blockquote>
+<p>[!CAUTION]
+If the build fails claiming it cannot find <code>gtk4</code> or <code>pkg-config</code>, it means the development headers are missing.</p>
 <ul>
 <li><strong>Linux:</strong> Ensure you installed the <code>-dev</code> or <code>-devel</code> packages (e.g., <code>libgtk-4-dev</code>), not just the runtime library.</li>
 <li><strong>macOS:</strong> Try running <code>brew link gtk4</code>.</li>
 </ul>
-</div>
-</div>
-<div id="admonition-error-linker-failed" class="admonition admonish-failure" role="note" aria-labelledby="admonition-error-linker-failed-title">
-<div class="admonition-title">
-<div id="admonition-error-linker-failed-title">
-<p>Error: Linker failed</p>
-</div>
-<a class="admonition-anchor-link" href="installation.html#admonition-error-linker-failed"></a>
-</div>
-<div>
-<p>If you see errors related to <code>cc</code> or <code>ld</code>:</p>
+</blockquote>
+<blockquote>
+<p>[!CAUTION]
+If you see errors related to <code>cc</code> or <code>ld</code>:</p>
 <ul>
 <li>Ensure you have <code>build-essential</code> (Linux) or Xcode Command Line Tools (macOS) installed.</li>
 </ul>
-</div>
-</div>
+</blockquote>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="loading--visualization"><a class="header" href="#loading--visualization">Loading &amp; Visualization</a></h1>
 <p>This section outlines the core workflows for importing structure files, managing the workspace, and controlling the visual representation of crystal structures.</p>
-<hr />
 <h2 id="file-operations"><a class="header" href="#file-operations">File Operations</a></h2>
 <h3 id="opening-files"><a class="header" href="#opening-files">Opening Files</a></h3>
 <p>To load a structure, navigate to <code>File → Open (Ctrl + O)</code> in the application menu. CView utilizes the native file chooser of your operating system to ensure a familiar experience.</p>
@@ -475,17 +405,10 @@ CView automatically detects the file type based on extension and content. You ca
 <li><strong>Replacement Mode:</strong> If the current active tab is empty (labelled "Untitled" with no structure), opening a file will replace this tab.</li>
 <li><strong>New Tab Mode:</strong> If a structure is already loaded, the new file will open in a separate, closable tab.</li>
 </ul>
-<div id="admonition-workspace-feedback" class="admonition admonish-note" role="note" aria-labelledby="admonition-workspace-feedback-title">
-<div class="admonition-title">
-<div id="admonition-workspace-feedback-title">
-<p>Workspace Feedback</p>
-</div>
-<a class="admonition-anchor-link" href="guide/visualization.html#admonition-workspace-feedback"></a>
-</div>
-<div>
-<p>Upon successfully loading a file, the application logs the event in the <strong>Interaction Log</strong> and automatically refreshes the <strong>Sidebar</strong> to display the atom list for the new structure.</p>
-</div>
-</div>
+<blockquote>
+<p>[!NOTE]
+Upon successfully loading a file, the application logs the event in the <strong>Interaction Log</strong> and automatically refreshes the <strong>Sidebar</strong> to display the atom list for the new structure.</p>
+</blockquote>
 <h3 id="saving--exporting"><a class="header" href="#saving--exporting">Saving &amp; Exporting</a></h3>
 <h4 id="saving-data"><a class="header" href="#saving-data">Saving Data</a></h4>
 <p>To convert a loaded structure into a different format, use <code>File → Save As (Shift+ Ctrl+ S)</code>. The output format is determined by the selected file filter in the dialog.</p>
@@ -607,18 +530,10 @@ $$F_{hkl} = \sum_{j=1}^{N} f_j(\theta) \exp\left[2\pi i (hx_j + ky_j + lz_j)\rig
 <li>$x_j, y_j, z_j$: Fractional coordinates of atom $j$.</li>
 <li>$f_j(\theta)$: The atomic scattering factor.</li>
 </ul>
-<div id="admonition-coefficients" class="admonition admonish-info" role="note" aria-labelledby="admonition-coefficients-title">
-<div class="admonition-title">
-<div id="admonition-coefficients-title">
-<p>Coefficients</p>
-</div>
-<a class="admonition-anchor-link" href="guide/xrd.html#admonition-coefficients"></a>
-</div>
-<div>
-<p>The atomic scattering factor ($f_j(\theta)$) has been calculated using Cromer-Mann coefficient (<code>model/elements.rs</code>)</p>
-</div>
-</div>
-<!-- > **Note**: The current implementation approximates $f_j$ using the atomic number ($Z$) or pre-tabulated coefficients compatible with standard crystallographic tables. -->
+<blockquote>
+<p>[!NOTE]
+The atomic scattering factor ($f_j(\theta)$) has been calculated using Cromer-Mann coefficient (<code>model/elements.rs</code>)</p>
+</blockquote>
 <h3 id="4-intensity-correction"><a class="header" href="#4-intensity-correction">4. Intensity Correction</a></h3>
 <p>The raw squared structure factor $|F_{hkl}|^2$ is corrected to obtain the observed intensity $I$. The primary correction applied in <code>xrd.rs</code> is the <strong>Lorentz-Polarization (LP) Factor</strong> for unpolarized radiation (standard laboratory diffractometer):</p>
 <p>$$
@@ -660,31 +575,6 @@ I_{calc} &amp;= |F_{hkl}|^2 \times LP(\theta)
 <li><strong>Fractional Reciprocal Coordinates</strong>: Used for DFT inputs (e.g., KPOINTS file).</li>
 <li><strong>Cartesian Reciprocal Coordinates</strong>: Used for the 3D wireframe visualization in CView.</li>
 </ul>
-<div id="admonition-current-limitations" class="admonition admonish-warning" role="note" aria-labelledby="admonition-current-limitations-title">
-<div class="admonition-title">
-<div id="admonition-current-limitations-title">
-<p>Current Limitations</p>
-</div>
-<a class="admonition-anchor-link" href="guide/kpath.html#admonition-current-limitations"></a>
-</div>
-<div>
-<p>While the generated <em>high-symmetry k-paths</em> are crystallographically correct for all space groups (based on the Setyawan-Curtarolo convention), the 3D Brillouin Zone wireframe visualization is currently hardcoded for Cubic systems.</p>
-<p>Non-cubic lattices will display correct path data but an incorrect (cubic) boundary box in the 3D viewer.</p>
-</div>
-</div>
-<div id="admonition-help-wanted-developers" class="admonition admonish-tip" role="note" aria-labelledby="admonition-help-wanted-developers-title">
-<div class="admonition-title">
-<div id="admonition-help-wanted-developers-title">
-<p>Help Wanted: Developers</p>
-</div>
-<a class="admonition-anchor-link" href="guide/kpath.html#admonition-help-wanted-developers"></a>
-</div>
-<div>
-<p>We welcome contributions to expand BZ visualization!
-If you wish to implement wireframes for other crystal systems, please extend the definitions in:
-<code>src/model/bs_data.rs</code></p>
-</div>
-</div>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="voids-analysis"><a class="header" href="#voids-analysis">Voids Analysis</a></h1>
 <p>This module performs geometric analysis to identify empty space within the crystal lattice. It is critical for research into battery materials (ion intercalation), porous frameworks (MOFs/Zeolites), and defect analysis.</p>
 <h2 id="algorithm-grid-based-geometric-insertion"><a class="header" href="#algorithm-grid-based-geometric-insertion">Algorithm: Grid-Based Geometric Insertion</a></h2>
@@ -710,6 +600,7 @@ $$D_{surf} &gt; R_{probe}$$</p>
 <p>The void fraction is calculated as:
 $$\phi = \frac{N_{void}}{N_{total}} \times 100%$$</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="miller-plane"><a class="header" href="#miller-plane">Miller Plane</a></h1>
+<p>To update later, but see <code>menu-&gt;tools</code></p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="bond-valence-sum-bvs"><a class="header" href="#bond-valence-sum-bvs">Bond Valence Sum (BVS)</a></h1>
 <p>The Bond Valence Sum (BVS) module is an empirical analytical tool used to estimate the oxidation states of atoms in a crystal structure and evaluate the physical plausibility of their coordination environments.</p>
 <h2 id="physical-model-1"><a class="header" href="#physical-model-1">Physical Model</a></h2>
@@ -754,20 +645,12 @@ Where:</p>
 <h2 id="difference-density-maps"><a class="header" href="#difference-density-maps">Difference Density Maps</a></h2>
 <p>A powerful feature of the module is the <strong>Difference Mode</strong>. You can load two distinct <code>CHGCAR</code> files (e.g., a combined system and an isolated adatom) to compute and visualize charge transfer.</p>
 <p>The software calculates $\Delta\rho(r) = \rho_A(r) - \rho_B(r)$ on the fly, allowing you to visually identify regions of electron accumulation and depletion.</p>
-<div id="admonition-rendering-and-overlays" class="admonition admonish-tip" role="note" aria-labelledby="admonition-rendering-and-overlays-title">
-<div class="admonition-title">
-<div id="admonition-rendering-and-overlays-title">
-<p>Rendering and Overlays</p>
-</div>
-<a class="admonition-anchor-link" href="guide/charge_density.html#admonition-rendering-and-overlays"></a>
-</div>
-<div>
-<p>CView utilizes Cairo for high-fidelity 2D rendering. When a slice is drawn, atoms near the slice plane are geometrically projected onto the 2D canvas, using standard CPK colors for easy chemical identification.</p>
-</div>
-</div>
+<blockquote>
+<p>[!TIP]
+CView utilizes Cairo for high-fidelity 2D rendering. When a slice is drawn, atoms near the slice plane are geometrically projected onto the 2D canvas, using standard CPK colors for easy chemical identification.</p>
+</blockquote>
 <h3 id="exporting"><a class="header" href="#exporting">Exporting</a></h3>
 <p>Slices can be instantly exported as high-resolution <code>png</code> or <code>pdf</code> images directly from the visualization tab, complete with isolines, heatmaps, and atomic projections.</p>
-<pre><code></code></pre>
 <div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><div style="break-before: page; page-break-before: always;"></div><h1 id="surface-slabs-building"><a class="header" href="#surface-slabs-building">Surface Slabs (Building)</a></h1>
 <p>Creating surface models from bulk crystals is a prerequisite for surface science calculations (catalysis, work function, surface energy). The Slab Builder mathematically transforms the unit cell to expose a specific Miller Index plane $(hkl)$.</p>
 <h2 id="mathematical-formulation"><a class="header" href="#mathematical-formulation">Mathematical Formulation</a></h2>

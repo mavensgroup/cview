@@ -208,32 +208,19 @@
 <img src="https://img.shields.io/badge/Windows-fcc624?logo=microsoft&amp;logoColor=white" alt="Windows" />
 <img src="https://img.shields.io/badge/macOS-fcc624?logo=apple&amp;logoColor=black" alt="macOS" /></p>
 <p><strong>CView</strong> is a high-performance crystallographic tool written in <strong>Rust</strong> and <strong>GTK4</strong>. It bridges the gap between structure visualization and <em>ab-initio</em> calculation setup (VASP, QE, SPRKKR).</p>
-<div id="admonition-performance-limitation-macromolecules" class="admonition admonish-warning" role="note" aria-labelledby="admonition-performance-limitation-macromolecules-title">
-<div class="admonition-title">
-<div id="admonition-performance-limitation-macromolecules-title">
-<p>Performance Limitation: Macromolecules</p>
-</div>
-<a class="admonition-anchor-link" href="#admonition-performance-limitation-macromolecules"></a>
-</div>
-<div>
-<p>This version of <code>CView</code> is built on <strong>GTK4</strong>, which primarily utilizes the CPU for rendering.</p>
-<p>While the engine is optimized, it is designed for <strong>crystal structures</strong> (unit cells, supercells, slabs). It handles systems up to $\approx 1000$ atoms with ease, but it is <strong>not suitable</strong> for visualizing massive biological macromolecules (e.g., proteins, DNA) containing millions of atoms.</p>
-</div>
-</div>
-<div id="admonition-philosophy" class="admonition admonish-note" role="note" aria-labelledby="admonition-philosophy-title">
-<div class="admonition-title">
-<div id="admonition-philosophy-title">
-<p>Philosophy</p>
-</div>
-<a class="admonition-anchor-link" href="#admonition-philosophy"></a>
-</div>
-<div>
-<p>CView is not just a viewer; it is a <strong>pre-calculation validator</strong>. It focuses on Reciprocal Space and Geometric consistency to prevent wasted CPU hours on incorrect VASP/QE inputs.</p>
-</div>
-</div>
+<blockquote>
+<p>[!IMPORTANT]
+This version of <code>CView</code> is built on <strong>GTK4</strong>, which primarily utilizes the CPU for rendering.<br>
+While the engine is optimized, it is designed for <strong>crystal structures</strong> (unit cells, supercells, slabs). It handles systems up to $\approx 5000$ atoms with ease, but it is <strong>not suitable</strong> for visualizing massive biological macromolecules (e.g., proteins, DNA) containing millions of atoms.<br>
+The largest molecule we have tested is of $6000$ atoms core shell polymer.</p>
+</blockquote>
+<blockquote>
+<p>[!TIP]
+CView is not just a viewer; it is a <strong>pre-calculation validator</strong>. It focuses on Reciprocal Space and Geometric consistency to prevent wasted CPU hours on incorrect VASP/QE inputs.</p>
+</blockquote>
 <p><img src="images/screenshot_main.png" alt="Screenshot of CView" /></p>
 <hr />
-<h2 id="-why-cview"><a class="header" href="#-why-cview">⚡ Why CView?</a></h2>
+<h2 id="why-cview"><a class="header" href="#why-cview">Why CView?</a></h2>
 <div class="table-wrapper"><table><thead><tr><th style="text-align: left">Feature</th><th style="text-align: left">Description</th></tr></thead><tbody>
 <tr><td style="text-align: left"><strong>Fast &amp; Lightweight</strong></td><td style="text-align: left">Built on Rust/GTK4. No GPU drivers required. Runs on any laptop.</td></tr>
 <tr><td style="text-align: left"><strong>Analysis First</strong></td><td style="text-align: left">Dedicated tools for <a href="guide/kpath.html">K-Paths</a>, <a href="guide/slabs.html">Slabs</a>, and <a href="guide/voids.html">Void Analysis</a>.</td></tr>
@@ -251,28 +238,19 @@
 <li><strong><a href="guide/kpath.html">K-Path Visualization</a></strong>: Brillouin zone construction and HSP selection.</li>
 <li><strong><a href="guide/xrd.html">XRD Simulation</a></strong>: Structure factors and powder diffraction patterns.</li>
 <li><strong><a href="guide/slabs.html">Surface Slabs</a></strong>: Creating vacuum-padded slabs for surface science.</li>
+<li><strong><a href="guide/charge_density.html">Charge Density</a></strong>: Charge Density analysis</li>
 </ul>
 </li>
-<li><strong><a href="tutorials/bi2se3.html">Tutorials</a></strong>: Step-by-step walkthroughs for real materials (e.g., Bi₂Se₃).</li>
+<li><strong><a href="tutorials">Tutorials</a></strong>: To Do.</li>
 </ol>
 <hr />
 <h2 id="quick-start"><a class="header" href="#quick-start">Quick Start</a></h2>
 <p>Get up and running in seconds.</p>
-<div id="admonition-installation" class="admonition admonish-success" role="note" aria-labelledby="admonition-installation-title">
-<div class="admonition-title">
-<div id="admonition-installation-title">
-<p>Installation</p>
-</div>
-<a class="admonition-anchor-link" href="#admonition-installation"></a>
-</div>
-<div>
-<pre><code># Clone and Run
-git clone https://github.com/mavensgroup/cview.git
+<h3 id="clone-and-run"><a class="header" href="#clone-and-run">Clone and Run</a></h3>
+<pre><code class="language-bash">git clone https://github.com/mavensgroup/cview.git
 cd cview
 cargo run --release
 </code></pre>
-</div>
-</div>
 <p>See the <a href="installation.html">Installation Page</a> for detailed OS-specific instructions.</p>
 <hr />
 <h2 id="supported-formats"><a class="header" href="#supported-formats">Supported Formats</a></h2>
@@ -284,26 +262,17 @@ cargo run --release
 </div>
 <hr />
 <h2 id="links"><a class="header" href="#links">Links</a></h2>
-<div id="admonition-contribute" class="admonition admonish-tip" role="note" aria-labelledby="admonition-contribute-title">
-<div class="admonition-title">
-<div id="admonition-contribute-title">
-<p>Contribute</p>
-</div>
-<a class="admonition-anchor-link" href="#admonition-contribute"></a>
-</div>
-<div>
-<p>This is an α (alpha) release. While the core functionality is operational, the software may contain
-incomplete features, bugs, or unstable behaviour.</p>
+<blockquote>
+<p>[!WARNING]
+This is a beta release. While the core functionality is operational, the software may contain incomplete features, bugs, or unstable behaviour.</p>
+</blockquote>
 <p>Contributions from testers and developers are welcome.</p>
 <ul>
 <li><a href="https://github.com/mavensgroup/cview">Source Code</a></li>
 <li><a href="https://github.com/mavensgroup/cview/issues">Bug Report</a></li>
 <li><a href="https://github.com/mavensgroup/cview/pulls">PR</a></li>
 </ul>
-</div>
-</div>
-<hr />
-<h2 id="-license--citation"><a class="header" href="#-license--citation">📜 License &amp; Citation</a></h2>
+<h2 id="license--citation"><a class="header" href="#license--citation">License &amp; Citation</a></h2>
 <p><strong>CView</strong> is open-source software licensed under the <strong>MIT</strong> Licence.</p>
 <p>If you use CView in your research, please cite the <a href="https://github.com/mavensgroup/cview">repository</a>.</p>
 

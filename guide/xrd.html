@@ -219,18 +219,10 @@ $$F_{hkl} = \sum_{j=1}^{N} f_j(\theta) \exp\left[2\pi i (hx_j + ky_j + lz_j)\rig
 <li>$x_j, y_j, z_j$: Fractional coordinates of atom $j$.</li>
 <li>$f_j(\theta)$: The atomic scattering factor.</li>
 </ul>
-<div id="admonition-coefficients" class="admonition admonish-info" role="note" aria-labelledby="admonition-coefficients-title">
-<div class="admonition-title">
-<div id="admonition-coefficients-title">
-<p>Coefficients</p>
-</div>
-<a class="admonition-anchor-link" href="#admonition-coefficients"></a>
-</div>
-<div>
-<p>The atomic scattering factor ($f_j(\theta)$) has been calculated using Cromer-Mann coefficient (<code>model/elements.rs</code>)</p>
-</div>
-</div>
-<!-- > **Note**: The current implementation approximates $f_j$ using the atomic number ($Z$) or pre-tabulated coefficients compatible with standard crystallographic tables. -->
+<blockquote>
+<p>[!NOTE]
+The atomic scattering factor ($f_j(\theta)$) has been calculated using Cromer-Mann coefficient (<code>model/elements.rs</code>)</p>
+</blockquote>
 <h3 id="4-intensity-correction"><a class="header" href="#4-intensity-correction">4. Intensity Correction</a></h3>
 <p>The raw squared structure factor $|F_{hkl}|^2$ is corrected to obtain the observed intensity $I$. The primary correction applied in <code>xrd.rs</code> is the <strong>Lorentz-Polarization (LP) Factor</strong> for unpolarized radiation (standard laboratory diffractometer):</p>
 <p>$$

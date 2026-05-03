@@ -201,17 +201,10 @@
                 <div id="content" class="content">
                     <main>
                         <h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
-<div id="admonition-quick-install" class="admonition admonish-tip" role="note" aria-labelledby="admonition-quick-install-title">
-<div class="admonition-title">
-<div id="admonition-quick-install-title">
-<p>Quick Install</p>
-</div>
-<a class="admonition-anchor-link" href="#admonition-quick-install"></a>
-</div>
-<div>
-<p>If you have <code>cargo</code> installed, then jump to <a href="#3-build-from-source">Build from source</a>.</p>
-</div>
-</div>
+<blockquote>
+<p>[!TIP]
+If you have <code>cargo</code> installed, then jump to <a href="#3-build-from-source">Build from source</a>.</p>
+</blockquote>
 <p>CView is a cross-platform application built on <strong>Rust</strong> and <strong>GTK4</strong>. Because it uses the native GTK4 libraries for rendering, the installation process involves two steps:</p>
 <ol>
 <li>Installing the system dependencies (GTK4).</li>
@@ -260,37 +253,21 @@ Run this command <em>inside the MSYS2 terminal</em>:
 </ul>
 </li>
 </ol>
-<div id="admonition-do-not-use-powershell-yet" class="admonition admonish-warning" role="note" aria-labelledby="admonition-do-not-use-powershell-yet-title">
-<div class="admonition-title">
-<div id="admonition-do-not-use-powershell-yet-title">
-<p>Do not use PowerShell yet</p>
-</div>
-<a class="admonition-anchor-link" href="#admonition-do-not-use-powershell-yet"></a>
-</div>
-<div>
-<p>The <code>pacman</code> command above works <strong>only</strong> inside the MSYS2 terminal. It will fail if you try to run it in PowerShell or Command Prompt.</p>
-</div>
-</div>
+<blockquote>
+<p>[!IMPORTANT]
+The <code>pacman</code> command above works <strong>only</strong> inside the MSYS2 terminal. It will fail if you try to run it in PowerShell or Command Prompt.</p>
+</blockquote>
 <hr />
 <h2 id="2-install-rust"><a class="header" href="#2-install-rust">2. Install Rust</a></h2>
 <p>If you do not have the Rust compiler installed, the recommended way is via <code>rustup</code>.</p>
-<div id="admonition-check-your-version" class="admonition admonish-note" role="note" aria-labelledby="admonition-check-your-version-title">
-<div class="admonition-title">
-<div id="admonition-check-your-version-title">
-<p>Check your version</p>
-</div>
-<a class="admonition-anchor-link" href="#admonition-check-your-version"></a>
-</div>
-<div>
-<p>CView requires <strong>Rust 1.70</strong> or higher.
+<blockquote>
+<p>[!NOTE]
+CView requires <strong>Rust 1.70</strong> or higher.
 Check your version with: <code>cargo --version</code></p>
-</div>
-</div>
+</blockquote>
 <p><strong>Command (Linux / macOS / Windows PowerShell):</strong></p>
 <pre><code class="language-bash">curl --proto '=https' --tlsv1.2 -sSf [https://sh.rustup.rs](https://sh.rustup.rs) | sh
-
 </code></pre>
-<hr />
 <h2 id="3-build-from-source"><a class="header" href="#3-build-from-source">3. Build from Source</a></h2>
 <p>Once the dependencies are ready, you can compile CView directly from the repository.</p>
 <pre><code class="language-bash"># 1. Clone the repository
@@ -303,37 +280,22 @@ cargo run --release
 </code></pre>
 <p>This will install <code>cview</code> in <code>~/bin</code> by default. For the subsequent run, just type <code>cview</code></p>
 <p>The first compilation may take a few minutes as it compiles the dependencies. Subsequent runs will be instant.</p>
-<hr />
 <h2 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h2>
-<div id="admonition-error-pkg-config-not-found" class="admonition admonish-failure" role="note" aria-labelledby="admonition-error-pkg-config-not-found-title">
-<div class="admonition-title">
-<div id="admonition-error-pkg-config-not-found-title">
-<p>Error: pkg-config not found</p>
-</div>
-<a class="admonition-anchor-link" href="#admonition-error-pkg-config-not-found"></a>
-</div>
-<div>
-<p>If the build fails claiming it cannot find <code>gtk4</code> or <code>pkg-config</code>, it means the development headers are missing.</p>
+<blockquote>
+<p>[!CAUTION]
+If the build fails claiming it cannot find <code>gtk4</code> or <code>pkg-config</code>, it means the development headers are missing.</p>
 <ul>
 <li><strong>Linux:</strong> Ensure you installed the <code>-dev</code> or <code>-devel</code> packages (e.g., <code>libgtk-4-dev</code>), not just the runtime library.</li>
 <li><strong>macOS:</strong> Try running <code>brew link gtk4</code>.</li>
 </ul>
-</div>
-</div>
-<div id="admonition-error-linker-failed" class="admonition admonish-failure" role="note" aria-labelledby="admonition-error-linker-failed-title">
-<div class="admonition-title">
-<div id="admonition-error-linker-failed-title">
-<p>Error: Linker failed</p>
-</div>
-<a class="admonition-anchor-link" href="#admonition-error-linker-failed"></a>
-</div>
-<div>
-<p>If you see errors related to <code>cc</code> or <code>ld</code>:</p>
+</blockquote>
+<blockquote>
+<p>[!CAUTION]
+If you see errors related to <code>cc</code> or <code>ld</code>:</p>
 <ul>
 <li>Ensure you have <code>build-essential</code> (Linux) or Xcode Command Line Tools (macOS) installed.</li>
 </ul>
-</div>
-</div>
+</blockquote>
 
                     </main>
 

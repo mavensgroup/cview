@@ -202,7 +202,6 @@
                     <main>
                         <h1 id="loading--visualization"><a class="header" href="#loading--visualization">Loading &amp; Visualization</a></h1>
 <p>This section outlines the core workflows for importing structure files, managing the workspace, and controlling the visual representation of crystal structures.</p>
-<hr />
 <h2 id="file-operations"><a class="header" href="#file-operations">File Operations</a></h2>
 <h3 id="opening-files"><a class="header" href="#opening-files">Opening Files</a></h3>
 <p>To load a structure, navigate to <code>File → Open (Ctrl + O)</code> in the application menu. CView utilizes the native file chooser of your operating system to ensure a familiar experience.</p>
@@ -222,17 +221,10 @@ CView automatically detects the file type based on extension and content. You ca
 <li><strong>Replacement Mode:</strong> If the current active tab is empty (labelled "Untitled" with no structure), opening a file will replace this tab.</li>
 <li><strong>New Tab Mode:</strong> If a structure is already loaded, the new file will open in a separate, closable tab.</li>
 </ul>
-<div id="admonition-workspace-feedback" class="admonition admonish-note" role="note" aria-labelledby="admonition-workspace-feedback-title">
-<div class="admonition-title">
-<div id="admonition-workspace-feedback-title">
-<p>Workspace Feedback</p>
-</div>
-<a class="admonition-anchor-link" href="#admonition-workspace-feedback"></a>
-</div>
-<div>
-<p>Upon successfully loading a file, the application logs the event in the <strong>Interaction Log</strong> and automatically refreshes the <strong>Sidebar</strong> to display the atom list for the new structure.</p>
-</div>
-</div>
+<blockquote>
+<p>[!NOTE]
+Upon successfully loading a file, the application logs the event in the <strong>Interaction Log</strong> and automatically refreshes the <strong>Sidebar</strong> to display the atom list for the new structure.</p>
+</blockquote>
 <h3 id="saving--exporting"><a class="header" href="#saving--exporting">Saving &amp; Exporting</a></h3>
 <h4 id="saving-data"><a class="header" href="#saving-data">Saving Data</a></h4>
 <p>To convert a loaded structure into a different format, use <code>File → Save As (Shift+ Ctrl+ S)</code>. The output format is determined by the selected file filter in the dialog.</p>

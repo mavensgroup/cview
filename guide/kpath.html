@@ -224,31 +224,6 @@
 <li><strong>Fractional Reciprocal Coordinates</strong>: Used for DFT inputs (e.g., KPOINTS file).</li>
 <li><strong>Cartesian Reciprocal Coordinates</strong>: Used for the 3D wireframe visualization in CView.</li>
 </ul>
-<div id="admonition-current-limitations" class="admonition admonish-warning" role="note" aria-labelledby="admonition-current-limitations-title">
-<div class="admonition-title">
-<div id="admonition-current-limitations-title">
-<p>Current Limitations</p>
-</div>
-<a class="admonition-anchor-link" href="#admonition-current-limitations"></a>
-</div>
-<div>
-<p>While the generated <em>high-symmetry k-paths</em> are crystallographically correct for all space groups (based on the Setyawan-Curtarolo convention), the 3D Brillouin Zone wireframe visualization is currently hardcoded for Cubic systems.</p>
-<p>Non-cubic lattices will display correct path data but an incorrect (cubic) boundary box in the 3D viewer.</p>
-</div>
-</div>
-<div id="admonition-help-wanted-developers" class="admonition admonish-tip" role="note" aria-labelledby="admonition-help-wanted-developers-title">
-<div class="admonition-title">
-<div id="admonition-help-wanted-developers-title">
-<p>Help Wanted: Developers</p>
-</div>
-<a class="admonition-anchor-link" href="#admonition-help-wanted-developers"></a>
-</div>
-<div>
-<p>We welcome contributions to expand BZ visualization!
-If you wish to implement wireframes for other crystal systems, please extend the definitions in:
-<code>src/model/bs_data.rs</code></p>
-</div>
-</div>
 
                     </main>
 
