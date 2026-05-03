@@ -1,5 +1,6 @@
 // src/ui/interactions.rs
 
+use crate::panels::sidebar::SidebarHandles;
 use crate::rendering::scene;
 use crate::state::{AppState, SelectedAtom};
 use crate::utils::{console, report};
@@ -21,6 +22,7 @@ pub fn setup_interactions(
     window: &ApplicationWindow,
     state: Rc<RefCell<AppState>>,
     drawing_area: &gtk::DrawingArea,
+    sidebar_handles: Rc<SidebarHandles>,
 ) {
     // 1. KEYBOARD CONTROLLER
     let key_controller = EventControllerKey::new();
@@ -77,6 +79,7 @@ pub fn setup_interactions(
 
     let s = state.clone();
     let da = drawing_area.clone();
+    let handles_drag = sidebar_handles.clone();
     drag.connect_drag_update(move |_, x, y| {
         let mut st = s.borrow_mut();
         let tab = st.active_tab_mut();
@@ -100,6 +103,7 @@ pub fn setup_interactions(
 
             tab.view
                 .apply_screen_rotation_deg(dx * DRAG_ROTATE_DEG_PER_PX, dy * DRAG_ROTATE_DEG_PER_PX);
+            handles_drag.sync_from_view(&st.active_tab().view);
             da.queue_draw();
         }
     });
@@ -174,6 +178,7 @@ pub fn setup_interactions(
     let scroll = EventControllerScroll::new(EventControllerScrollFlags::VERTICAL);
     let s = state.clone();
     let da = drawing_area.clone();
+    let handles_scroll = sidebar_handles.clone();
     scroll.connect_scroll(move |_, _, dy| {
         let mut st = s.borrow_mut();
         let tab = st.active_tab_mut();
@@ -182,6 +187,7 @@ pub fn setup_interactions(
         } else {
             tab.view.zoom *= 1.1;
         }
+        handles_scroll.sync_from_view(&st.active_tab().view);
         da.queue_draw();
         glib::Propagation::Stop
     });

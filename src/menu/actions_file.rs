@@ -1,6 +1,7 @@
 // src/menu/actions_file.rs
 
 use crate::io;
+use crate::panels::sidebar::SidebarHandles;
 use crate::state::AppState;
 use crate::ui::create_tab_content;
 use crate::ui::preferences::show_preferences_window;
@@ -20,6 +21,7 @@ pub fn setup(
     notebook: &Notebook,
     drawing_area: &DrawingArea,
     atom_list_box: &gtk4::Box,
+    sidebar_handles: Rc<SidebarHandles>,
 ) {
     // --- OPEN ACTION ---
     let open_action = gtk4::gio::SimpleAction::new("open", None);
@@ -121,6 +123,7 @@ pub fn setup(
         let nb_inner = notebook_weak.clone();
         let atom_box_inner = atom_box_weak.clone();
         let win_weak_inner = win.downgrade();
+        let handles_inner = sidebar_handles.clone();
 
         dialog.connect_response(move |d, response| {
             if response == ResponseType::Accept {
@@ -212,6 +215,7 @@ pub fn setup(
                                                     &w,
                                                     st_rc.clone(),
                                                     &new_da,
+                                                    handles_inner.clone(),
                                                 );
                                             }
                                             nb.set_current_page(Some(idx as u32));

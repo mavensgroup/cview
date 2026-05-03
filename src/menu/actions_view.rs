@@ -1,6 +1,7 @@
 // src/menu/actions_view.rs
 
 use crate::config::RotationCenter;
+use crate::panels::sidebar::SidebarHandles;
 use crate::state::AppState;
 use crate::ui::show_preferences_window;
 use gtk4::prelude::*;
@@ -15,6 +16,7 @@ pub fn setup(
     state: Rc<RefCell<AppState>>,
     notebook: &Notebook,
     drawing_area: &DrawingArea,
+    sidebar_handles: Rc<SidebarHandles>,
 ) {
     // Helper to get active DA from weak notebook ref
     let get_da = |nb_weak: &gtk4::glib::WeakRef<Notebook>| -> Option<DrawingArea> {
@@ -29,6 +31,7 @@ pub fn setup(
     let act_reset = gtk4::gio::SimpleAction::new("view_reset", None);
     let s_reset = state.clone();
     let nb_reset = notebook.downgrade();
+    let h_reset = sidebar_handles.clone();
 
     act_reset.connect_activate(move |_, _| {
         if let Some(da) = get_da(&nb_reset) {
@@ -36,6 +39,7 @@ pub fn setup(
             let tab = st.active_tab_mut();
             tab.view.reset_rotation();
             tab.view.zoom = 1.0;
+            h_reset.sync_from_view(&st.active_tab().view);
             da.queue_draw();
         }
     });
@@ -46,12 +50,14 @@ pub fn setup(
     let act_a = gtk4::gio::SimpleAction::new("view_along_a", None);
     let s_a = state.clone();
     let nb_a = notebook.downgrade();
+    let h_a = sidebar_handles.clone();
 
     act_a.connect_activate(move |_, _| {
         if let Some(da) = get_da(&nb_a) {
             let mut st = s_a.borrow_mut();
             let tab = st.active_tab_mut();
             tab.view.set_euler_xyz_deg(0.0, -90.0, 0.0);
+            h_a.sync_from_view(&st.active_tab().view);
             da.queue_draw();
         }
     });
@@ -61,12 +67,14 @@ pub fn setup(
     let act_b = gtk4::gio::SimpleAction::new("view_along_b", None);
     let s_b = state.clone();
     let nb_b = notebook.downgrade();
+    let h_b = sidebar_handles.clone();
 
     act_b.connect_activate(move |_, _| {
         if let Some(da) = get_da(&nb_b) {
             let mut st = s_b.borrow_mut();
             let tab = st.active_tab_mut();
             tab.view.set_euler_xyz_deg(90.0, 0.0, 0.0);
+            h_b.sync_from_view(&st.active_tab().view);
             da.queue_draw();
         }
     });
@@ -76,12 +84,14 @@ pub fn setup(
     let act_c = gtk4::gio::SimpleAction::new("view_along_c", None);
     let s_c = state.clone();
     let nb_c = notebook.downgrade();
+    let h_c = sidebar_handles.clone();
 
     act_c.connect_activate(move |_, _| {
         if let Some(da) = get_da(&nb_c) {
             let mut st = s_c.borrow_mut();
             let tab = st.active_tab_mut();
             tab.view.reset_rotation();
+            h_c.sync_from_view(&st.active_tab().view);
             da.queue_draw();
         }
     });

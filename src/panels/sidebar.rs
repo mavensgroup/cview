@@ -2,6 +2,7 @@
 // All features preserved — logging via centralized utils::console
 
 use gtk4::gdk;
+use gtk4::glib::SignalHandlerId;
 use gtk4::prelude::*;
 use gtk4::{
     Adjustment, Align, Box as GtkBox, Button, CheckButton, ColorButton, CssProvider, DropDown,
@@ -11,13 +12,86 @@ use gtk4::{
 
 use crate::config::ColorMode;
 use crate::model::elements::get_element_color;
-use crate::state::AppState;
+use crate::state::{AppState, ViewState};
 use crate::utils::console;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Builds the sidebar and returns (The ScrolledWindow, The Atom List Container Box)
-pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWindow, GtkBox) {
+/// Handles to the View Controls sliders so external events (mouse drag, scroll,
+/// tab switch) can push the current ViewState back into the widgets. Signal
+/// handlers are blocked during programmatic updates to break the feedback loop.
+pub struct SidebarHandles {
+    zoom_scale: Scale,
+    rot_x_scale: Scale,
+    rot_y_scale: Scale,
+    rot_z_scale: Scale,
+    zoom_handler: SignalHandlerId,
+    rot_x_handler: SignalHandlerId,
+    rot_y_handler: SignalHandlerId,
+    rot_z_handler: SignalHandlerId,
+}
+
+impl SidebarHandles {
+    /// Push current view state into the slider widgets without re-firing their
+    /// value-changed callbacks (which would write back into state and could
+    /// re-quantize through the snapping logic).
+    pub fn sync_from_view(&self, view: &ViewState) {
+        let (rx, ry, rz) = view.euler_xyz_deg();
+        Self::set_blocked(&self.zoom_scale, &self.zoom_handler, view.zoom);
+        Self::set_blocked(&self.rot_x_scale, &self.rot_x_handler, rx);
+        Self::set_blocked(&self.rot_y_scale, &self.rot_y_handler, ry);
+        Self::set_blocked(&self.rot_z_scale, &self.rot_z_handler, rz);
+    }
+
+    fn set_blocked(scale: &Scale, handler: &SignalHandlerId, value: f64) {
+        scale.block_signal(handler);
+        scale.set_value(value);
+        scale.unblock_signal(handler);
+    }
+}
+
+/// Same as the build()-local `create_slider` helper, but returns the underlying
+/// Scale and the value-changed handler ID so callers that need to drive the
+/// slider programmatically can block the handler during writes.
+fn create_tracked_slider(
+    label: &str,
+    min: f64,
+    max: f64,
+    step: f64,
+    val: f64,
+    callback: Box<dyn Fn(f64)>,
+) -> (GtkBox, Scale, SignalHandlerId) {
+    let b = GtkBox::new(Orientation::Vertical, 2);
+    b.append(&Label::builder().label(label).halign(Align::Start).build());
+
+    let adj = Adjustment::new(val, min, max, step, step, 0.0);
+    let scale = Scale::new(Orientation::Horizontal, Some(&adj));
+
+    scale.add_css_class("thin-slider");
+    scale.set_digits(2);
+    scale.set_draw_value(true);
+    scale.set_value_pos(gtk4::PositionType::Right);
+
+    let id = scale.connect_value_changed(move |sc| {
+        let raw = sc.value();
+        let snapped = (raw / step).round() * step;
+
+        if (raw - snapped).abs() > 0.0001 {
+            sc.set_value(snapped);
+            return;
+        }
+        callback(snapped);
+    });
+    b.append(&scale);
+    (b, scale, id)
+}
+
+/// Builds the sidebar and returns (ScrolledWindow, atom list container, handles
+/// for the View Controls sliders so mouse drag/scroll can sync them).
+pub fn build(
+    state: Rc<RefCell<AppState>>,
+    notebook: &Notebook,
+) -> (ScrolledWindow, GtkBox, SidebarHandles) {
     // --- 0. INJECT CUSTOM CSS FOR "BOLD LINE" SLIDERS ---
     let provider = CssProvider::new();
     provider.load_from_data(
@@ -66,28 +140,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
     // --- Helper for Sliders (Fixed Snapping & Styling) ---
     let create_slider =
         |label: &str, min: f64, max: f64, step: f64, val: f64, callback: Box<dyn Fn(f64)>| {
-            let b = GtkBox::new(Orientation::Vertical, 2);
-            b.append(&Label::builder().label(label).halign(Align::Start).build());
-
-            let adj = Adjustment::new(val, min, max, step, step, 0.0);
-            let scale = Scale::new(Orientation::Horizontal, Some(&adj));
-
-            scale.add_css_class("thin-slider");
-            scale.set_digits(2);
-            scale.set_draw_value(true);
-            scale.set_value_pos(gtk4::PositionType::Right);
-
-            scale.connect_value_changed(move |sc| {
-                let raw = sc.value();
-                let snapped = (raw / step).round() * step;
-
-                if (raw - snapped).abs() > 0.0001 {
-                    sc.set_value(snapped);
-                    return;
-                }
-                callback(snapped);
-            });
-            b.append(&scale);
+            let (b, _scale, _id) = create_tracked_slider(label, min, max, step, val, callback);
             b
         };
 
@@ -125,7 +178,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
     let s_z = state.clone();
     let nb_z = nb_weak.clone();
     let cb_z = queue_active_draw;
-    controls_box.append(&create_slider(
+    let (zoom_box, zoom_scale, zoom_handler) = create_tracked_slider(
         "Zoom",
         0.1,
         5.0,
@@ -135,18 +188,17 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
             s_z.borrow_mut().active_tab_mut().view.zoom = v;
             cb_z(&nb_z);
         }),
-    ));
+    );
+    controls_box.append(&zoom_box);
 
     // Rotation sliders set absolute Euler angles (XYZ-intrinsic). Each callback
     // decomposes the current quaternion, replaces one component, and recomposes.
-    // Sliders don't auto-track mouse-drag changes (slider widgets aren't reactive
-    // to state changes); that mirrors prior behavior.
     let (init_rx, init_ry, init_rz) = state.borrow().active_tab().view.euler_xyz_deg();
 
     let s_rx = state.clone();
     let nb_rx = nb_weak.clone();
     let cb_rx = queue_active_draw;
-    controls_box.append(&create_slider(
+    let (rx_box, rot_x_scale, rot_x_handler) = create_tracked_slider(
         "Rotation X",
         -180.0,
         180.0,
@@ -160,12 +212,13 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
             drop(st);
             cb_rx(&nb_rx);
         }),
-    ));
+    );
+    controls_box.append(&rx_box);
 
     let s_ry = state.clone();
     let nb_ry = nb_weak.clone();
     let cb_ry = queue_active_draw;
-    controls_box.append(&create_slider(
+    let (ry_box, rot_y_scale, rot_y_handler) = create_tracked_slider(
         "Rotation Y",
         -180.0,
         180.0,
@@ -179,12 +232,13 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
             drop(st);
             cb_ry(&nb_ry);
         }),
-    ));
+    );
+    controls_box.append(&ry_box);
 
     let s_rz = state.clone();
     let nb_rz = nb_weak.clone();
     let cb_rz = queue_active_draw;
-    controls_box.append(&create_slider(
+    let (rz_box, rot_z_scale, rot_z_handler) = create_tracked_slider(
         "Rotation Z",
         -180.0,
         180.0,
@@ -198,7 +252,19 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
             drop(st);
             cb_rz(&nb_rz);
         }),
-    ));
+    );
+    controls_box.append(&rz_box);
+
+    let handles = SidebarHandles {
+        zoom_scale,
+        rot_x_scale,
+        rot_y_scale,
+        rot_z_scale,
+        zoom_handler,
+        rot_x_handler,
+        rot_y_handler,
+        rot_z_handler,
+    };
 
     controls_expander.set_child(Some(&controls_box));
     // The View Controls panel is appended below (after Appearance) so the
@@ -589,7 +655,7 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
     bvs_expander.set_child(Some(&bvs_box));
     root_vbox.append(&bvs_expander);
 
-    (scroll, atoms_list_container)
+    (scroll, atoms_list_container, handles)
 }
 
 /// Public helper to rebuild the list of atom colors dynamically.

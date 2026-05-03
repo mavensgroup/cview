@@ -116,7 +116,9 @@ fn build_ui(app: &Application) {
 
     // --- LEFT PANEL (Sidebar) ---
     use panels::sidebar;
-    let (sidebar_widget, atom_list_box) = sidebar::build(state.clone(), &view_notebook);
+    let (sidebar_widget, atom_list_box, sidebar_handles) =
+        sidebar::build(state.clone(), &view_notebook);
+    let sidebar_handles = std::rc::Rc::new(sidebar_handles);
 
     let sidebar_revealer = Revealer::builder()
         .transition_type(RevealerTransitionType::SlideRight)
@@ -137,6 +139,7 @@ fn build_ui(app: &Application) {
         &view_notebook,
         &first_da,
         &atom_list_box,
+        sidebar_handles.clone(),
     );
 
     // --- ACTIONS ---
@@ -186,13 +189,16 @@ fn build_ui(app: &Application) {
     root_vbox.append(&main_hbox);
 
     // --- INTERACTIONS ---
-    setup_interactions(&window, state.clone(), &first_da);
+    setup_interactions(&window, state.clone(), &first_da, sidebar_handles.clone());
 
     // --- TAB SWITCHING LOGIC ---
     let state_nb = state.clone();
+    let handles_nb = sidebar_handles.clone();
     view_notebook.connect_switch_page(move |_, _, page_num| {
         let mut st = state_nb.borrow_mut();
         st.active_tab_index = page_num as usize;
+        // Newly-active tab has its own ViewState; push it into the sliders.
+        handles_nb.sync_from_view(&st.active_tab().view);
     });
 
     window.present();

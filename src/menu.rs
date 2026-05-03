@@ -1,5 +1,6 @@
 // src/menu.rs
 
+use crate::panels::sidebar::SidebarHandles;
 use crate::state::AppState;
 use gtk4::prelude::*;
 use gtk4::{Application, ApplicationWindow, DrawingArea, Notebook};
@@ -20,6 +21,7 @@ pub fn build_menu_and_actions(
     notebook: &Notebook,
     drawing_area: &DrawingArea,
     atom_list_box: &gtk4::Box,
+    sidebar_handles: Rc<SidebarHandles>,
 ) -> gtk4::Box {
     // --- 1. REGISTER ACTIONS ---
     actions_file::setup(
@@ -29,8 +31,16 @@ pub fn build_menu_and_actions(
         notebook,
         drawing_area,
         atom_list_box,
+        sidebar_handles.clone(),
     );
-    actions_view::setup(app, window, state.clone(), notebook, drawing_area);
+    actions_view::setup(
+        app,
+        window,
+        state.clone(),
+        notebook,
+        drawing_area,
+        sidebar_handles,
+    );
     actions_tools::setup(app, window, state.clone(), notebook, drawing_area);
     actions_analysis::setup(app, window, state.clone());
     actions_help::setup(app, window);
