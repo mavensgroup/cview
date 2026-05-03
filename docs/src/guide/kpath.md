@@ -22,16 +22,3 @@ The module generates two data sets:
 The internal logic handles the matrix multiplication to convert between:
 * **Fractional Reciprocal Coordinates**: Used for DFT inputs (e.g., KPOINTS file).
 * **Cartesian Reciprocal Coordinates**: Used for the 3D wireframe visualization in CView.
-
-
-```admonish warning title="Current Limitations"
-While the generated _high-symmetry k-paths_ are crystallographically correct for all space groups (based on the Setyawan-Curtarolo convention), the 3D Brillouin Zone wireframe visualization is currently hardcoded for Cubic systems.
-
-Non-cubic lattices will display correct path data but an incorrect (cubic) boundary box in the 3D viewer.
-```
-
-```admonish tip title="Help Wanted: Developers"
-We welcome contributions to expand BZ visualization!
-If you wish to implement wireframes for other crystal systems, please extend the definitions in:
-`src/model/bs_data.rs`
-```

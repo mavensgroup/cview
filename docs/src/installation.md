@@ -1,8 +1,7 @@
 # Installation
 
-```admonish tip title="Quick Install"
-If you have `cargo` installed, then jump to [Build from source](#3-build-from-source).
-```
+>[!TIP]
+>If you have `cargo` installed, then jump to [Build from source](#3-build-from-source).
 
 
 CView is a cross-platform application built on **Rust** and **GTK4**. Because it uses the native GTK4 libraries for rendering, the installation process involves two steps:
@@ -67,9 +66,8 @@ For Windows, we recommend using the **MSYS2** environment to manage the native G
 4.  **Add to Path:** Add `C:\msys64\mingw64\bin` to your Windows System PATH environment variable.
     * *Why?* This allows you to run `cargo run` from VS Code or PowerShell later.
 
-```admonish warning title="Do not use PowerShell yet"
+>[!IMPORTANT]
 The `pacman` command above works **only** inside the MSYS2 terminal. It will fail if you try to run it in PowerShell or Command Prompt.
-```
 
 ---
 
@@ -77,20 +75,17 @@ The `pacman` command above works **only** inside the MSYS2 terminal. It will fai
 
 If you do not have the Rust compiler installed, the recommended way is via `rustup`.
 
-```admonish note title="Check your version"
+>[!NOTE]
 CView requires **Rust 1.70** or higher.
 Check your version with: `cargo --version`
 
-```
 
 **Command (Linux / macOS / Windows PowerShell):**
 
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf [https://sh.rustup.rs](https://sh.rustup.rs) | sh
-
 ```
 
----
 
 ## 3. Build from Source
 
@@ -110,19 +105,16 @@ This will install `cview` in `~/bin` by default. For the subsequent run, just ty
 
 The first compilation may take a few minutes as it compiles the dependencies. Subsequent runs will be instant.
 
----
 
 
 ## Troubleshooting
 
-```admonish failure title="Error: pkg-config not found"
-If the build fails claiming it cannot find `gtk4` or `pkg-config`, it means the development headers are missing.
-* **Linux:** Ensure you installed the `-dev` or `-devel` packages (e.g., `libgtk-4-dev`), not just the runtime library.
-* **macOS:** Try running `brew link gtk4`.
+>[!CAUTION]
+>If the build fails claiming it cannot find `gtk4` or `pkg-config`, it means the development headers are missing.
+>* **Linux:** Ensure you installed the `-dev` or `-devel` packages (e.g., `libgtk-4-dev`), not just the runtime library.
+>* **macOS:** Try running `brew link gtk4`.
 
-```
 
-```admonish failure title="Error: Linker failed"
-If you see errors related to `cc` or `ld`:
-* Ensure you have `build-essential` (Linux) or Xcode Command Line Tools (macOS) installed.
-```
+>[!CAUTION]
+>If you see errors related to `cc` or `ld`:
+>* Ensure you have `build-essential` (Linux) or Xcode Command Line Tools (macOS) installed.

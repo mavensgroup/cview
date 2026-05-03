@@ -2,7 +2,6 @@
 
 This section outlines the core workflows for importing structure files, managing the workspace, and controlling the visual representation of crystal structures.
 
----
 
 ## File Operations
 
@@ -26,9 +25,8 @@ CView uses a tabbed interface to handle multiple structures simultaneously. The 
 * **Replacement Mode:** If the current active tab is empty (labelled "Untitled" with no structure), opening a file will replace this tab.
 * **New Tab Mode:** If a structure is already loaded, the new file will open in a separate, closable tab.
 
-```admonish note title="Workspace Feedback"
-Upon successfully loading a file, the application logs the event in the **Interaction Log** and automatically refreshes the **Sidebar** to display the atom list for the new structure.
-```
+>[!NOTE]
+>Upon successfully loading a file, the application logs the event in the **Interaction Log** and automatically refreshes the **Sidebar** to display the atom list for the new structure.
 
 ### Saving & Exporting
 

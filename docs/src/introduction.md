@@ -9,21 +9,19 @@
 
 **CView** is a high-performance crystallographic tool written in **Rust** and **GTK4**. It bridges the gap between structure visualization and *ab-initio* calculation setup (VASP, QE, SPRKKR).
 
-```admonish warning title="Performance Limitation: Macromolecules"
-This version of `CView` is built on **GTK4**, which primarily utilizes the CPU for rendering.
+>[!IMPORTANT]
+>This version of `CView` is built on **GTK4**, which primarily utilizes the CPU for rendering.<br>
+>While the engine is optimized, it is designed for **crystal structures** (unit cells, supercells, slabs). It handles systems up to $\approx 5000$ atoms with ease, but it is **not suitable** for visualizing massive biological macromolecules (e.g., proteins, DNA) containing millions of atoms.<br>
+>The largest molecule we have tested is of $6000$ atoms core shell polymer.
 
-While the engine is optimized, it is designed for **crystal structures** (unit cells, supercells, slabs). It handles systems up to $\approx 1000$ atoms with ease, but it is **not suitable** for visualizing massive biological macromolecules (e.g., proteins, DNA) containing millions of atoms.
-```
-
-```admonish note title="Philosophy"
-CView is not just a viewer; it is a **pre-calculation validator**. It focuses on Reciprocal Space and Geometric consistency to prevent wasted CPU hours on incorrect VASP/QE inputs.
-```
+>[!TIP]
+>CView is not just a viewer; it is a **pre-calculation validator**. It focuses on Reciprocal Space and Geometric consistency to prevent wasted CPU hours on incorrect VASP/QE inputs.
 
 ![Screenshot of CView](images/screenshot_main.png)
 
 ---
 
-## ⚡ Why CView?
+##  Why CView?
 
 | Feature | Description |
 | :--- | :--- |
@@ -43,7 +41,8 @@ This manual is divided into three parts:
     * **[K-Path Visualization](guide/kpath.md)**: Brillouin zone construction and HSP selection.
     * **[XRD Simulation](guide/xrd.md)**: Structure factors and powder diffraction patterns.
     * **[Surface Slabs](guide/slabs.md)**: Creating vacuum-padded slabs for surface science.
-3.  **[Tutorials](tutorials/bi2se3.md)**: Step-by-step walkthroughs for real materials (e.g., Bi₂Se₃).
+    * **[Charge Density](guide/charge_density.md)**: Charge Density analysis
+3.  **[Tutorials](tutorials)**: To Do.
 
 ---
 
@@ -51,15 +50,12 @@ This manual is divided into three parts:
 
 Get up and running in seconds.
 
-````admonish success title="Installation"
-```
-# Clone and Run
+### Clone and Run
+```bash
 git clone https://github.com/mavensgroup/cview.git
 cd cview
 cargo run --release
 ```
-````
-
 See the [Installation Page](installation.md) for detailed OS-specific instructions.
 
 ---
@@ -76,21 +72,17 @@ Format | VASP | Quantum Espresso | SPRKKR | CIF / XYZ |
 
 ## Links
 
-
-```admonish important title="Contribute"
-This is an α (alpha) release. While the core functionality is operational, the software may contain
-incomplete features, bugs, or unstable behaviour.
+>[!WARNING]
+>This is a beta release. While the core functionality is operational, the software may contain incomplete features, bugs, or unstable behaviour.
 
 Contributions from testers and developers are welcome.
 
 - [Source Code](https://github.com/mavensgroup/cview)
 - [Bug Report](https://github.com/mavensgroup/cview/issues)
 - [PR](https://github.com/mavensgroup/cview/pulls)
-```
 
----
 
-## 📜 License & Citation
+## License & Citation
 
 **CView** is open-source software licensed under the **MIT** Licence.
 

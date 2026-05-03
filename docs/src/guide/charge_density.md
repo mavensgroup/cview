@@ -24,10 +24,8 @@ A powerful feature of the module is the **Difference Mode**. You can load two di
 
 The software calculates $\\Delta\\rho(r) = \\rho_A(r) - \\rho_B(r)$ on the fly, allowing you to visually identify regions of electron accumulation and depletion.
 
-```admonish tip title="Rendering and Overlays"
-CView utilizes Cairo for high-fidelity 2D rendering. When a slice is drawn, atoms near the slice plane are geometrically projected onto the 2D canvas, using standard CPK colors for easy chemical identification.
-```
+>[!TIP]
+>CView utilizes Cairo for high-fidelity 2D rendering. When a slice is drawn, atoms near the slice plane are geometrically projected onto the 2D canvas, using standard CPK colors for easy chemical identification.
 
 ### Exporting
 Slices can be instantly exported as high-resolution `png` or `pdf` images directly from the visualization tab, complete with isolines, heatmaps, and atomic projections.
-```

@@ -1,7 +1,6 @@
 # XRD Simulation
 
 
-
 The X-Ray Diffraction (XRD) module simulates the powder diffraction pattern for the loaded structure. It utilizes **Kinematic Diffraction Theory**, assuming ideal interactions without primary extinction or multiple scattering events.
 
 ## Physical Model
@@ -23,10 +22,9 @@ $$F_{hkl} = \sum_{j=1}^{N} f_j(\theta) \exp\left[2\pi i (hx_j + ky_j + lz_j)\rig
 * $x_j, y_j, z_j$: Fractional coordinates of atom $j$.
 * $f_j(\theta)$: The atomic scattering factor.
 
-```admonish info title="Coefficients"
+>[!NOTE]
 The atomic scattering factor ($f_j(\theta)$) has been calculated using Cromer-Mann coefficient (`model/elements.rs`)
-```
-<!-- > **Note**: The current implementation approximates $f_j$ using the atomic number ($Z$) or pre-tabulated coefficients compatible with standard crystallographic tables. -->
+
 
 ### 4. Intensity Correction
 The raw squared structure factor $|F_{hkl}|^2$ is corrected to obtain the observed intensity $I$. The primary correction applied in `xrd.rs` is the **Lorentz-Polarization (LP) Factor** for unpolarized radiation (standard laboratory diffractometer):
