@@ -27,9 +27,5 @@ Detailed physical derivation and algorithmic implementation for each tool are pr
 * **[Reciprocal Space (K-Path)](kpath.md)**
     * *Method*: High-symmetry path standardization (Setyawan-Curtarolo).
     * *Application*: Band structure calculation inputs.
-
----
-*Note: While **Surface Slabs** are technically a structural building operation, their documentation regarding miller index transformation is provided here for completeness.*
-
 * **[Surface Slabs](slabs.md)**
     * *Method*: Lattice transformation via planar basis searching.
