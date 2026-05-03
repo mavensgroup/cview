@@ -5,13 +5,16 @@ use crate::config::{Config, RenderStyle};
 use crate::model::miller::MillerPlane;
 use crate::model::structure::Structure;
 use crate::physics::analysis::{kpath::KPathResult, voids::VoidResult};
+use nalgebra::{Rotation3, UnitQuaternion, Vector3};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct ViewState {
-    pub rot_x: f64,
-    pub rot_y: f64,
-    pub rot_z: f64,
+    /// Camera orientation as a unit quaternion. Mouse drag composes screen-space
+    /// deltas onto this (trackball behavior); presets and Euler sliders set it
+    /// from absolute angles. Quaternion form keeps composition numerically stable
+    /// across many incremental drags.
+    pub rotation: UnitQuaternion<f64>,
     pub zoom: f64,
     pub pan_x: f64,
     pub pan_y: f64,
@@ -25,9 +28,7 @@ pub struct ViewState {
 impl ViewState {
     pub fn from_config(config: &Config) -> Self {
         Self {
-            rot_x: 0.0,
-            rot_y: 0.0,
-            rot_z: 0.0,
+            rotation: UnitQuaternion::identity(),
             zoom: config.default_zoom,
             pan_x: 0.0,
             pan_y: 0.0,
@@ -38,14 +39,49 @@ impl ViewState {
             show_full_unit_cell: config.default_show_full_cell,
         }
     }
+
+    /// Rotation matrix the renderer applies to world-space points.
+    pub fn rotation_matrix(&self) -> Rotation3<f64> {
+        self.rotation.to_rotation_matrix()
+    }
+
+    /// Set absolute orientation from XYZ-intrinsic Euler angles in degrees
+    /// (composition order `Rz * Ry * Rx`, matching the previous behavior).
+    pub fn set_euler_xyz_deg(&mut self, rx_deg: f64, ry_deg: f64, rz_deg: f64) {
+        self.rotation = UnitQuaternion::from_euler_angles(
+            rx_deg.to_radians(),
+            ry_deg.to_radians(),
+            rz_deg.to_radians(),
+        );
+    }
+
+    /// Decompose to XYZ-intrinsic Euler angles in degrees. Used to seed the
+    /// sidebar sliders; values may be negative or wrap, and gimbal-lock cases
+    /// produce one of many equivalent decompositions.
+    pub fn euler_xyz_deg(&self) -> (f64, f64, f64) {
+        let (rx, ry, rz) = self.rotation.euler_angles();
+        (rx.to_degrees(), ry.to_degrees(), rz.to_degrees())
+    }
+
+    /// Apply a screen-space rotation increment (trackball). `yaw_deg` rotates
+    /// around the screen's vertical axis (horizontal drag), `pitch_deg` around
+    /// the screen's horizontal axis (vertical drag). Left-multiplied so the
+    /// delta is interpreted in camera space regardless of current orientation.
+    pub fn apply_screen_rotation_deg(&mut self, yaw_deg: f64, pitch_deg: f64) {
+        let yaw = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), yaw_deg.to_radians());
+        let pitch = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), pitch_deg.to_radians());
+        self.rotation = yaw * pitch * self.rotation;
+    }
+
+    pub fn reset_rotation(&mut self) {
+        self.rotation = UnitQuaternion::identity();
+    }
 }
 
 impl Default for ViewState {
     fn default() -> Self {
         Self {
-            rot_x: 0.0,
-            rot_y: 0.0,
-            rot_z: 0.0,
+            rotation: UnitQuaternion::identity(),
             zoom: 1.0,
             pan_x: 0.0,
             pan_y: 0.0,
@@ -97,6 +133,10 @@ pub struct InteractionState {
     pub undo_stack: Vec<Structure>,
     pub is_shift_pressed: bool,
     pub selection_box: Option<((f64, f64), (f64, f64))>,
+    /// Cumulative drag offset reported on the previous drag-update event.
+    /// Reset to (0, 0) on drag-begin. Used to derive per-frame deltas for
+    /// trackball rotation, since GTK's GestureDrag reports cumulative offset.
+    pub drag_prev_offset: (f64, f64),
 }
 
 pub struct TabState {

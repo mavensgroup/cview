@@ -13,6 +13,10 @@ use gtk4::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
+/// Mouse-drag rotation sensitivity in degrees per pixel. Tuned to feel close to
+/// VESTA — a swipe across the canvas gives a meaningful spin without overshooting.
+const DRAG_ROTATE_DEG_PER_PX: f64 = 0.4;
+
 pub fn setup_interactions(
     window: &ApplicationWindow,
     state: Rc<RefCell<AppState>>,
@@ -65,6 +69,7 @@ pub fn setup_interactions(
     drag.connect_drag_begin(move |_, x, y| {
         let mut st = s.borrow_mut();
         let tab = st.active_tab_mut();
+        tab.interaction.drag_prev_offset = (0.0, 0.0);
         if tab.interaction.is_shift_pressed {
             tab.interaction.selection_box = Some(((x, y), (x, y)));
         }
@@ -84,8 +89,17 @@ pub fn setup_interactions(
                 da.queue_draw();
             }
         } else {
-            tab.view.rot_y += x * 0.01;
-            tab.view.rot_x += y * 0.01;
+            // GestureDrag delivers cumulative offset since drag-begin, so we
+            // diff against the previous frame to get a per-frame delta and feed
+            // that into the trackball. Without diffing, each frame would re-add
+            // the entire offset and rotation would explode.
+            let (prev_dx, prev_dy) = tab.interaction.drag_prev_offset;
+            let dx = x - prev_dx;
+            let dy = y - prev_dy;
+            tab.interaction.drag_prev_offset = (x, y);
+
+            tab.view
+                .apply_screen_rotation_deg(dx * DRAG_ROTATE_DEG_PER_PX, dy * DRAG_ROTATE_DEG_PER_PX);
             da.queue_draw();
         }
     });

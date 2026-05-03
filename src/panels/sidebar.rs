@@ -137,50 +137,65 @@ pub fn build(state: Rc<RefCell<AppState>>, notebook: &Notebook) -> (ScrolledWind
         }),
     ));
 
-    // Rotation X
+    // Rotation sliders set absolute Euler angles (XYZ-intrinsic). Each callback
+    // decomposes the current quaternion, replaces one component, and recomposes.
+    // Sliders don't auto-track mouse-drag changes (slider widgets aren't reactive
+    // to state changes); that mirrors prior behavior.
+    let (init_rx, init_ry, init_rz) = state.borrow().active_tab().view.euler_xyz_deg();
+
     let s_rx = state.clone();
     let nb_rx = nb_weak.clone();
     let cb_rx = queue_active_draw;
     controls_box.append(&create_slider(
         "Rotation X",
-        0.0,
-        360.0,
+        -180.0,
+        180.0,
         1.0,
-        state.borrow().active_tab().view.rot_x,
+        init_rx,
         Box::new(move |v| {
-            s_rx.borrow_mut().active_tab_mut().view.rot_x = v;
+            let mut st = s_rx.borrow_mut();
+            let view = &mut st.active_tab_mut().view;
+            let (_, ry, rz) = view.euler_xyz_deg();
+            view.set_euler_xyz_deg(v, ry, rz);
+            drop(st);
             cb_rx(&nb_rx);
         }),
     ));
 
-    // Rotation Y
     let s_ry = state.clone();
     let nb_ry = nb_weak.clone();
     let cb_ry = queue_active_draw;
     controls_box.append(&create_slider(
         "Rotation Y",
-        0.0,
-        360.0,
+        -180.0,
+        180.0,
         1.0,
-        state.borrow().active_tab().view.rot_y,
+        init_ry,
         Box::new(move |v| {
-            s_ry.borrow_mut().active_tab_mut().view.rot_y = v;
+            let mut st = s_ry.borrow_mut();
+            let view = &mut st.active_tab_mut().view;
+            let (rx, _, rz) = view.euler_xyz_deg();
+            view.set_euler_xyz_deg(rx, v, rz);
+            drop(st);
             cb_ry(&nb_ry);
         }),
     ));
 
-    // Rotation Z
     let s_rz = state.clone();
     let nb_rz = nb_weak.clone();
     let cb_rz = queue_active_draw;
     controls_box.append(&create_slider(
         "Rotation Z",
-        0.0,
-        360.0,
+        -180.0,
+        180.0,
         1.0,
-        state.borrow().active_tab().view.rot_z,
+        init_rz,
         Box::new(move |v| {
-            s_rz.borrow_mut().active_tab_mut().view.rot_z = v;
+            let mut st = s_rz.borrow_mut();
+            let view = &mut st.active_tab_mut().view;
+            let (rx, ry, _) = view.euler_xyz_deg();
+            view.set_euler_xyz_deg(rx, ry, v);
+            drop(st);
             cb_rz(&nb_rz);
         }),
     ));

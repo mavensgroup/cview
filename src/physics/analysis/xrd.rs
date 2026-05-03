@@ -36,6 +36,15 @@ pub struct XRDPattern {
     pub multiplicity: u32,
 }
 
+/// Crystallographic convention: first non-zero index is positive.
+/// Friedel's law makes (h,k,l) and (-h,-k,-l) symmetry-equivalent in intensity,
+/// so we collapse them onto a single canonical label.
+fn canonical_hkl(hkl: (i32, i32, i32)) -> (i32, i32, i32) {
+    let (h, k, l) = hkl;
+    let flip = h < 0 || (h == 0 && k < 0) || (h == 0 && k == 0 && l < 0);
+    if flip { (-h, -k, -l) } else { (h, k, l) }
+}
+
 /// Main calculation: Returns discrete peaks with proper physics (Structure Factor)
 pub fn calculate_pattern(structure: &Structure, settings: &XRDSettings) -> Vec<XRDPattern> {
     // 1. Calculate Real Lattice Vectors (a1, a2, a3)
@@ -148,7 +157,7 @@ pub fn calculate_pattern(structure: &Structure, settings: &XRDSettings) -> Vec<X
                     raw_peaks.push(XRDPattern {
                         two_theta: two_theta_deg,
                         intensity: final_intensity,
-                        hkl: vec![(h, k, l)],
+                        hkl: vec![canonical_hkl((h, k, l))],
                         d_spacing: d,
                         multiplicity: 1,
                     });

@@ -7,7 +7,7 @@
 
 use crate::config::{Config, RotationCenter};
 use crate::state::TabState;
-use nalgebra::{Matrix3, Rotation3, Vector3};
+use nalgebra::{Matrix3, Vector3};
 use std::cmp::Ordering;
 
 // This struct is used by interactions.rs for hit-testing and painter.rs
@@ -57,10 +57,7 @@ pub fn calculate_scene(
     };
 
     // --- 1. Prepare Matrices (Nalgebra) ---
-    let rx = Rotation3::from_axis_angle(&Vector3::x_axis(), tab.view.rot_x.to_radians());
-    let ry = Rotation3::from_axis_angle(&Vector3::y_axis(), tab.view.rot_y.to_radians());
-    let rz = Rotation3::from_axis_angle(&Vector3::z_axis(), tab.view.rot_z.to_radians());
-    let rotation_matrix = rz * ry * rx;
+    let rotation_matrix = tab.view.rotation_matrix();
 
     let lat = structure.lattice;
     let lattice_mat = Matrix3::new(

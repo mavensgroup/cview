@@ -34,8 +34,7 @@ pub fn setup(
         if let Some(da) = get_da(&nb_reset) {
             let mut st = s_reset.borrow_mut();
             let tab = st.active_tab_mut();
-            tab.view.rot_x = 0.0;
-            tab.view.rot_y = 0.0;
+            tab.view.reset_rotation();
             tab.view.zoom = 1.0;
             da.queue_draw();
         }
@@ -52,9 +51,7 @@ pub fn setup(
         if let Some(da) = get_da(&nb_a) {
             let mut st = s_a.borrow_mut();
             let tab = st.active_tab_mut();
-            // 0, -90 degrees (was -PI/2 radians)
-            tab.view.rot_x = 0.0;
-            tab.view.rot_y = -90.0;
+            tab.view.set_euler_xyz_deg(0.0, -90.0, 0.0);
             da.queue_draw();
         }
     });
@@ -69,9 +66,7 @@ pub fn setup(
         if let Some(da) = get_da(&nb_b) {
             let mut st = s_b.borrow_mut();
             let tab = st.active_tab_mut();
-            // 90, 0 degrees (was PI/2 radians)
-            tab.view.rot_x = 90.0;
-            tab.view.rot_y = 0.0;
+            tab.view.set_euler_xyz_deg(90.0, 0.0, 0.0);
             da.queue_draw();
         }
     });
@@ -86,8 +81,7 @@ pub fn setup(
         if let Some(da) = get_da(&nb_c) {
             let mut st = s_c.borrow_mut();
             let tab = st.active_tab_mut();
-            tab.view.rot_x = 0.0;
-            tab.view.rot_y = 0.0;
+            tab.view.reset_rotation();
             da.queue_draw();
         }
     });

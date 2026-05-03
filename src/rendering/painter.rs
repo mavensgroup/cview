@@ -513,25 +513,11 @@ pub fn draw_axes(cr: &cairo::Context, tab: &TabState, width: f64, height: f64) {
     let hud_cx = hud_size * 0.6;
     let hud_cy = height - hud_size * 0.6;
 
-    let (sin_x, cos_x) = tab.view.rot_x.to_radians().sin_cos();
-    let (sin_y, cos_y) = tab.view.rot_y.to_radians().sin_cos();
+    let rotation_matrix = tab.view.rotation_matrix();
 
     let rotate_vec = |v: [f64; 3]| -> [f64; 3] {
-        let x = v[0];
-        let y = v[1];
-        let z = v[2];
-
-        // Rotate around Y (Yaw)
-        let x1 = x * cos_y + z * sin_y;
-        let y1 = y;
-        let z1 = -x * sin_y + z * cos_y;
-
-        // Rotate around X (Pitch)
-        let x2 = x1;
-        let y2 = y1 * cos_x - z1 * sin_x;
-        let z2 = y1 * sin_x + z1 * cos_x;
-
-        [x2, y2, z2]
+        let r = rotation_matrix * nalgebra::Vector3::new(v[0], v[1], v[2]);
+        [r.x, r.y, r.z]
     };
 
     let axes_data = [
