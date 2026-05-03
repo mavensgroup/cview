@@ -1,7 +1,12 @@
 # Installation
 
+>[!IMPORTANT]
+> The `CView` sourcecode is available in [github](https://github.com/mavensgroup/cview)<br><br>
+> The latest and greates build is available for all major OS; check
+[release](https://github.com/mavensgroup/cview/releases/latest)
+
 >[!TIP]
->If you have `cargo` installed, then jump to [Build from source](#3-build-from-source).
+>If you are already using `rust` and have `cargo` installed, then jump to [Build from source](#3-build-from-source).
 
 
 CView is a cross-platform application built on **Rust** and **GTK4**. Because it uses the native GTK4 libraries for rendering, the installation process involves two steps:
@@ -93,12 +98,11 @@ Once the dependencies are ready, you can compile CView directly from the reposit
 
 ```bash
 # 1. Clone the repository
-git clone [https://github.com/mavensgroup/cview.git](https://github.com/mavensgroup/cview.git)
+git clone https://github.com/mavensgroup/cview.git
 cd cview
 
 # 2. Build and Run (Release mode recommended for performance)
 cargo run --release
-
 ```
 
 The first compilation may take a few minutes as it compiles the dependencies. Subsequent runs will be instant.
