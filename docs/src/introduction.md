@@ -9,6 +9,9 @@
 
 **CView** is a high-performance crystallographic tool written in **Rust** and **GTK4**. It bridges the gap between structure visualization and *ab-initio* calculation setup (VASP, QE, SPRKKR).
 
+>[!TIP]
+>**Quick Start**: Download pre-built binaries for Linux, macOS, or Windows from the [**Releases Page**](https://github.com/mavensgroup/cview/releases/latest). See [Installation](installation.md) for details.
+
 >[!IMPORTANT]
 >This version of `CView` is built on **GTK4**, which primarily utilizes the CPU for rendering.<br>
 >While the engine is optimized, it is designed for **crystal structures** (unit cells, supercells, slabs). It handles systems up to $\approx 5000$ atoms with ease, but it is **not suitable** for visualizing massive biological macromolecules (e.g., proteins, DNA) containing millions of atoms.<br>

@@ -1,6 +1,6 @@
 # Summary
 
-[Cover](README.md)
+[CView](README.md)
 - [Introduction](introduction.md)
 - [Installation](installation.md)
 
