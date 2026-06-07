@@ -92,20 +92,7 @@ CView automatically detects file types based on extension and content.
 ---
 
 ## 🚀 Installation
-
-### System Requirements
-* **OS:** Linux, Windows, or macOS
-* **Graphics:** Standard desktop graphics (Integrated GPU sufficient).
-* **Build Tools:** Rust toolchain (`cargo`) and GTK4 development libraries.
-
-### Building from Source
-
-```bash
-sudo dnf install gcc gtk4-devel libadwaita-devel
-git clone https://github.com/mavensgroup/cview.git
-cd cview
-cargo run --release
-```
+Detailed installation is available in [CView Documentation](https://mavensgroup.github.io/cview/installation.html)
 
 After the first run, it can be run from anywhere in the system just by using `cview` in your
 terminal.
