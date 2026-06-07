@@ -317,13 +317,22 @@ struct PlotLayout {
 
 impl PlotLayout {
     fn compute(width: f64, height: f64, ps: &PlotStyle) -> Self {
-        // Scale margins proportionally to font sizes for publication quality
-        let margin = (ps.font_axis_label * 1.1).clamp(12.0, 28.0);
-        let cb_w = (ps.font_colorbar * 2.2).clamp(22.0, 40.0);
-        // Rotated (vertical) colorbar labels need only ~1.5x font height of width
-        let label_w = (ps.font_colorbar * 1.8).clamp(18.0, 36.0);
-        let axis_margin_left = (ps.font_tick_label * 4.0).clamp(40.0, 80.0);
-        let axis_margin_bottom = (ps.font_tick_label * 3.0).clamp(28.0, 60.0);
+        // Scale margins proportionally to font sizes for publication quality.
+        // Caps are generous so large (publication) fonts still get room and
+        // labels are never clipped at the canvas edge.
+        let margin = (ps.font_axis_label * 1.1).clamp(12.0, 70.0);
+        let cb_w = (ps.font_colorbar * 2.2).clamp(22.0, 70.0);
+        // Rotated (vertical) colorbar labels span ~1.2x the font height plus the
+        // baseline gap; reserve enough so the value text never runs off the edge.
+        let label_w = (ps.font_colorbar * 1.6).clamp(22.0, 140.0);
+        // Bottom/left axis space is the exact stack of: tick marks + tick-number
+        // height + axis-label height + small gaps. Computing it (rather than a
+        // loose proportional clamp) keeps the axis label clear of the tick
+        // numbers without leaving a large empty band below it.
+        let axis_margin_bottom = ps.tick_length + ps.font_tick_label + ps.font_axis_label + 18.0;
+        // Left also needs room for the (up to ~4-char) y tick numbers.
+        let axis_margin_left =
+            ps.tick_length + ps.font_tick_label * 2.6 + ps.font_axis_label + 16.0;
         let plot_x = margin + axis_margin_left;
         let plot_y = margin;
         let plot_w = (width - cb_w - label_w - margin * 2.0 - axis_margin_left - 6.0).max(10.0);
@@ -548,31 +557,6 @@ fn draw_scene(
 
     // ── Colourbar ──
     draw_colorbar(cr, &ly, slice, colormap, &ps);
-
-    // ── Plane annotation (top-left inside plot) ──
-    cr.set_font_size(ps.font_annotation);
-    if ps.annotation_halo {
-        // White halo for readability on varying heatmap backgrounds
-        cr.set_source_rgba(1.0, 1.0, 1.0, 0.9);
-        for &(dx, dy) in &[
-            (-1.0, 0.0),
-            (1.0, 0.0),
-            (0.0, -1.0),
-            (0.0, 1.0),
-            (-1.0, -1.0),
-            (1.0, -1.0),
-            (-1.0, 1.0),
-            (1.0, 1.0),
-        ] {
-            cr.move_to(ly.plot_x + 8.0 + dx, ly.plot_y + 18.0 + dy);
-            let _ = cr.show_text(&slice.plane_annotation);
-        }
-        cr.set_source_rgb(0.0, 0.0, 0.0);
-    } else {
-        cr.set_source_rgba(1.0, 1.0, 1.0, 0.8);
-    }
-    cr.move_to(ly.plot_x + 8.0, ly.plot_y + 18.0);
-    let _ = cr.show_text(&slice.plane_annotation);
 }
 
 fn draw_axis_labels(cr: &cairo::Context, ly: &PlotLayout, slice: &DensitySlice, ps: &PlotStyle) {
@@ -586,7 +570,10 @@ fn draw_axis_labels(cr: &cairo::Context, ly: &PlotLayout, slice: &DensitySlice, 
         .map(|te| te.width())
         .unwrap_or(0.0);
     let x_label_x = ly.plot_x + ly.plot_w * 0.5 - x_label_w * 0.5;
-    let x_label_y = ly.plot_y + ly.plot_h + ps.tick_length + ps.font_tick_label + 16.0;
+    // Below the tick numbers (whose baseline is at +tick_length+font_tick+2),
+    // dropped by the axis-label height so the two never overlap.
+    let x_label_y =
+        ly.plot_y + ly.plot_h + ps.tick_length + ps.font_tick_label + ps.font_axis_label + 8.0;
     cr.move_to(x_label_x, x_label_y);
     let _ = cr.show_text(&slice.x_label);
 
@@ -596,7 +583,7 @@ fn draw_axis_labels(cr: &cairo::Context, ly: &PlotLayout, slice: &DensitySlice, 
         .text_extents(&slice.y_label)
         .map(|te| te.width())
         .unwrap_or(0.0);
-    let y_label_x = ly.plot_x - ps.tick_length - 30.0 - ps.font_tick_label * 0.3;
+    let y_label_x = ly.plot_x - ps.tick_length - ps.font_tick_label * 2.4 - 6.0;
     let y_label_y = ly.plot_y + ly.plot_h * 0.5 + y_label_w * 0.5;
     cr.move_to(y_label_x, y_label_y);
     cr.rotate(-std::f64::consts::FRAC_PI_2);
@@ -679,17 +666,75 @@ fn draw_colorbar(
         (0.5, (slice.data_min + slice.data_max) * 0.5),
         (1.0, slice.data_min),
     ] {
-        let y = ly.plot_y + frac * ly.plot_h;
         let label = fmt_val(*value);
         let tw = cr.text_extents(&label).map(|te| te.width()).unwrap_or(0.0);
+        // Center the (rotated) label on the tick position, but keep the whole
+        // label inside the colorbar's vertical span so the top (max) and bottom
+        // (min) labels are not clipped at the canvas edge.
+        let center = (ly.plot_y + frac * ly.plot_h)
+            .clamp(ly.plot_y + tw * 0.5, ly.plot_y + ly.plot_h - tw * 0.5);
         // Rotated label parallel to colorbar (vertical text reading bottom-to-top)
         cr.save().ok();
-        cr.translate(ly.cb_x + ly.cb_w + ps.font_colorbar + 2.0, y + tw * 0.5);
+        cr.translate(ly.cb_x + ly.cb_w + ps.font_colorbar + 2.0, center + tw * 0.5);
         cr.rotate(-std::f64::consts::FRAC_PI_2);
         cr.move_to(0.0, 0.0);
         let _ = cr.show_text(&label);
         cr.restore().ok();
     }
+}
+
+/// Write a 2D row-major float64 grid as a NumPy `.npy` file (format v1.0).
+/// Load it back with `numpy.load("file.npy")` → array of shape (n_rows, n_cols).
+fn write_npy_2d(path: &std::path::Path, data: &[Vec<f64>], n_rows: usize, n_cols: usize) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut f = std::io::BufWriter::new(std::fs::File::create(path)?);
+    // Header dict; total of (10-byte preamble + header) must be 64-byte aligned.
+    let dict = format!(
+        "{{'descr': '<f8', 'fortran_order': False, 'shape': ({}, {}), }}",
+        n_rows, n_cols
+    );
+    let preamble = 10usize; // 6 magic + 2 version + 2 header-len
+    let mut header_len = dict.len() + 1; // +1 for trailing '\n'
+    let pad = (64 - (preamble + header_len) % 64) % 64;
+    header_len += pad;
+    f.write_all(b"\x93NUMPY")?; // magic
+    f.write_all(&[1u8, 0u8])?; // version 1.0
+    f.write_all(&(header_len as u16).to_le_bytes())?;
+    f.write_all(dict.as_bytes())?;
+    f.write_all(&vec![b' '; pad])?;
+    f.write_all(b"\n")?;
+    for row in data.iter().take(n_rows) {
+        for &v in row.iter().take(n_cols) {
+            f.write_all(&v.to_le_bytes())?;
+        }
+    }
+    f.flush()
+}
+
+/// Write a JSON sidecar describing the slice axes so the raw `.npy` can be
+/// plotted with correct physical extents.
+fn write_slice_metadata(path: &std::path::Path, slice: &DensitySlice) -> std::io::Result<()> {
+    use std::io::Write;
+    let mut f = std::io::BufWriter::new(std::fs::File::create(path)?);
+    // Hand-rolled JSON (no serde dep needed here); labels have no quotes/escapes.
+    let json = format!(
+        "{{\n  \"shape\": [{}, {}],\n  \"x_label\": \"{}\",\n  \"y_label\": \"{}\",\n  \
+         \"x_extent_ang\": {},\n  \"y_extent_ang\": {},\n  \"data_min\": {},\n  \
+         \"data_max\": {},\n  \"plane\": \"{}\",\n  \"position_frac\": {},\n  \
+         \"note\": \"data is row-major (n_rows, n_cols); extent = [0, x_extent_ang, 0, y_extent_ang] for imshow(origin='upper')\"\n}}\n",
+        slice.n_rows,
+        slice.n_cols,
+        slice.x_label.replace('"', "'"),
+        slice.y_label.replace('"', "'"),
+        slice.x_extent_ang,
+        slice.y_extent_ang,
+        slice.data_min,
+        slice.data_max,
+        slice.plane_annotation.replace('"', "'"),
+        slice.position,
+    );
+    f.write_all(json.as_bytes())?;
+    f.flush()
 }
 
 fn fmt_val(v: f64) -> String {
@@ -1247,6 +1292,13 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
 
     let btn_export = Button::with_label("Export PNG / PDF");
     right_pane.append(&btn_export);
+
+    let btn_export_data = Button::with_label("Export Data (NumPy .npy)");
+    btn_export_data.set_tooltip_text(Some(
+        "Save the raw 2D slice as a float64 .npy array (row-major) plus a \
+         .json sidecar with axis extents and labels, for custom plotting.",
+    ));
+    right_pane.append(&btn_export_data);
 
     scroll.set_child(Some(&right_pane));
     root.append(&scroll);
@@ -1859,6 +1911,65 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                                 println!("Exported PNG: {}", path.display());
                             }
                         }
+                    }
+                }
+            });
+            native.show();
+        });
+    }
+
+    // ── Export raw slice data as NumPy .npy (+ .json sidecar) ──
+    {
+        let st = state.clone();
+        btn_export_data.connect_clicked(move |btn| {
+            let s = st.borrow();
+            let slice = match &s.cached_slice {
+                Some(sl) => sl.clone(),
+                None => return,
+            };
+            drop(s);
+
+            let native = FileChooserNative::new(
+                Some("Export Data (NumPy .npy)"),
+                btn.root()
+                    .and_then(|r| r.downcast::<gtk4::Window>().ok())
+                    .as_ref(),
+                FileChooserAction::Save,
+                Some("Save"),
+                Some("Cancel"),
+            );
+            let f_npy = gtk4::FileFilter::new();
+            f_npy.set_name(Some("NumPy Array (*.npy)"));
+            f_npy.add_pattern("*.npy");
+            native.add_filter(&f_npy);
+            native.set_current_name("charge_density.npy");
+
+            native.connect_response(move |d, resp| {
+                if resp != ResponseType::Accept {
+                    return;
+                }
+                let Some(mut path) = d.file().and_then(|f| f.path()) else {
+                    return;
+                };
+                if path.extension().and_then(|e| e.to_str()) != Some("npy") {
+                    path.set_extension("npy");
+                }
+                match write_npy_2d(&path, &slice.data, slice.n_rows, slice.n_cols) {
+                    Ok(()) => {
+                        let meta_path = path.with_extension("json");
+                        let _ = write_slice_metadata(&meta_path, &slice);
+                        crate::utils::console::log_info(&format!(
+                            "Exported data: {} ({}×{}) + {}",
+                            path.display(),
+                            slice.n_rows,
+                            slice.n_cols,
+                            meta_path.display(),
+                        ));
+                    }
+                    Err(e) => {
+                        crate::utils::console::log_error(&format!(
+                            "Failed to export .npy: {e}"
+                        ));
                     }
                 }
             });

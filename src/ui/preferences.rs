@@ -426,7 +426,7 @@ fn build_export_plot_tab(state: Rc<RefCell<AppState>>) -> gtk::Box {
     let row1 = labeled_spin(
         "Axis Label Font Size (pt):",
         8.0,
-        36.0,
+        72.0,
         1.0,
         state.borrow().config.export_plot.font_size_axis_label,
     );
@@ -442,7 +442,7 @@ fn build_export_plot_tab(state: Rc<RefCell<AppState>>) -> gtk::Box {
     let row2 = labeled_spin(
         "Tick Label Font Size (pt):",
         6.0,
-        28.0,
+        60.0,
         1.0,
         state.borrow().config.export_plot.font_size_tick_label,
     );
@@ -458,7 +458,7 @@ fn build_export_plot_tab(state: Rc<RefCell<AppState>>) -> gtk::Box {
     let row3 = labeled_spin(
         "Plane Annotation Font Size (pt):",
         8.0,
-        30.0,
+        60.0,
         1.0,
         state.borrow().config.export_plot.font_size_annotation,
     );
@@ -474,7 +474,7 @@ fn build_export_plot_tab(state: Rc<RefCell<AppState>>) -> gtk::Box {
     let row4 = labeled_spin(
         "Colorbar Label Font Size (pt):",
         6.0,
-        28.0,
+        60.0,
         1.0,
         state.borrow().config.export_plot.font_size_colorbar,
     );
