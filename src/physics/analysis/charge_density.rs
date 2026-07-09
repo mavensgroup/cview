@@ -430,7 +430,7 @@ pub fn extract_slice_hkl(
             continue;
         }
         let t = (plane_d - p0.dot(&n)) / dn;
-        if t >= -1e-6 && t <= 1.0 + 1e-6 {
+        if (-1e-6..=1.0 + 1e-6).contains(&t) {
             let pt = p0 + d * t.clamp(0.0, 1.0);
             poly_uv_raw.push((pt.dot(&u), pt.dot(&v)));
         }
@@ -641,7 +641,7 @@ pub fn project_atoms_hkl(
             continue;
         }
         let t = (plane_d - p0.dot(&n)) / dn;
-        if t >= -1e-6 && t <= 1.0 + 1e-6 {
+        if (-1e-6..=1.0 + 1e-6).contains(&t) {
             let pt = p0 + d * t.clamp(0.0, 1.0);
             poly_uv.push((pt.dot(&u), pt.dot(&v)));
         }

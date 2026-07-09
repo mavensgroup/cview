@@ -250,7 +250,6 @@ fn lerp_stops(t: f64, stops: &[(f64, (f64, f64, f64))]) -> (f64, f64, f64) {
 struct PlotStyle {
     font_axis_label: f64,
     font_tick_label: f64,
-    font_annotation: f64,
     font_colorbar: f64,
     font_atom_label: f64,
     isoline_width: f64,
@@ -260,8 +259,6 @@ struct PlotStyle {
     fg_color: (f64, f64, f64),
     /// Slightly lighter color for secondary text (tick values)
     fg_secondary: (f64, f64, f64),
-    /// Whether to draw a halo behind the plane annotation for visibility
-    annotation_halo: bool,
 }
 
 impl PlotStyle {
@@ -270,7 +267,6 @@ impl PlotStyle {
         Self {
             font_axis_label: 10.0,
             font_tick_label: 8.0,
-            font_annotation: 10.0,
             font_colorbar: 9.0,
             font_atom_label: 9.0,
             isoline_width: 1.2,
@@ -278,7 +274,6 @@ impl PlotStyle {
             tick_length: 4.0,
             fg_color: (0.85, 0.85, 0.85),
             fg_secondary: (0.7, 0.7, 0.7),
-            annotation_halo: false,
         }
     }
 
@@ -288,7 +283,6 @@ impl PlotStyle {
         Self {
             font_axis_label: cfg.font_size_axis_label,
             font_tick_label: cfg.font_size_tick_label,
-            font_annotation: cfg.font_size_annotation,
             font_colorbar: cfg.font_size_colorbar,
             font_atom_label: 10.0,
             isoline_width: cfg.isoline_line_width,
@@ -296,7 +290,6 @@ impl PlotStyle {
             tick_length: 6.0,
             fg_color: (0.1, 0.1, 0.1),
             fg_secondary: (0.25, 0.25, 0.25),
-            annotation_halo: true,
         }
     }
 
@@ -933,7 +926,7 @@ fn draw_3d_preview(
 
 /// Compute the intersection polygon of the current slice plane with the unit cell.
 /// Returns fractional coordinates of the polygon vertices, angularly sorted.
-fn compute_slice_plane_polygon(state: &ChargeDensityState, lat: &[[f64; 3]; 3]) -> Vec<[f64; 3]> {
+fn compute_slice_plane_polygon(state: &ChargeDensityState, _lat: &[[f64; 3]; 3]) -> Vec<[f64; 3]> {
     if state.use_hkl {
         // Use the MillerPlane intersection logic for HKL planes
         use crate::model::miller::MillerPlane;

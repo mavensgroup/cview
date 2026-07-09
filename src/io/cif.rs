@@ -299,7 +299,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
 /// operation string. Handles rows with a leading integer id and/or surrounding
 /// single or double quotes. Returns None if no commas are found.
 fn extract_symop_string(line: &str) -> Option<String> {
-    let stripped = line.replace('\'', "").replace('"', "");
+    let stripped = line.replace(['\'', '"'], "");
     let s = stripped.trim();
 
     // If the whole thing is surrounded by extra tokens (e.g. leading id), the

@@ -116,3 +116,90 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    struct TmpFile(std::path::PathBuf);
+    impl TmpFile {
+        fn new(contents: &str) -> Self {
+            let mut p = std::env::temp_dir();
+            let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+            p.push(format!("cview_xyz_{}_{}.xyz", std::process::id(), n));
+            std::fs::write(&p, contents).unwrap();
+            TmpFile(p)
+        }
+        fn path(&self) -> &str {
+            self.0.to_str().unwrap()
+        }
+    }
+    impl Drop for TmpFile {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+
+    fn approx(a: f64, b: f64) {
+        assert!((a - b).abs() < 1e-6, "{a} != {b}");
+    }
+
+    #[test]
+    fn plain_xyz_is_non_periodic_with_default_box() {
+        let f = TmpFile::new("2\nwater fragment\nO 0.0 0.0 0.0\nH 0.96 0.0 0.0\n");
+        let s = parse(f.path()).unwrap();
+        assert!(!s.is_periodic);
+        assert_eq!(s.atoms.len(), 2);
+        assert_eq!(s.atoms[0].element, "O");
+        // Default 20 Å identity box when no Lattice= is present.
+        approx(s.lattice[0][0], 20.0);
+        approx(s.atoms[1].position[0], 0.96);
+    }
+
+    #[test]
+    fn extended_xyz_lattice_is_periodic() {
+        let f = TmpFile::new(
+            "1\nLattice=\"3.0 0.0 0.0 0.0 3.0 0.0 0.0 0.0 3.0\" Properties=species:S:1:pos:R:3\n\
+             Po 0.0 0.0 0.0\n",
+        );
+        let s = parse(f.path()).unwrap();
+        assert!(s.is_periodic);
+        approx(s.lattice[0][0], 3.0);
+        approx(s.lattice[1][1], 3.0);
+        approx(s.lattice[2][2], 3.0);
+    }
+
+    #[test]
+    fn multiframe_trajectory_reads_only_first_frame() {
+        // Two concatenated frames of 1 atom each; parser must stop at n_atoms.
+        let f = TmpFile::new("1\nframe 1\nH 0.0 0.0 0.0\n1\nframe 2\nH 1.0 1.0 1.0\n");
+        let s = parse(f.path()).unwrap();
+        assert_eq!(s.atoms.len(), 1);
+        approx(s.atoms[0].position[0], 0.0);
+    }
+
+    #[test]
+    fn write_then_parse_roundtrips() {
+        let original = Structure {
+            lattice: [[4.0, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 4.0]],
+            atoms: vec![Atom {
+                element: "Fe".into(),
+                position: [1.0, 2.0, 3.0],
+                original_index: 0,
+                oxidation: None,
+            }],
+            formula: String::new(),
+            is_periodic: true,
+        };
+        let f = TmpFile::new("");
+        write(f.path(), &original).unwrap();
+        let s = parse(f.path()).unwrap();
+        // Writer emits Lattice=, so round-trip is periodic.
+        assert!(s.is_periodic);
+        assert_eq!(s.atoms[0].element, "Fe");
+        approx(s.atoms[0].position[2], 3.0);
+    }
+}

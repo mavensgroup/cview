@@ -2,13 +2,14 @@
 
 [package]
 name = "cview"
-version = "0.8.5"
+version = "0.9.0"
 edition = "2021"
 license = "MIT"  # Or "GPL-3.0", "Apache-2.0", etc.
 description = "Crystal Structure Visualization & Analysis"
 
 [dependencies]
 gtk4 = { version = "0.8", features = ["v4_6"] }
+adw = { package = "libadwaita", version = "0.6", features = ["v1_5"] }
 cairo-rs = { version = "0.19", features = ["pdf", "png", "svg"] }
 gdk4 = "0.8"
 moyo = "0.7"

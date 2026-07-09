@@ -5,14 +5,12 @@
 
 use gtk4::cairo::ImageSurface;
 use std::collections::HashMap;
-use std::time::Instant;
 
 /// Cache entry with LRU tracking and metadata
 #[derive(Clone, Debug)]
 struct CacheEntry {
     sprite: ImageSurface,
     last_used: u64,
-    creation_time: Instant,
     access_count: u64,
     size_bytes: usize,
 }
@@ -24,7 +22,6 @@ impl CacheEntry {
         Self {
             sprite,
             last_used: 0,
-            creation_time: Instant::now(),
             access_count: 1,
             size_bytes,
         }

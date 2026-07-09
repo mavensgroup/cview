@@ -249,3 +249,134 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    /// Temp file that cleans itself up on drop. Keeps parser tests hermetic
+    /// (no reliance on repo sample files) and parallel-safe (unique names).
+    struct TmpFile(std::path::PathBuf);
+    impl TmpFile {
+        fn new(ext: &str, contents: &str) -> Self {
+            let mut p = std::env::temp_dir();
+            let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+            p.push(format!("cview_poscar_{}_{}{}", std::process::id(), n, ext));
+            std::fs::write(&p, contents).unwrap();
+            TmpFile(p)
+        }
+        fn path(&self) -> &str {
+            self.0.to_str().unwrap()
+        }
+    }
+    impl Drop for TmpFile {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+
+    fn approx(a: f64, b: f64) {
+        assert!((a - b).abs() < 1e-6, "{a} != {b}");
+    }
+
+    #[test]
+    fn parses_vasp5_direct_coords() {
+        // Element symbols + counts, fractional (Direct) coordinates.
+        let f = TmpFile::new(
+            ".vasp",
+            "Cubic test\n1.0\n\
+             4.0 0.0 0.0\n0.0 4.0 0.0\n0.0 0.0 4.0\n\
+             Si O\n1 2\nDirect\n\
+             0.5 0.5 0.5\n0.0 0.0 0.0\n0.25 0.25 0.25\n",
+        );
+        let s = parse(f.path()).unwrap();
+        assert!(s.is_periodic);
+        assert_eq!(s.atoms.len(), 3);
+        assert_eq!(s.atoms[0].element, "Si");
+        assert_eq!(s.atoms[1].element, "O");
+        assert_eq!(s.atoms[2].element, "O");
+        // frac (0.5,0.5,0.5) in a 4 Å cube → cart (2,2,2).
+        approx(s.atoms[0].position[0], 2.0);
+        approx(s.atoms[0].position[1], 2.0);
+        approx(s.atoms[0].position[2], 2.0);
+    }
+
+    #[test]
+    fn parses_cartesian_with_scale() {
+        // Scale factor 2.0 multiplies both lattice and Cartesian coords.
+        let f = TmpFile::new(
+            ".vasp",
+            "Cart test\n2.0\n\
+             1.0 0.0 0.0\n0.0 1.0 0.0\n0.0 0.0 1.0\n\
+             H\n1\nCartesian\n1.0 2.0 3.0\n",
+        );
+        let s = parse(f.path()).unwrap();
+        approx(s.lattice[0][0], 2.0);
+        approx(s.atoms[0].position[0], 2.0);
+        approx(s.atoms[0].position[1], 4.0);
+        approx(s.atoms[0].position[2], 6.0);
+    }
+
+    #[test]
+    fn parses_vasp4_counts_only_gives_placeholder_elements() {
+        // VASP 4 style: no symbol line, so elements become El1, El2, ...
+        let f = TmpFile::new(
+            "",
+            "V4\n1.0\n\
+             3 0 0\n0 3 0\n0 0 3\n\
+             2\nDirect\n0.0 0.0 0.0\n0.5 0.5 0.5\n",
+        );
+        let s = parse(f.path()).unwrap();
+        assert_eq!(s.atoms.len(), 2);
+        assert_eq!(s.atoms[0].element, "El1");
+        assert_eq!(s.atoms[1].element, "El1");
+    }
+
+    #[test]
+    fn skips_selective_dynamics_line() {
+        let f = TmpFile::new(
+            ".vasp",
+            "SD test\n1.0\n\
+             4.0 0.0 0.0\n0.0 4.0 0.0\n0.0 0.0 4.0\n\
+             H\n1\nSelective dynamics\nDirect\n0.0 0.0 0.0 T T T\n",
+        );
+        let s = parse(f.path()).unwrap();
+        assert_eq!(s.atoms.len(), 1);
+        approx(s.atoms[0].position[0], 0.0);
+    }
+
+    #[test]
+    fn write_then_parse_roundtrips_positions() {
+        let original = Structure {
+            lattice: [[5.0, 0.0, 0.0], [0.0, 5.0, 0.0], [0.0, 0.0, 5.0]],
+            atoms: vec![
+                Atom {
+                    element: "Na".into(),
+                    position: [0.0, 0.0, 0.0],
+                    original_index: 0,
+                    oxidation: None,
+                },
+                Atom {
+                    element: "Cl".into(),
+                    position: [2.5, 2.5, 2.5],
+                    original_index: 1,
+                    oxidation: None,
+                },
+            ],
+            formula: String::new(),
+            is_periodic: true,
+        };
+        let f = TmpFile::new(".vasp", "");
+        write(f.path(), &original).unwrap();
+        let s = parse(f.path()).unwrap();
+        assert_eq!(s.atoms.len(), 2);
+        // Writer sorts by element (Cl before Na); match by element to compare.
+        let cl = s.atoms.iter().find(|a| a.element == "Cl").unwrap();
+        approx(cl.position[0], 2.5);
+        approx(cl.position[1], 2.5);
+        approx(cl.position[2], 2.5);
+    }
+}

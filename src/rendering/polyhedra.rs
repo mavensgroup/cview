@@ -194,16 +194,6 @@ pub fn classify_anions(atoms: &[RenderAtom]) -> HashSet<String> {
     out
 }
 
-/// Element-level fallback when structure context is not available. Uses
-/// the traditional Pauling-scale threshold (χ ≥ 2.5) — includes the
-/// halogens, chalcogens, oxygen, and nitrogen. Excludes P (2.19) and
-/// As (2.18), which are cations in the vast majority of crystal
-/// structures. Prefer `classify_anions` when the full atom list is
-/// available.
-fn is_anion(element: &str) -> bool {
-    get_electronegativity(element) >= 2.5
-}
-
 // ============================================================================
 // NEIGHBOR DETECTION
 // ============================================================================

@@ -544,3 +544,105 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    struct TmpFile(std::path::PathBuf);
+    impl TmpFile {
+        fn new(contents: &str) -> Self {
+            let mut p = std::env::temp_dir();
+            let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+            p.push(format!("cview_qe_{}_{}.in", std::process::id(), n));
+            std::fs::write(&p, contents).unwrap();
+            TmpFile(p)
+        }
+        fn path(&self) -> &str {
+            self.0.to_str().unwrap()
+        }
+    }
+    impl Drop for TmpFile {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
+
+    fn approx(a: f64, b: f64) {
+        assert!((a - b).abs() < 1e-6, "{a} != {b}");
+    }
+
+    #[test]
+    fn input_explicit_cell_angstrom() {
+        let f = TmpFile::new(
+            "&system\n  ibrav = 0\n  nat = 2\n/\n\
+             CELL_PARAMETERS angstrom\n\
+             4.0 0.0 0.0\n0.0 4.0 0.0\n0.0 0.0 4.0\n\
+             ATOMIC_POSITIONS angstrom\n\
+             Si 0.0 0.0 0.0\nSi 2.0 2.0 2.0\n",
+        );
+        let s = parse(f.path()).unwrap();
+        assert!(s.is_periodic);
+        assert_eq!(s.atoms.len(), 2);
+        approx(s.lattice[1][1], 4.0);
+        approx(s.atoms[1].position[0], 2.0);
+    }
+
+    #[test]
+    fn input_crystal_coords_convert_to_cartesian() {
+        // Fractional (crystal) positions must be converted using the cell.
+        let f = TmpFile::new(
+            "&system\n  ibrav = 0\n/\n\
+             CELL_PARAMETERS angstrom\n\
+             4.0 0.0 0.0\n0.0 4.0 0.0\n0.0 0.0 4.0\n\
+             ATOMIC_POSITIONS crystal\n\
+             Na 0.5 0.5 0.5\n",
+        );
+        let s = parse(f.path()).unwrap();
+        // frac (0.5,0.5,0.5) in a 4 Å cube → cart (2,2,2).
+        approx(s.atoms[0].position[0], 2.0);
+        approx(s.atoms[0].position[1], 2.0);
+        approx(s.atoms[0].position[2], 2.0);
+    }
+
+    #[test]
+    fn input_ibrav1_generates_cubic_lattice() {
+        // No CELL_PARAMETERS: lattice derived from ibrav=1 + celldm(1) (bohr).
+        let f = TmpFile::new(
+            "&system\n  ibrav = 1\n  celldm(1) = 10.0\n/\n\
+             ATOMIC_POSITIONS alat\n\
+             H 0.0 0.0 0.0\n",
+        );
+        let s = parse(f.path()).unwrap();
+        // celldm(1)=10 bohr → a = 10 * 0.5291772109 Å.
+        let a = 10.0 * BOHR_TO_ANG;
+        approx(s.lattice[0][0], a);
+        approx(s.lattice[1][1], a);
+        approx(s.lattice[2][2], a);
+    }
+
+    #[test]
+    fn write_then_parse_roundtrips() {
+        let original = Structure {
+            lattice: [[5.0, 0.0, 0.0], [0.0, 5.0, 0.0], [0.0, 0.0, 5.0]],
+            atoms: vec![Atom {
+                element: "C".into(),
+                position: [1.0, 2.0, 3.0],
+                original_index: 0,
+                oxidation: None,
+            }],
+            formula: String::new(),
+            is_periodic: true,
+        };
+        let f = TmpFile::new("");
+        write(f.path(), &original).unwrap();
+        let s = parse(f.path()).unwrap();
+        assert_eq!(s.atoms.len(), 1);
+        assert_eq!(s.atoms[0].element, "C");
+        approx(s.atoms[0].position[1], 2.0);
+        approx(s.lattice[2][2], 5.0);
+    }
+}

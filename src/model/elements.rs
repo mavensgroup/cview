@@ -8,7 +8,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone)]
 struct AtomData {
     pub atomic_number: i32,
+    // Kept for completeness of the reference table even though nothing reads
+    // them yet (element identity is carried by the lookup key). Silences the
+    // dead-code lint without deleting data from all 118 entries.
+    #[allow(dead_code)]
     pub symbol: &'static str,
+    #[allow(dead_code)]
     pub name: &'static str,
 
     // -- Scattering Factors --
@@ -1383,7 +1388,9 @@ pub fn get_atom_cov(element: &str) -> f64 {
 // =============================================================================
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum ColorScheme {
+    #[default]
     GroupMaterial,
     Jmol,
     CpkClassic,
@@ -1392,11 +1399,6 @@ pub enum ColorScheme {
     AtomicRadius,
 }
 
-impl Default for ColorScheme {
-    fn default() -> Self {
-        ColorScheme::GroupMaterial
-    }
-}
 
 /// Returns the visualization color for an element under the given scheme.
 pub fn get_element_color(element: &str, scheme: ColorScheme) -> (f64, f64, f64) {

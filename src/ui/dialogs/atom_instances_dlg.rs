@@ -87,7 +87,9 @@ fn build_row(
 
     row.set_child(Some(&hbox));
     // Stash the atom index on the row for retrieval during multi-select apply.
-    unsafe { row.set_data::<usize>("atom_idx", atom_idx) };
+    // The widget name is unused for CSS here, so it's a safe place to carry the
+    // index (row position can't be used — a filter shows only a subset).
+    row.set_widget_name(&atom_idx.to_string());
     row
 }
 
@@ -288,11 +290,9 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
                 let mut s = st.borrow_mut();
                 let tab = s.active_tab_mut();
                 for row in &selected_rows {
-                    let idx = unsafe { row.data::<usize>("atom_idx") };
-                    let Some(idx) = idx else {
+                    let Ok(idx) = row.widget_name().parse::<usize>() else {
                         continue;
                     };
-                    let idx = unsafe { *idx.as_ref() };
                     let entry = tab.overrides.entry(idx).or_default();
                     if let Some(ref l) = label_opt {
                         entry.display_label = Some(l.clone());
@@ -349,11 +349,9 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
                 let mut s = st.borrow_mut();
                 let tab = s.active_tab_mut();
                 for row in &selected_rows {
-                    let idx = unsafe { row.data::<usize>("atom_idx") };
-                    let Some(idx) = idx else {
+                    let Ok(idx) = row.widget_name().parse::<usize>() else {
                         continue;
                     };
-                    let idx = unsafe { *idx.as_ref() };
                     if tab.overrides.remove(&idx).is_some() {
                         count += 1;
                     }

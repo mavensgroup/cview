@@ -356,8 +356,7 @@ fn classify_h(structure: &Structure, atom_idx: usize) -> i32 {
             continue;
         }
 
-        let d2_min = if pbc && inv_lt.is_some() {
-            let inv = inv_lt.unwrap();
+        let d2_min = if let (true, Some(inv)) = (pbc, inv_lt) {
             let frac_j = inv * p_j;
             let frac_i = inv * p_h;
             let mut min2 = f64::MAX;

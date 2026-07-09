@@ -1,7 +1,7 @@
 // src/menu/actions_help.rs
 
-use gtk4::prelude::*;
-use gtk4::{AboutDialog, Application, ApplicationWindow, ButtonsType, MessageDialog, MessageType};
+use adw::prelude::*;
+use gtk4::{Application, ApplicationWindow, ButtonsType, MessageDialog, MessageType};
 
 pub fn setup(app: &Application, window: &ApplicationWindow) {
     // --- 1. CONTROLS ACTION ---
@@ -71,20 +71,19 @@ pub fn setup(app: &Application, window: &ApplicationWindow) {
             None => return,
         };
 
-        let dialog = AboutDialog::builder()
-            .transient_for(&win)
-            .modal(true)
-            .program_name("CView")
+        let dialog = adw::AboutDialog::builder()
+            .application_name("CView")
             .version(env!("CARGO_PKG_VERSION"))
             .copyright("© 2026 Rudra")
-            .authors(vec!["Rudra".to_string()])
+            .developer_name("Rudra")
+            .developers(vec!["Rudra".to_string()])
             .comments("Crystal Structure Visualization and Analysis")
-            .logo_icon_name("org.mavensgroup.cview")
+            .application_icon("org.mavensgroup.cview")
             .website("https://mavensgroup.github.io/cview/")
             .license_type(gtk4::License::Gpl30)
             .build();
 
-        dialog.show();
+        dialog.present(&win);
     });
     app.add_action(&about_action);
 }

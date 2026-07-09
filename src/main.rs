@@ -37,6 +37,12 @@ fn main() {
 }
 
 fn build_ui(app: &Application) {
+    // Initialize libadwaita so Adwaita widgets (e.g. the About dialog) and the
+    // Adwaita stylesheet are available. Must run before any widget is built.
+    if let Err(e) = adw::init() {
+        eprintln!("Failed to initialize libadwaita: {}", e);
+    }
+
     // 1. Initialize State
     let (initial_state, _startup_log) = AppState::new_with_log();
     let state = Rc::new(RefCell::new(initial_state));
