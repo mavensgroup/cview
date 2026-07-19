@@ -2,6 +2,7 @@
 
 use crate::model::elements;
 use crate::model::structure::Structure;
+use crate::utils::console;
 use nalgebra::Vector3;
 use std::cmp::Ordering;
 use std::f64::consts::PI;
@@ -69,13 +70,53 @@ pub fn calculate_pattern(structure: &Structure, settings: &XRDSettings) -> Vec<X
 
     let mut raw_peaks: Vec<XRDPattern> = Vec::new();
 
-    // 3. Scan HKL Loop
-    // Limit range based on d-spacing
-    let range = 6;
+    // Cromer-Mann coefficients per unique species. Atoms of the same element
+    // share f0 at a given reflection, so the expansion is evaluated once per
+    // species per reflection rather than once per atom.
+    let mut species: Vec<(&str, [f64; 9])> = Vec::new();
+    let species_of: Vec<usize> = structure
+        .atoms
+        .iter()
+        .map(
+            |a| match species.iter().position(|(e, _)| *e == a.element) {
+                Some(i) => i,
+                None => {
+                    species.push((&a.element, elements::get_cromer_mann_coeffs(&a.element)));
+                    species.len() - 1
+                }
+            },
+        )
+        .collect();
+    let mut f0_by_species = vec![0.0; species.len()];
 
-    for h in -range..=range {
-        for k in -range..=range {
-            for l in -range..=range {
+    // 3. Scan HKL Loop
+    // The largest reciprocal vector reachable in the angular window is
+    // g_max = 2 sin(theta_max) / lambda. Since h = g . a1 (crystallographic
+    // convention, b_i . a_j = delta_ij), |h| <= g_max * |a1| — so the loop
+    // bounds must scale with the real-space cell, per axis. A fixed cube
+    // silently truncates large cells anisotropically.
+    let theta_max = (settings.max_2theta / 2.0).to_radians();
+    let g_max = 2.0 * theta_max.sin() / settings.wavelength;
+    const MAX_RANGE: i32 = 50;
+    let range_of = |a: &Vector3<f64>| ((g_max * a.norm()).ceil() as i32 + 1).max(1);
+    let (want_h, want_k, want_l) = (range_of(&a1), range_of(&a2), range_of(&a3));
+    let (range_h, range_k, range_l) = (
+        want_h.min(MAX_RANGE),
+        want_k.min(MAX_RANGE),
+        want_l.min(MAX_RANGE),
+    );
+    // The cap guards against a runaway loop on pathological cells, but it
+    // truncates the pattern — say so instead of failing silently.
+    if want_h > MAX_RANGE || want_k > MAX_RANGE || want_l > MAX_RANGE {
+        console::log_warn(&format!(
+            "XRD: hkl enumeration capped at ±{MAX_RANGE} (cell would need ±{}); high-angle peaks will be missing from the pattern",
+            want_h.max(want_k).max(want_l)
+        ));
+    }
+
+    for h in -range_h..=range_h {
+        for k in -range_k..=range_k {
+            for l in -range_l..=range_l {
                 // Skip the origin
                 if h == 0 && k == 0 && l == 0 {
                     continue;
@@ -114,17 +155,25 @@ pub fn calculate_pattern(structure: &Structure, settings: &XRDSettings) -> Vec<X
                 let mut f_real = 0.0;
                 let mut f_imag = 0.0;
 
-                for atom in &structure.atoms {
-                    // Atomic Form Factor (f0)
-                    // FIXED: get_atomic_number returns i32, not Option<i32>
-                    let z = elements::get_atomic_number(&atom.element);
-                    let f0 = if z > 0 { z as f64 } else { 1.0 };
+                // Cromer-Mann argument: s = sin(theta)/lambda = g/2 (since g = 1/d)
+                let s2 = (g_mag / 2.0) * (g_mag / 2.0);
 
-                    // Temperature Factor (Debye-Waller)
-                    // exp(-B * (sin(theta)/lambda)^2) -> simplified using g (1/d = 2sin(theta)/lambda)
-                    // Common approx: exp( -B * g^2 / 4 )
-                    let debye = (-settings.temperature_factor * (g_mag * g_mag) / 4.0).exp();
-                    let f_eff = f0 * debye;
+                // Temperature Factor (Debye-Waller)
+                // exp(-B * (sin(theta)/lambda)^2) = exp(-B * g^2 / 4); atom-independent
+                let debye = (-settings.temperature_factor * (g_mag * g_mag) / 4.0).exp();
+
+                // Atomic Form Factor: f0(s) = sum_i a_i exp(-b_i s^2) + c
+                // (Cromer-Mann analytic expansion, ITC Vol. C, Table 6.1.1.4)
+                for (f0, (_, cm)) in f0_by_species.iter_mut().zip(&species) {
+                    *f0 = cm[0] * (-cm[1] * s2).exp()
+                        + cm[2] * (-cm[3] * s2).exp()
+                        + cm[4] * (-cm[5] * s2).exp()
+                        + cm[6] * (-cm[7] * s2).exp()
+                        + cm[8];
+                }
+
+                for (atom, &sp) in structure.atoms.iter().zip(&species_of) {
+                    let f_eff = f0_by_species[sp] * debye;
 
                     // Phase = 2 * PI * (g_vector dot position_vector)
                     let pos = Vector3::from(atom.position);
@@ -270,9 +319,58 @@ mod tests {
         );
 
         // (220) and (311) must exist within tolerance
-        let has_peak_near = |target: f64| peaks.iter().any(|p| (p.two_theta - target).abs() < 0.15);
-        assert!(has_peak_near(47.30), "Si missing (220) peak near 47.30°");
-        assert!(has_peak_near(56.12), "Si missing (311) peak near 56.12°");
+        let peak_near = |target: f64| {
+            peaks
+                .iter()
+                .find(|p| (p.two_theta - target).abs() < 0.15)
+                .unwrap_or_else(|| panic!("Si missing peak near {target}°"))
+        };
+        let p220 = peak_near(47.30);
+        let p311 = peak_near(56.12);
+
+        // Relative intensities (ICDD 00-027-1402: I(220) ≈ 55, I(311) ≈ 30 vs
+        // I(111) = 100). With a constant f0 = Z these high-angle peaks come out
+        // far too strong; only an angle-dependent form factor lands them in
+        // these bands (wide, since the B-factor here is a generic default).
+        assert!(
+            p220.intensity > 30.0 && p220.intensity < 80.0,
+            "Si (220) relative intensity should be ~55, got {:.1}",
+            p220.intensity
+        );
+        assert!(
+            p311.intensity > 12.0 && p311.intensity < 55.0,
+            "Si (311) relative intensity should be ~30, got {:.1}",
+            p311.intensity
+        );
+    }
+
+    /// A large cell (a = 13.7 Å, chibaite-sized) needs hkl indices up to ~12
+    /// to cover 2θ ≤ 90° at Cu Kα. A fixed ±6 enumeration cube silently drops
+    /// the upper half of the pattern; this guards the dynamic per-axis range.
+    #[test]
+    fn test_large_cell_high_angle_peaks() {
+        let a = 13.7;
+        let lat = [[a, 0.0, 0.0], [0.0, a, 0.0], [0.0, 0.0, a]];
+        let s = make_structure(lat, vec![("C", [0.0, 0.0, 0.0])]);
+        let settings = XRDSettings::default();
+        let peaks = calculate_pattern(&s, &settings);
+
+        let max_index = peaks
+            .iter()
+            .flat_map(|p| p.hkl.iter())
+            .map(|&(h, k, l)| h.abs().max(k.abs()).max(l.abs()))
+            .max()
+            .unwrap_or(0);
+        assert!(
+            max_index > 6,
+            "Large cell should produce reflections with hkl index > 6, max was {max_index}"
+        );
+
+        let max_2theta = peaks.iter().map(|p| p.two_theta).fold(0.0, f64::max);
+        assert!(
+            max_2theta > 80.0,
+            "Large cell should have peaks near the top of the 2θ range, max was {max_2theta:.1}°"
+        );
     }
 
     /// α-quartz (P3₁21, a = 4.9133 Å, c = 5.4053 Å, Cu Kα).
