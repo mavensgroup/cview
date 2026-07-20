@@ -10,6 +10,9 @@ use gtk4::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
+/// Line-mode subdivisions per segment in the exported KPOINTS file.
+const KPOINTS_INTERSECTIONS: u32 = 20;
+
 struct ViewerState {
     rot_x: f64,
     rot_y: f64,
@@ -204,10 +207,15 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
             .vexpand(true)
             .build();
 
-        // Generate VASP KPOINTS content
+        // Generate VASP KPOINTS content.
+        // The comment line warns that coordinates are only valid for the
+        // SC-standardized PRIMITIVE cell (KP-10): running these against the
+        // original input cell gives silently wrong band structures.
         let mut vasp_str = String::new();
-        vasp_str.push_str("KPOINTS file for VASP\n");
-        vasp_str.push_str("20 ! intersections\n");
+        vasp_str.push_str(
+            "k-path (Setyawan-Curtarolo) — valid ONLY for the standardized primitive cell (Tools > Convert to Primitive)\n",
+        );
+        vasp_str.push_str(&format!("{KPOINTS_INTERSECTIONS} ! intersections\n"));
         vasp_str.push_str("Line_mode\n");
         vasp_str.push_str("Reciprocal\n");
 

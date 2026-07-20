@@ -13,6 +13,12 @@ use moyo::base::{AngleTolerance, Cell, Lattice};
 use moyo::data::Setting;
 use moyo::MoyoDataset;
 
+/// Single symmetry tolerance for the whole application. The symmetry tab,
+/// k-path, and primitive/conventional conversion must all use this value —
+/// with different tolerances the panels can report DIFFERENT space groups
+/// for the same file.
+pub const SYMPREC: f64 = 1e-4;
+
 pub struct SymmetryInfo {
     pub number: i32,
     pub symbol: String,
@@ -36,7 +42,7 @@ pub fn analyze(structure: &Structure) -> Result<SymmetryInfo, String> {
     }
 
     let cell = Cell::new(Lattice::new(lattice_mat), positions, numbers);
-    let dataset = MoyoDataset::new(&cell, 1e-4, AngleTolerance::Default, Setting::Spglib, true)
+    let dataset = MoyoDataset::new(&cell, SYMPREC, AngleTolerance::Default, Setting::Spglib, true)
         .map_err(|_| "Symmetry search failed".to_string())?;
 
     let sys_name = match dataset.number {
@@ -50,17 +56,22 @@ pub fn analyze(structure: &Structure) -> Result<SymmetryInfo, String> {
         _ => "Unknown",
     };
 
-    let symbol = if dataset.number >= 1 && dataset.number <= 230 {
-        SG_SYMBOLS[dataset.number as usize].to_string()
-    } else {
-        "Unknown".to_string()
-    };
-
     Ok(SymmetryInfo {
         number: dataset.number,
-        symbol,
+        symbol: spacegroup_symbol(dataset.number).to_string(),
         system: sys_name.to_string(),
     })
+}
+
+/// Hermann-Mauguin symbol for a space-group number (1-230).
+/// Shared by the symmetry tab and the k-path panel so both always show
+/// the same name for the same group.
+pub fn spacegroup_symbol(number: i32) -> &'static str {
+    if (1..=230).contains(&number) {
+        SG_SYMBOLS[number as usize]
+    } else {
+        "Unknown"
+    }
 }
 
 // =========================================================================
@@ -179,7 +190,7 @@ const SG_SYMBOLS: [&str; 231] = [
     "I4_1md",
     "I4_1cd",
     "P-42m",
-    "P42c",
+    "P-42c",
     "P-42_1m",
     "P-42_1c",
     "P-4m2",
@@ -322,6 +333,7 @@ mod tests {
                         position: [r.x, r.y, r.z],
                         original_index: i,
                         oxidation: None,
+                        occupancy: 1.0,
                     }
                 })
                 .collect(),

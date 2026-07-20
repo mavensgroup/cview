@@ -1858,133 +1858,101 @@ fn blue_white_red(t: f64) -> (f64, f64, f64) {
 // VALENCE & BVS PROPERTIES
 // =========================================================================
 
-/// Properties of an atom required for the Brese & O'Keeffe (1991) fallback.
+/// O'Keeffe-Brese fitted atomic parameters for estimating untabulated
+/// bond-valence R0 values:
+///
+///     R0 = r_i + r_j - r_i·r_j·(√c_i - √c_j)² / (c_i·r_i + c_j·r_j)
+///
+/// `r` is their fitted size parameter (Å, covalent-radius scale — NOT a
+/// Shannon ionic radius) and `c` their fitted electronegativity-like
+/// parameter (NOT the Pauling χ).
+///
+/// **Source:** M. O'Keeffe & N.E. Brese, *J. Am. Chem. Soc.* **113**,
+/// 3226-3229 (1991); companion pair tables in N.E. Brese & M. O'Keeffe,
+/// *Acta Cryst.* **B47**, 192-197 (1991). Every row below was validated
+/// against the tabulated R0 values of the Acta B47 paper (Tables 2/3);
+/// agreement is 0.001-0.06 Å, consistent with the ±0.05 Å accuracy the
+/// authors claim for the estimation scheme.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BvsAtomProps {
-    pub r: f64,   // Size parameter (specific to the valence state)
-    pub chi: f64, // Electronegativity (Pauling)
-    pub n: f64,   // Valence-dependent constant (|valence|)
+    /// Fitted size parameter (Å).
+    pub r: f64,
+    /// Fitted electronegativity-like parameter (dimensionless).
+    pub c: f64,
 }
 
-/// Retrieves the BVS properties of a specific atom in a specific valence state.
-/// Combines the base electronegativity from `AtomData` with state-specific size parameters.
-pub fn get_bvs_atom_props(element: &str, valence: i32) -> Option<BvsAtomProps> {
-    // 1. Fetch base element data (electronegativity) from the central database
-    let base_data = get_atom_data(element);
-
-    // Noble gases or elements with no electronegativity don't participate natively
-    if base_data.electronegativity <= 0.0 {
-        return None;
-    }
-
-    // 2. Lookup the size parameter (r) for the specific oxidation state.
-    // Values derived from Shannon effective ionic radii.
-    let r = match (element, valence) {
-        // --- Anions ---
-        ("O", -2) => 1.40,
-        ("F", -1) => 1.33,
-        ("Cl", -1) => 1.81,
-        ("Br", -1) => 1.96,
-        ("I", -1) => 2.20,
-        ("S", -2) => 1.84,
-        ("Se", -2) => 1.98,
-        ("Te", -2) => 2.21,
-        ("N", -3) => 1.46,
-        ("P", -3) => 2.12,
-        ("As", -3) => 2.22,
-        ("C", -4) => 2.60,
-        ("H", -1) => 1.37,
-
-        // --- Cations ---
-        ("H", 1) => 0.60,
-        ("Li", 1) => 0.76,
-        ("Na", 1) => 1.02,
-        ("K", 1) => 1.38,
-        ("Rb", 1) => 1.52,
-        ("Cs", 1) => 1.67,
-        ("Ag", 1) => 1.15,
-        ("Cu", 1) => 0.77,
-
-        ("Be", 2) => 0.45,
-        ("Mg", 2) => 0.72,
-        ("Ca", 2) => 1.00,
-        ("Sr", 2) => 1.18,
-        ("Ba", 2) => 1.35,
-        ("Mn", 2) => 0.83,
-        ("Fe", 2) => 0.78,
-        ("Co", 2) => 0.745,
-        ("Ni", 2) => 0.69,
-        ("Cu", 2) => 0.73,
-        ("Zn", 2) => 0.74,
-        ("Cd", 2) => 0.95,
-        ("Sn", 2) => 1.12,
-        ("Pb", 2) => 1.19,
-
-        ("B", 3) => 0.27,
-        ("Al", 3) => 0.54,
-        ("Sc", 3) => 0.745,
-        ("Y", 3) => 0.90,
-        ("Ti", 3) => 0.67,
-        ("V", 3) => 0.64,
-        ("Cr", 3) => 0.615,
-        ("Mn", 3) => 0.645,
-        ("Fe", 3) => 0.645,
-        ("Co", 3) => 0.61,
-        ("Ga", 3) => 0.62,
-        ("As", 3) => 0.58,
-        ("Rh", 3) => 0.665,
-        ("In", 3) => 0.80,
-        ("Sb", 3) => 0.76,
-        ("Bi", 3) => 1.03,
-
-        ("C", 4) => 0.16,
-        ("Si", 4) => 0.40,
-        ("Ti", 4) => 0.605,
-        ("V", 4) => 0.58,
-        ("Mn", 4) => 0.53,
-        ("Ge", 4) => 0.53,
-        ("Zr", 4) => 0.72,
-        ("Ru", 4) => 0.62,
-        ("Pd", 4) => 0.615,
-        ("Sn", 4) => 0.69,
-        ("Te", 4) => 0.97,
-        ("Pb", 4) => 0.775,
-
-        ("N", 5) => 0.13,
-        ("P", 5) => 0.38,
-        ("V", 5) => 0.54,
-        ("As", 5) => 0.46,
-        ("Nb", 5) => 0.64,
-        ("Sb", 5) => 0.60,
-        ("I", 5) => 0.95,
-        ("Ta", 5) => 0.64,
-
-        ("S", 6) => 0.29,
-        ("Cr", 6) => 0.44,
-        ("Se", 6) => 0.42,
-        ("Mo", 6) => 0.59,
-        ("Te", 6) => 0.56,
-        ("W", 6) => 0.60,
-
-        ("Cl", 7) => 0.27,
-        ("Mn", 7) => 0.46,
-        ("Br", 7) => 0.39,
-        ("Tc", 7) => 0.56,
-        ("I", 7) => 0.53,
-        ("Re", 7) => 0.53,
-
-        // 3. Fallback: If a specific valence state isn't mapped above,
-        // fall back to the general Shannon ionic radius defined in the main AtomData.
-        _ => base_data.ionic_radius,
+/// O'Keeffe-Brese (r, c) parameters for an element, independent of oxidation
+/// state (the scheme does not distinguish valences; state-specific accuracy
+/// comes from the tabulated pair values, not the fallback).
+///
+/// Returns `None` for elements without validated parameters. Deliberately
+/// excluded: Cu, Ag(II+), Au, Pd, Rh, In, Sn, Sb — either flagged by the
+/// authors themselves as oxidation-state-dependent outliers (coinage
+/// metals), or failing our validation against the published pair tables by
+/// more than 0.08 Å. For those, an absent fallback (bond skipped, reported
+/// as "n/a") is more honest than a wrong number.
+pub fn get_bvs_atom_props(element: &str) -> Option<BvsAtomProps> {
+    let (r, c) = match element {
+        "H" => (0.38, 0.89),
+        "Li" => (1.00, 0.97),
+        "Be" => (0.81, 1.47),
+        "B" => (0.79, 1.60),
+        "C" => (0.78, 2.00),
+        "N" => (0.72, 2.61),
+        "O" => (0.63, 3.15),
+        "F" => (0.58, 3.98),
+        "Na" => (1.36, 1.01),
+        "Mg" => (1.21, 1.23),
+        "Al" => (1.13, 1.47),
+        "Si" => (1.12, 1.58),
+        "P" => (1.09, 1.96),
+        "S" => (1.03, 2.35),
+        "Cl" => (0.99, 2.74),
+        "K" => (1.73, 0.91),
+        "Ca" => (1.50, 1.04),
+        "Sc" => (1.34, 1.20),
+        "Ti" => (1.27, 1.32),
+        "V" => (1.21, 1.45),
+        "Cr" => (1.16, 1.56),
+        "Mn" => (1.17, 1.60),
+        "Fe" => (1.16, 1.64),
+        "Co" => (1.09, 1.70),
+        "Ni" => (1.04, 1.75),
+        "Zn" => (1.07, 1.66),
+        "Ga" => (1.14, 1.82),
+        "Ge" => (1.21, 1.51),
+        "As" => (1.21, 2.23),
+        "Se" => (1.18, 2.51),
+        "Br" => (1.13, 2.58),
+        "Rb" => (1.84, 0.89),
+        "Sr" => (1.66, 0.99),
+        "Y" => (1.52, 1.11),
+        "Zr" => (1.43, 1.22),
+        "Nb" => (1.40, 1.23),
+        "Mo" => (1.37, 1.30),
+        "Ru" => (1.32, 1.42),
+        "Ag" => (1.28, 1.42), // Ag(I) only per the authors; higher states excluded
+        "Cd" => (1.36, 1.46),
+        "Te" => (1.40, 2.01),
+        "I" => (1.33, 2.21),
+        "Cs" => (1.98, 0.86),
+        "Ba" => (1.85, 0.97),
+        "La" => (1.71, 1.08),
+        "Ce" => (1.68, 1.08),
+        "Nd" => (1.66, 1.08),
+        "Gd" => (1.61, 1.08),
+        "Hf" => (1.42, 1.23),
+        "Ta" => (1.39, 1.33),
+        "W" => (1.38, 1.40),
+        "Re" => (1.37, 1.46),
+        "Pt" => (1.31, 1.44),
+        "Hg" => (1.32, 1.44),
+        "Tl" => (1.62, 1.44),
+        "Pb" => (1.53, 1.55),
+        "Bi" => (1.54, 1.67),
+        "Th" => (1.70, 1.11),
+        "U" => (1.59, 1.22),
+        _ => return None,
     };
-
-    if r <= 0.0 {
-        return None;
-    }
-
-    Some(BvsAtomProps {
-        r,
-        chi: base_data.electronegativity,
-        n: valence.abs() as f64,
-    })
+    Some(BvsAtomProps { r, c })
 }

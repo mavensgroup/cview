@@ -6,6 +6,7 @@
 //
 // Reference: W. Setyawan and S. Curtarolo, Comp. Mat. Sci. 49, 299 (2010).
 
+use nalgebra::{Matrix3, Vector3};
 use std::collections::HashMap;
 
 /// The 14 Bravais lattice types, with sub-variants where k-point coordinates
@@ -193,8 +194,183 @@ fn centering(sg: i32) -> Centering {
 
 const ANGLE_TOL: f64 = 1e-5;
 
+/// Map moyo/spglib (ITA-convention) conventional cell parameters onto the
+/// Setyawan-Curtarolo convention assumed by `classify` and the k-point
+/// formulas:
+///   - R space groups: spglib's conventional cell is the triple hexagonal
+///     cell; SC10 works in the primitive rhombohedral cell (a_r, α_r).
+///   - Monoclinic: ITA standard is unique-axis-b (α = γ = 90°, β oblique);
+///     SC10 puts the oblique angle in α (between b and c) with α < 90°,
+///     and for primitive MCL additionally requires b ≤ c.
+///   - A-centred orthorhombic (SG 38-41): cyclic axis permutation maps the
+///     b-c face centring onto the a-b face (C-centring); all base-centred
+///     orthorhombic cells then enforce SC10's a < b.
+pub fn sc_conventional_params(sg: i32, ita: &LatticeParams) -> LatticeParams {
+    let half_pi = std::f64::consts::FRAC_PI_2;
+    match crystal_system(sg) {
+        CrystalSystem::Trigonal if centering(sg) == Centering::R => {
+            // Hexagonal (a_h, c_h) → rhombohedral (a_r, α_r):
+            //   a_r = sqrt(3 a_h² + c_h²) / 3
+            //   sin(α_r/2) = 3 / (2 sqrt(3 + (c_h/a_h)²))
+            let (ah, ch) = (ita.a, ita.c);
+            let ar = (3.0 * ah * ah + ch * ch).sqrt() / 3.0;
+            let alpha_r = 2.0 * (3.0 / (2.0 * (3.0 + (ch / ah).powi(2)).sqrt())).asin();
+            LatticeParams {
+                a: ar,
+                b: ar,
+                c: ar,
+                alpha: alpha_r,
+                beta: alpha_r,
+                gamma: alpha_r,
+            }
+        }
+        CrystalSystem::Monoclinic => {
+            // Rotate whichever angle is oblique into α = angle(b, c).
+            let (a, mut b, mut c, mut alpha) = if (ita.beta - half_pi).abs() > ANGLE_TOL {
+                (ita.b, ita.a, ita.c, ita.beta) // unique axis b (ITA standard)
+            } else if (ita.gamma - half_pi).abs() > ANGLE_TOL {
+                (ita.c, ita.a, ita.b, ita.gamma) // unique axis c
+            } else {
+                (ita.a, ita.b, ita.c, ita.alpha) // unique axis a (or degenerate)
+            };
+            // SC10 requires α < 90°; folding corresponds to flipping the sign
+            // of the c vector (plus a compensating flip to keep handedness).
+            if alpha > half_pi {
+                alpha = std::f64::consts::PI - alpha;
+            }
+            // Primitive MCL additionally requires b ≤ c; a b↔c swap keeps α
+            // between them. Not applied to MCLC — swapping would move the
+            // centring out of the a-b plane.
+            if centering(sg) == Centering::P && b > c {
+                std::mem::swap(&mut b, &mut c);
+            }
+            LatticeParams {
+                a,
+                b,
+                c,
+                alpha,
+                beta: half_pi,
+                gamma: half_pi,
+            }
+        }
+        CrystalSystem::Orthorhombic if centering(sg) == Centering::A => {
+            // SG 38-41 keep true A-centring in their standard setting.
+            let a_groups: &[i32] = &[38, 39, 40, 41];
+            let (mut a, mut b, c) = if a_groups.contains(&sg) {
+                (ita.b, ita.c, ita.a) // (a,b,c) → (b,c,a): A → C centring
+            } else {
+                (ita.a, ita.b, ita.c)
+            };
+            // SC10 ORCC requires a < b; an a↔b swap keeps the centring in
+            // the a-b plane.
+            if a > b {
+                std::mem::swap(&mut a, &mut b);
+            }
+            LatticeParams {
+                a,
+                b,
+                c,
+                alpha: half_pi,
+                beta: half_pi,
+                gamma: half_pi,
+            }
+        }
+        _ => ita.clone(),
+    }
+}
+
+/// Setyawan-Curtarolo primitive lattice vectors (matrix columns) constructed
+/// explicitly from SC-convention conventional parameters (SC10 Sec. 2-5).
+/// Building the reciprocal basis from this construction — rather than from
+/// moyo's `prim_std_cell` — guarantees the fractional k-point coordinates and
+/// the reciprocal basis can never disagree about axis conventions.
+pub fn sc_primitive_lattice(btype: BravaisType, p: &LatticeParams) -> Matrix3<f64> {
+    let (a, b, c) = (p.a, p.b, p.c);
+    let cols: [[f64; 3]; 3] = match btype {
+        BravaisType::CUB | BravaisType::TET | BravaisType::ORC => {
+            [[a, 0.0, 0.0], [0.0, b, 0.0], [0.0, 0.0, c]]
+        }
+        BravaisType::FCC => [
+            [0.0, a / 2.0, a / 2.0],
+            [a / 2.0, 0.0, a / 2.0],
+            [a / 2.0, a / 2.0, 0.0],
+        ],
+        BravaisType::BCC => [
+            [-a / 2.0, a / 2.0, a / 2.0],
+            [a / 2.0, -a / 2.0, a / 2.0],
+            [a / 2.0, a / 2.0, -a / 2.0],
+        ],
+        BravaisType::BCT1 | BravaisType::BCT2 => [
+            [-a / 2.0, a / 2.0, c / 2.0],
+            [a / 2.0, -a / 2.0, c / 2.0],
+            [a / 2.0, a / 2.0, -c / 2.0],
+        ],
+        BravaisType::ORCF1 | BravaisType::ORCF2 | BravaisType::ORCF3 => [
+            [0.0, b / 2.0, c / 2.0],
+            [a / 2.0, 0.0, c / 2.0],
+            [a / 2.0, b / 2.0, 0.0],
+        ],
+        BravaisType::ORCI => [
+            [-a / 2.0, b / 2.0, c / 2.0],
+            [a / 2.0, -b / 2.0, c / 2.0],
+            [a / 2.0, b / 2.0, -c / 2.0],
+        ],
+        BravaisType::ORCC => [
+            [a / 2.0, -b / 2.0, 0.0],
+            [a / 2.0, b / 2.0, 0.0],
+            [0.0, 0.0, c],
+        ],
+        BravaisType::HEX => [
+            [a / 2.0, -a * 3.0_f64.sqrt() / 2.0, 0.0],
+            [a / 2.0, a * 3.0_f64.sqrt() / 2.0, 0.0],
+            [0.0, 0.0, c],
+        ],
+        BravaisType::RHL1 | BravaisType::RHL2 => {
+            let (ch, sh) = ((p.alpha / 2.0).cos(), (p.alpha / 2.0).sin());
+            let z = (1.0 - p.alpha.cos().powi(2) / (ch * ch)).max(0.0).sqrt();
+            [
+                [a * ch, -a * sh, 0.0],
+                [a * ch, a * sh, 0.0],
+                [a * p.alpha.cos() / ch, 0.0, a * z],
+            ]
+        }
+        BravaisType::MCL => [
+            [a, 0.0, 0.0],
+            [0.0, b, 0.0],
+            [0.0, c * p.alpha.cos(), c * p.alpha.sin()],
+        ],
+        BravaisType::MCLC1
+        | BravaisType::MCLC2
+        | BravaisType::MCLC3
+        | BravaisType::MCLC4
+        | BravaisType::MCLC5 => [
+            [a / 2.0, b / 2.0, 0.0],
+            [-a / 2.0, b / 2.0, 0.0],
+            [0.0, c * p.alpha.cos(), c * p.alpha.sin()],
+        ],
+        BravaisType::TRI1A | BravaisType::TRI1B | BravaisType::TRI2A | BravaisType::TRI2B => {
+            let (ca, cb, cg) = (p.alpha.cos(), p.beta.cos(), p.gamma.cos());
+            let sg_ = p.gamma.sin();
+            let vol_term = (1.0 - ca * ca - cb * cb - cg * cg + 2.0 * ca * cb * cg)
+                .max(0.0)
+                .sqrt();
+            [
+                [a, 0.0, 0.0],
+                [b * cg, b * sg_, 0.0],
+                [c * cb, c * (ca - cb * cg) / sg_, c * vol_term / sg_],
+            ]
+        }
+    };
+    Matrix3::from_columns(&[
+        Vector3::from(cols[0]),
+        Vector3::from(cols[1]),
+        Vector3::from(cols[2]),
+    ])
+}
+
 /// Classify the full Bravais type from space group number and conventional
-/// lattice parameters.
+/// lattice parameters. `params` must already be in the SC convention
+/// (see `sc_conventional_params`).
 pub fn classify(sg: i32, params: &LatticeParams) -> BravaisType {
     let sys = crystal_system(sg);
     let cent = centering(sg);
@@ -258,10 +434,11 @@ pub fn classify(sg: i32, params: &LatticeParams) -> BravaisType {
             if cent == Centering::P {
                 BravaisType::MCL
             } else {
-                // Base-centered monoclinic: classify by reciprocal angle kγ
-                // In SC convention, unique axis is b, angle is β (but moyo
-                // standardizes so we use alpha as the monoclinic angle)
-                let k_gamma = reciprocal_angle_gamma(params);
+                // Base-centered monoclinic: classify by kγ — the γ angle of
+                // the reciprocal of the MCLC *primitive* cell. For the
+                // conventional cell this angle is identically 90° and would
+                // classify everything as MCLC2.
+                let k_gamma = mclc_kgamma(params);
                 let half_pi = std::f64::consts::FRAC_PI_2;
                 if k_gamma > half_pi + ANGLE_TOL {
                     BravaisType::MCLC1
@@ -283,6 +460,24 @@ pub fn classify(sg: i32, params: &LatticeParams) -> BravaisType {
         CrystalSystem::Triclinic => {
             let (ka, kb, kg) = reciprocal_angles(params);
             let half_pi = std::f64::consts::FRAC_PI_2;
+            // SC10's TRI1/TRI2 assignment assumes a reduced cell in which
+            // all reciprocal angles lie on one side of 90°. Mixed-sign
+            // angles mean the cell is not in that form (no Niggli
+            // reduction is performed here) — say so instead of silently
+            // classifying as TRI2A.
+            let above = [ka, kb, kg]
+                .iter()
+                .filter(|&&x| x > half_pi + ANGLE_TOL)
+                .count();
+            let below = [ka, kb, kg]
+                .iter()
+                .filter(|&&x| x < half_pi - ANGLE_TOL)
+                .count();
+            if above > 0 && below > 0 {
+                crate::utils::console::log_warn(
+                    "Triclinic cell has reciprocal angles on both sides of 90° (not SC10-reduced) — k-path labels are approximate",
+                );
+            }
             // Type 1: all reciprocal angles > 90° (or = 90°)
             // Type 2: all reciprocal angles < 90° (or = 90°)
             if ka > half_pi - ANGLE_TOL && kb > half_pi - ANGLE_TOL && kg > half_pi - ANGLE_TOL {
@@ -323,11 +518,20 @@ fn reciprocal_angles(p: &LatticeParams) -> (f64, f64, f64) {
     (k_alpha, k_beta, k_gamma)
 }
 
-fn reciprocal_angle_gamma(p: &LatticeParams) -> f64 {
-    let (sa, ca) = (p.alpha.sin(), p.alpha.cos());
-    let (sb, cb) = (p.beta.sin(), p.beta.cos());
-    let (_sg, cg) = (p.gamma.sin(), p.gamma.cos());
-    ((ca * cb - cg) / (sa * sb)).clamp(-1.0, 1.0).acos()
+/// kγ for MCLC classification: the γ angle of the reciprocal lattice of the
+/// SC MCLC primitive cell (this is also pymatgen's definition:
+/// `primitive.reciprocal_lattice.parameters[5]`).
+fn mclc_kgamma(p: &LatticeParams) -> f64 {
+    let prim = sc_primitive_lattice(BravaisType::MCLC1, p);
+    let rec = prim
+        .try_inverse()
+        .unwrap_or_else(Matrix3::identity)
+        .transpose();
+    let b1 = rec.column(0);
+    let b2 = rec.column(1);
+    (b1.dot(&b2) / (b1.norm() * b2.norm()))
+        .clamp(-1.0, 1.0)
+        .acos()
 }
 
 /// MCLC sub-classification condition:
@@ -654,7 +858,7 @@ fn kpoints_orci(p: &LatticeParams) -> KData {
             ("Γ", [0.0, 0.0, 0.0]),
             ("L", [-mu, mu, 0.5 - delta]),
             ("L₁", [mu, -mu, 0.5 + delta]),
-            ("L₂", [0.5 - delta + mu, 0.5 + delta - mu, 0.0]),
+            ("L₂", [0.5 - delta, 0.5 + delta, -mu]),
             ("R", [0.0, 0.5, 0.0]),
             ("S", [0.5, 0.0, 0.0]),
             ("T", [0.0, 0.0, 0.5]),
@@ -757,10 +961,9 @@ fn kpoints_rhl1(p: &LatticeParams) -> KData {
 // RHL2 — Rhombohedral, α > 90°
 // ---------------------------------------------------------------------------
 fn kpoints_rhl2(p: &LatticeParams) -> KData {
-    let ca = p.alpha.cos();
-    let eta = 1.0 / (2.0 * p.alpha.tan() * p.alpha.tan());
+    // SC10: η = 1 / (2 tan²(α/2))
+    let eta = 1.0 / (2.0 * (p.alpha / 2.0).tan().powi(2));
     let nu = 0.75 - eta / 2.0;
-    let _ = ca; // suppress unused
     (
         "RHL2",
         pts(&[
@@ -903,12 +1106,13 @@ fn kpoints_mclc2(p: &LatticeParams) -> KData {
 // MCLC3 — Base-Centered Monoclinic, kγ < 90°, condition < 1
 // ---------------------------------------------------------------------------
 fn kpoints_mclc3(p: &LatticeParams) -> KData {
+    let a2 = p.a * p.a;
     let b2 = p.b * p.b;
-    let c2 = p.c * p.c;
     let ca = p.alpha.cos();
     let sa2 = p.alpha.sin() * p.alpha.sin();
 
-    let mu = (1.0 + b2 / c2) / 4.0;
+    // SC10: μ = (1 + b²/a²)/4
+    let mu = (1.0 + b2 / a2) / 4.0;
     let delta = p.b * p.c * ca / (2.0 * p.a * p.a);
     let zeta = mu - 0.25 + (1.0 - p.b * ca / p.c) / (4.0 * sa2);
     let eta = 0.5 + 2.0 * zeta * p.c * ca / p.b;
@@ -956,14 +1160,16 @@ fn kpoints_mclc4(p: &LatticeParams) -> KData {
 // MCLC5 — Base-Centered Monoclinic, kγ < 90°, condition > 1
 // ---------------------------------------------------------------------------
 fn kpoints_mclc5(p: &LatticeParams) -> KData {
+    let a2 = p.a * p.a;
     let b2 = p.b * p.b;
-    let c2 = p.c * p.c;
     let ca = p.alpha.cos();
     let sa2 = p.alpha.sin() * p.alpha.sin();
 
-    let zeta = (b2 / c2 + (1.0 - p.b * ca / p.c) / sa2) / 4.0;
+    // SC10: ζ = (b²/a² + (1 − b cosα/c)/sin²α)/4,
+    //       μ = η/2 + b²/(4a²) − b c cosα/(2a²)
+    let zeta = (b2 / a2 + (1.0 - p.b * ca / p.c) / sa2) / 4.0;
     let eta = 0.5 + 2.0 * zeta * p.c * ca / p.b;
-    let mu = eta / 2.0 + b2 / (4.0 * c2) - p.b * ca / (2.0 * p.c);
+    let mu = eta / 2.0 + b2 / (4.0 * a2) - p.b * p.c * ca / (2.0 * a2);
     let nu = 2.0 * mu - zeta;
     let omega = (4.0 * nu - 1.0 - b2 * sa2 / (p.a * p.a)) * p.c / (2.0 * p.b * ca);
     let delta = zeta * p.c * ca / p.b + omega / 2.0 - 0.25;
@@ -1049,4 +1255,146 @@ fn kpoints_tri2() -> KData {
             seg(&["R", "Γ"]),
         ],
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn params(a: f64, b: f64, c: f64, al: f64, be: f64, ga: f64) -> LatticeParams {
+        LatticeParams {
+            a,
+            b,
+            c,
+            alpha: al.to_radians(),
+            beta: be.to_radians(),
+            gamma: ga.to_radians(),
+        }
+    }
+
+    /// KP-1: hexagonal → rhombohedral parameter conversion for R groups.
+    #[test]
+    fn test_sc_params_rhombohedral() {
+        // Bi2Se3: a_h = 4.143, c_h = 28.636 → a_r = 9.8403, α_r = 24.30°
+        let sc = sc_conventional_params(166, &params(4.143, 4.143, 28.636, 90.0, 90.0, 120.0));
+        assert!((sc.a - 9.8403).abs() < 1e-3, "a_r = {}", sc.a);
+        assert!((sc.alpha.to_degrees() - 24.30).abs() < 0.02, "α_r = {}", sc.alpha.to_degrees());
+        assert_eq!(classify(166, &sc), BravaisType::RHL1);
+    }
+
+    /// KP-3: ITA unique-axis-b monoclinic → SC oblique-α mapping.
+    #[test]
+    fn test_sc_params_monoclinic() {
+        // ZrO2-like: β = 99.23° oblique → α_SC = 80.77°, axes (b, a, c)
+        let sc = sc_conventional_params(14, &params(5.1505, 5.2116, 5.3173, 90.0, 99.23, 90.0));
+        assert!((sc.a - 5.2116).abs() < 1e-9);
+        assert!((sc.b - 5.1505).abs() < 1e-9);
+        assert!((sc.c - 5.3173).abs() < 1e-9);
+        assert!((sc.alpha.to_degrees() - 80.77).abs() < 1e-9);
+        assert!((sc.beta.to_degrees() - 90.0).abs() < 1e-9);
+        assert_eq!(classify(14, &sc), BravaisType::MCL);
+
+        // MCL b ≤ c enforcement: mapped b > c must swap
+        let sc = sc_conventional_params(4, &params(7.0, 6.0, 5.0, 90.0, 100.0, 90.0));
+        assert!((sc.a - 6.0).abs() < 1e-9);
+        assert!((sc.b - 5.0).abs() < 1e-9);
+        assert!((sc.c - 7.0).abs() < 1e-9);
+    }
+
+    /// KP-5: A-centred orthorhombic (SG 38-41) permutes to C-centring,
+    /// and base-centred cells enforce a < b.
+    #[test]
+    fn test_sc_params_a_centered_orthorhombic() {
+        // Amm2 (#38): (a,b,c) → (b,c,a)
+        let sc = sc_conventional_params(38, &params(8.0, 4.0, 6.0, 90.0, 90.0, 90.0));
+        assert_eq!((sc.a, sc.b, sc.c), (4.0, 6.0, 8.0));
+
+        // Permutation then a↔b swap when a > b
+        let sc = sc_conventional_params(38, &params(8.0, 7.0, 4.0, 90.0, 90.0, 90.0));
+        assert_eq!((sc.a, sc.b, sc.c), (4.0, 7.0, 8.0));
+
+        // Plain C-centred (#63) with a > b swaps
+        let sc = sc_conventional_params(63, &params(6.0, 4.0, 5.0, 90.0, 90.0, 90.0));
+        assert_eq!((sc.a, sc.b, sc.c), (4.0, 6.0, 5.0));
+    }
+
+    /// KP-2: RHL2 η = 1/(2 tan²(α/2)); α = 100° → η = 0.35205, ν = 0.57398.
+    #[test]
+    fn test_rhl2_eta() {
+        let p = params(5.0, 5.0, 5.0, 100.0, 100.0, 100.0);
+        let (_, pts, _) = kpoints_rhl2(&p);
+        let q = pts["Q"];
+        assert!((q[0] - 0.35205).abs() < 1e-4, "η = {}", q[0]);
+        let pp = pts["P"];
+        assert!((pp[0] - (1.0 - 0.57398)).abs() < 1e-4, "1-ν = {}", pp[0]);
+    }
+
+    /// KP-6: ORCI L₂ = (½−δ, ½+δ, −μ).
+    #[test]
+    fn test_orci_l2() {
+        let p = params(3.0, 4.0, 5.0, 90.0, 90.0, 90.0);
+        // δ = (b²−a²)/4c² = 0.07, μ = (a²+b²)/4c² = 0.25
+        let (_, pts, _) = kpoints_orci(&p);
+        let l2 = pts["L₂"];
+        assert!((l2[0] - 0.43).abs() < 1e-9);
+        assert!((l2[1] - 0.57).abs() < 1e-9);
+        assert!((l2[2] - (-0.25)).abs() < 1e-9);
+    }
+
+    /// KP-4: MCLC sub-classification must use kγ of the primitive reciprocal
+    /// cell; the branches MCLC1/3/5 must all be reachable.
+    #[test]
+    fn test_mclc_classification_branches() {
+        // kγ > 90° ⟺ a < b sinα (from the MCLC primitive construction)
+        let p1 = params(3.0, 8.0, 9.0, 80.0, 90.0, 90.0);
+        assert_eq!(classify(15, &p1), BravaisType::MCLC1);
+
+        // kγ < 90°, condition b cosα/c + b²sin²α/a² = 0.194 < 1 → MCLC3
+        let p3 = params(8.0, 3.0, 9.0, 80.0, 90.0, 90.0);
+        assert_eq!(classify(15, &p3), BravaisType::MCLC3);
+
+        // kγ < 90°, condition = 1.0385 > 1 → MCLC5
+        let p5 = params(5.0, 4.9, 5.0, 85.0, 90.0, 90.0);
+        assert_eq!(classify(15, &p5), BravaisType::MCLC5);
+    }
+
+    /// MCLC3 μ = (1 + b²/a²)/4 (was b²/c²) — checked via Y = (μ, μ, δ).
+    #[test]
+    fn test_mclc3_mu() {
+        let p = params(8.0, 3.0, 9.0, 80.0, 90.0, 90.0);
+        // μ = (1 + 9/64)/4 = 0.285156, δ = bc·cosα/(2a²) = 0.036629
+        let (_, pts, _) = kpoints_mclc3(&p);
+        let y = pts["Y"];
+        assert!((y[0] - 0.285156).abs() < 1e-5, "μ = {}", y[0]);
+        assert!((y[2] - 0.036629).abs() < 1e-5, "δ = {}", y[2]);
+    }
+
+    /// The SC primitive construction must reproduce the conventional cell
+    /// volume divided by the number of centring points.
+    #[test]
+    fn test_sc_primitive_volumes() {
+        let p = params(3.0, 4.0, 5.0, 90.0, 90.0, 90.0);
+        let vol_conv = 60.0;
+        for (bt, div) in [
+            (BravaisType::ORC, 1.0),
+            (BravaisType::ORCF1, 4.0),
+            (BravaisType::ORCI, 2.0),
+            (BravaisType::ORCC, 2.0),
+        ] {
+            let v = sc_primitive_lattice(bt, &p).determinant().abs();
+            assert!(
+                (v - vol_conv / div).abs() < 1e-9,
+                "{bt:?}: volume {v} != {}",
+                vol_conv / div
+            );
+        }
+
+        // MCL/MCLC with oblique α
+        let pm = params(3.0, 4.0, 5.0, 80.0, 90.0, 90.0);
+        let vol_m = 3.0 * 4.0 * 5.0 * pm.alpha.sin();
+        let v_mcl = sc_primitive_lattice(BravaisType::MCL, &pm).determinant().abs();
+        let v_mclc = sc_primitive_lattice(BravaisType::MCLC1, &pm).determinant().abs();
+        assert!((v_mcl - vol_m).abs() < 1e-9);
+        assert!((v_mclc - vol_m / 2.0).abs() < 1e-9);
+    }
 }

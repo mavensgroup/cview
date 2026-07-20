@@ -3,8 +3,18 @@
 //!
 //! Auto-generated from the IUCr bvparm2020.cif database.
 //! Contains 1000+ explicit pairs.
-//! Falls back to the Brese & O'Keeffe (1991) empirical formula if missing:
-//! R0 = r_A + r_B - (r_A * r_B * (√χ_A - √χ_B)²) / (n_A * χ_A + n_B * χ_B)
+//! Falls back to the O'Keeffe & Brese (1991) estimation scheme when a pair
+//! is untabulated:
+//!
+//!     R0 = r_i + r_j - r_i·r_j·(√c_i - √c_j)² / (c_i·r_i + c_j·r_j)
+//!
+//! with their fitted atomic parameters (r, c) — see
+//! `elements::get_bvs_atom_props`. Typical accuracy of the estimate is
+//! ±0.05 Å (the authors' own figure), i.e. bond valences good to ~15%.
+//!
+//! References:
+//!   M. O'Keeffe & N.E. Brese, J. Am. Chem. Soc. 113, 3226 (1991).
+//!   N.E. Brese & M. O'Keeffe, Acta Cryst. B47, 192 (1991).
 
 use crate::model::elements::{get_bvs_atom_props, BvsAtomProps};
 
@@ -20,17 +30,49 @@ impl BvsParams {
   }
 }
 
-fn calculate_fallback_r0(prop_a: &BvsAtomProps, prop_b: &BvsAtomProps) -> f64 {
-  let sqrt_chi_diff = prop_a.chi.sqrt() - prop_b.chi.sqrt();
-  let numerator = prop_a.r * prop_b.r * (sqrt_chi_diff * sqrt_chi_diff);
-  let denominator = (prop_a.n * prop_a.chi) + (prop_b.n * prop_b.chi);
-  prop_a.r + prop_b.r - (numerator / denominator)
+/// O'Keeffe-Brese estimation of R0 for an untabulated pair.
+/// R0 = r_i + r_j - r_i·r_j·(√c_i - √c_j)² / (c_i·r_i + c_j·r_j)
+fn calculate_fallback_r0(p1: &BvsAtomProps, p2: &BvsAtomProps) -> f64 {
+  let sqrt_c_diff = p1.c.sqrt() - p2.c.sqrt();
+  let numerator = p1.r * p2.r * (sqrt_c_diff * sqrt_c_diff);
+  let denominator = (p1.c * p1.r) + (p2.c * p2.r);
+  p1.r + p2.r - (numerator / denominator)
 }
 
-/// Primary function to get BVS parameters.
+/// Convenience wrapper: tabulated value if present, O'Keeffe-Brese
+/// estimation otherwise. Callers that need to KNOW which one they got
+/// (e.g. for the report's Source column) must call
+/// `get_bvs_params_tabulated` / `estimate_bvs_params` separately.
 pub fn get_bvs_params(cation: &str, val_c: i32, anion: &str, val_a: i32) -> Option<BvsParams> {
-  // 1. Check the exhaustive IUCr exact match table
-  let exact_match = match (cation, val_c, anion, val_a) {
+  get_bvs_params_tabulated(cation, val_c, anion, val_a)
+    .or_else(|| estimate_bvs_params(cation, anion))
+}
+
+/// O'Keeffe-Brese estimation only (no table lookup). Valence-independent.
+/// None when either element has no validated (r, c) parameters.
+pub fn estimate_bvs_params(cation: &str, anion: &str) -> Option<BvsParams> {
+  let default_b = 0.37;
+  let props_c = get_bvs_atom_props(cation)?;
+  let props_a = get_bvs_atom_props(anion)?;
+  Some(BvsParams::new(
+    calculate_fallback_r0(&props_c, &props_a),
+    default_b,
+  ))
+}
+
+/// IUCr bvparm2020 table lookup only — no estimation fallback.
+///
+/// Note: genuinely tabulated same-sign pairs (e.g. B³⁺-B³⁺) exist in the
+/// source database but are unreachable through the calculator by design:
+/// BVS is defined for heteropolar (cation-anion) bonds and same-sign pairs
+/// are skipped before lookup. Do not "fix" that by relaxing the sign check.
+pub fn get_bvs_params_tabulated(
+  cation: &str,
+  val_c: i32,
+  anion: &str,
+  val_a: i32,
+) -> Option<BvsParams> {
+  match (cation, val_c, anion, val_a) {
     ("Ac", 3, "O", -2) => Some(BvsParams::new(2.24, 0.37)),
     ("Ac", 3, "F", -1) => Some(BvsParams::new(2.1, 0.4)),
     ("Ac", 3, "Cl", -1) => Some(BvsParams::new(2.63, 0.37)),
@@ -80,7 +122,7 @@ pub fn get_bvs_params(cation: &str, val_c: i32, anion: &str, val_a: i32) -> Opti
     ("As", 3, "C", -4) => Some(BvsParams::new(1.93, 0.37)),
     ("As", 5, "O", -2) => Some(BvsParams::new(1.767, 0.37)),
     ("As", 5, "F", -1) => Some(BvsParams::new(1.62, 0.37)),
-    ("As", 5, "Cl", -2) => Some(BvsParams::new(2.14, 0.37)),
+    ("As", 5, "Cl", -1) => Some(BvsParams::new(2.14, 0.37)), // was keyed Cl -2 (typo): Cl(-II) does not exist
     ("Au", 1, "Cl", -1) => Some(BvsParams::new(2.02, 0.37)),
     ("Au", 1, "I", -1) => Some(BvsParams::new(2.35, 0.37)),
     ("Au", 3, "O", -2) => Some(BvsParams::new(1.89, 0.37)),
@@ -390,7 +432,7 @@ pub fn get_bvs_params(cation: &str, val_c: i32, anion: &str, val_a: i32) -> Opti
     ("Fe", 9, "P", -3) => Some(BvsParams::new(2.27, 0.37)),
     ("Fe", 9, "As", -3) => Some(BvsParams::new(2.35, 0.37)),
     ("Fe", 9, "H", -1) => Some(BvsParams::new(1.53, 0.37)),
-    ("Ga", 1, "Se", -1) => Some(BvsParams::new(2.55, 0.37)),
+    ("Ga", 1, "Se", -2) => Some(BvsParams::new(2.55, 0.37)), // was keyed Se -1 (typo)
     ("Ga", 3, "O", -2) => Some(BvsParams::new(1.73, 0.37)),
     ("Ga", 3, "F", -1) => Some(BvsParams::new(1.62, 0.37)),
     ("Ga", 3, "Br", -1) => Some(BvsParams::new(2.2, 0.35)),
@@ -598,7 +640,7 @@ pub fn get_bvs_params(cation: &str, val_c: i32, anion: &str, val_a: i32) -> Opti
     ("Mn", 9, "Br", -1) => Some(BvsParams::new(2.26, 0.37)),
     ("Mn", 9, "I", -1) => Some(BvsParams::new(2.49, 0.37)),
     ("Mn", 9, "S", -2) => Some(BvsParams::new(2.2, 0.37)),
-    ("Mn", 9, "Se", -1) => Some(BvsParams::new(2.32, 0.37)),
+    ("Mn", 9, "Se", -2) => Some(BvsParams::new(2.32, 0.37)), // was keyed Se -1 (typo)
     ("Mn", 9, "Te", -2) => Some(BvsParams::new(2.55, 0.37)),
     ("Mn", 9, "N", -3) => Some(BvsParams::new(1.87, 0.37)),
     ("Mn", 9, "P", -3) => Some(BvsParams::new(2.24, 0.37)),
@@ -882,7 +924,7 @@ pub fn get_bvs_params(cation: &str, val_c: i32, anion: &str, val_a: i32) -> Opti
     ("Rh", 9, "Br", -1) => Some(BvsParams::new(2.25, 0.37)),
     ("Rh", 9, "I", -1) => Some(BvsParams::new(2.48, 0.37)),
     ("Rh", 9, "S", -2) => Some(BvsParams::new(2.15, 0.37)),
-    ("Rh", 9, "Se", -1) => Some(BvsParams::new(2.33, 0.37)),
+    ("Rh", 9, "Se", -2) => Some(BvsParams::new(2.33, 0.37)), // was keyed Se -1 (typo)
     ("Rh", 9, "Te", -2) => Some(BvsParams::new(2.55, 0.37)),
     ("Rh", 9, "N", -3) => Some(BvsParams::new(1.88, 0.37)),
     ("Rh", 9, "P", -3) => Some(BvsParams::new(2.29, 0.37)),
@@ -912,7 +954,6 @@ pub fn get_bvs_params(cation: &str, val_c: i32, anion: &str, val_a: i32) -> Opti
     ("Ru", 9, "H", -1) => Some(BvsParams::new(1.61, 0.37)),
     ("S", 2, "O", -2) => Some(BvsParams::new(1.74, 0.37)),
     ("S", 2, "S", -2) => Some(BvsParams::new(2.03, 0.37)),
-    ("S", 2, "N", -2) => Some(BvsParams::new(1.597, 0.37)),
     ("S", 2, "N", -3) => Some(BvsParams::new(1.682, 0.37)),
     ("S", 2, "S", 2) => Some(BvsParams::new(2.1, 0.35)),
     ("S", 4, "O", -2) => Some(BvsParams::new(1.644, 0.37)),
@@ -1274,17 +1315,48 @@ pub fn get_bvs_params(cation: &str, val_c: i32, anion: &str, val_a: i32) -> Opti
     ("Zr", 4, "As", -3) => Some(BvsParams::new(2.57, 0.37)),
     ("Zr", 4, "H", -1) => Some(BvsParams::new(1.79, 0.37)),
     _ => None,
-  };
+  }
+}
 
-  if let Some(params) = exact_match {
-    return Some(params);
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  /// Fallback estimation vs tabulated IUCr values, for pairs that ARE in
+  /// the table (bypassing it). Brese & O'Keeffe claim ±0.05 Å typical
+  /// accuracy for the scheme; we allow 0.08 Å. With the old pseudo-formula
+  /// (Shannon radii + Pauling χ) these were off by +0.2 to +0.5 Å.
+  #[test]
+  fn fallback_reproduces_tabulated_r0() {
+    let cases = [
+      ("Mg", "O", 1.693),
+      ("Ca", "O", 1.967),
+      ("Al", "O", 1.651),
+      ("Zn", "O", 1.704),
+      ("Na", "F", 1.677),
+      ("Ti", "O", 1.815),
+      ("Ba", "O", 2.29),
+      ("Fe", "O", 1.759),
+    ];
+    for (cat, an, r0_table) in cases {
+      let pc = get_bvs_atom_props(cat).unwrap();
+      let pa = get_bvs_atom_props(an).unwrap();
+      let r0 = calculate_fallback_r0(&pc, &pa);
+      assert!(
+        (r0 - r0_table).abs() < 0.08,
+        "{cat}-{an}: fallback R0 = {r0:.3}, table = {r0_table}"
+      );
+    }
   }
 
-  // 2. Trigger Brese & O'Keeffe (1991) fallback if pair isn't tabulated
-  let default_b = 0.37;
-  let props_c = get_bvs_atom_props(cation, val_c)?;
-  let props_a = get_bvs_atom_props(anion, val_a)?;
-
-  let fallback_r0 = calculate_fallback_r0(&props_c, &props_a);
-  Some(BvsParams::new(fallback_r0, default_b))
+  /// Elements without validated O'Keeffe-Brese parameters must yield no
+  /// fallback (None), never a fabricated value.
+  #[test]
+  fn fallback_excluded_elements_return_none() {
+    // Cu/Au fail the authors' own scheme (oxidation-state-dependent);
+    // a Cu-Xx pair not in the IUCr table must resolve to None.
+    assert!(get_bvs_atom_props("Cu").is_none());
+    assert!(get_bvs_atom_props("Au").is_none());
+    assert!(get_bvs_params("Cu", 2, "Xx", -1).is_none());
+  }
 }

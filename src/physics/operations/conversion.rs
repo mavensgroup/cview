@@ -57,7 +57,7 @@ pub fn convert_structure(structure: &Structure, cell_type: CellType) -> Result<S
     // 3. Symmetry detection + standardization
     let dataset = MoyoDataset::new(
         &moyo_cell,
-        1e-4,
+        crate::physics::analysis::symmetry::SYMPREC,
         AngleTolerance::Default,
         Setting::Spglib,
         true,
@@ -70,8 +70,11 @@ pub fn convert_structure(structure: &Structure, cell_type: CellType) -> Result<S
         CellType::Conventional => &dataset.std_cell,
     };
 
-    // 5. Convert Moyo result back to Structure
-    let new_lattice = matrix3_to_arr(result_cell.lattice.basis);
+    // 5. Convert Moyo result back to Structure.
+    //    moyo stores lattice vectors as COLUMNS of `basis` (Lattice::new
+    //    transposes its row-vector input), while Structure.lattice holds
+    //    rows = vectors — transpose back.
+    let new_lattice = matrix3_to_arr(result_cell.lattice.basis.transpose());
 
     let mut new_atoms = Vec::with_capacity(result_cell.positions.len());
     for (i, pos_frac) in result_cell.positions.iter().enumerate() {
@@ -98,6 +101,7 @@ pub fn convert_structure(structure: &Structure, cell_type: CellType) -> Result<S
             // mixed-valence species at distinct sites are merged. Drop the
             // oxidation hint here — downstream BVS will re-infer.
             oxidation: None,
+            occupancy: 1.0,
         });
     }
 
@@ -132,4 +136,68 @@ fn build_formula(atoms: &[Atom]) -> String {
         })
         .collect::<Vec<_>>()
         .join("")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression for the moyo basis row/column mix-up: converting a
+    /// hexagonal structure must return a lattice with the hexagonal metric
+    /// (a, a, c, γ = 120°), not its transpose (which has lengths
+    /// 1.118a / 0.866a and broken angles).
+    #[test]
+    fn test_conventional_hexagonal_metric() {
+        let (a, c) = (3.2094, 5.2108);
+        let lat = [
+            [a, 0.0, 0.0],
+            [-a / 2.0, a * 3.0_f64.sqrt() / 2.0, 0.0],
+            [0.0, 0.0, c],
+        ];
+        let frac_sites = [[1.0 / 3.0, 2.0 / 3.0, 0.25], [2.0 / 3.0, 1.0 / 3.0, 0.75]];
+        let atoms = frac_sites
+            .iter()
+            .enumerate()
+            .map(|(i, f)| Atom {
+                element: "Mg".to_string(),
+                position: frac_to_cart(*f, lat),
+                original_index: i,
+                oxidation: None,
+                occupancy: 1.0,
+            })
+            .collect();
+        let s = Structure {
+            lattice: lat,
+            atoms,
+            formula: String::new(),
+            is_periodic: true,
+        };
+
+        let conv = convert_structure(&s, CellType::Conventional).expect("conversion failed");
+        let va = Vector3::from(conv.lattice[0]);
+        let vb = Vector3::from(conv.lattice[1]);
+        let vc = Vector3::from(conv.lattice[2]);
+
+        assert!((va.norm() - a).abs() < 1e-4, "|a| = {}", va.norm());
+        assert!((vb.norm() - a).abs() < 1e-4, "|b| = {}", vb.norm());
+        assert!((vc.norm() - c).abs() < 1e-4, "|c| = {}", vc.norm());
+        let gamma = (va.dot(&vb) / (va.norm() * vb.norm())).acos().to_degrees();
+        assert!((gamma - 120.0).abs() < 1e-3, "γ = {gamma}");
+
+        // Interatomic distances must be preserved: nearest Mg-Mg in hcp
+        // is sqrt(a²/3 + c²/4) = 3.196 Å.
+        let d_expect = (a * a / 3.0 + c * c / 4.0).sqrt();
+        let p0 = Vector3::from(conv.atoms[0].position);
+        let mut d_min = f64::MAX;
+        for other in &conv.atoms[1..] {
+            let d = (Vector3::from(other.position) - p0).norm();
+            if d < d_min {
+                d_min = d;
+            }
+        }
+        assert!(
+            (d_min - d_expect).abs() < 1e-3,
+            "nearest-neighbour distance {d_min} != {d_expect}"
+        );
+    }
 }

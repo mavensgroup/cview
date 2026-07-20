@@ -2,6 +2,14 @@
 //
 use nalgebra::Vector3;
 
+fn gcd(a: i32, b: i32) -> i32 {
+    if b == 0 {
+        a.abs().max(1)
+    } else {
+        gcd(b, a % b)
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct MillerMath {
     pub h: i32,
@@ -14,25 +22,33 @@ impl MillerMath {
         Self { h, k, l }
     }
 
-    pub fn normal(&self) -> Vector3<f64> {
-        let n = Vector3::new(self.h as f64, self.k as f64, self.l as f64);
-        if n.norm() < 1e-6 {
-            Vector3::new(0.0, 0.0, 1.0)
-        } else {
-            n.normalize()
-        }
-    }
+    // NOTE: there is intentionally no `normal()` here. The true plane
+    // normal is h·b1 + k·b2 + l·b3 (reciprocal basis) — the naive
+    // normalized (h,k,l) is only correct for cubic cells. Compute the
+    // normal from the actual lattice where it is needed (slab.rs does).
 
     // ==========================================
     // PART A: PHYSICS ENGINE
     // ==========================================
+    /// Integer basis (u, v, w) with u, v spanning the (hkl) plane and w a
+    /// stacking vector. Non-coprime indices — (200), (220) — are reduced by
+    /// their gcd first: they denote the same plane orientation, and the
+    /// Bézout condition h·x + k·y + l·z = 1 is unsolvable without the
+    /// reduction. Note the u/v choice minimizes the INDEX-space norm, not
+    /// the physical length |A·u|, so strongly anisotropic lattices may get
+    /// a more skewed surface cell than necessary (valid, just not reduced).
     pub fn find_basis(&self) -> Result<(Vector3<i32>, Vector3<i32>, Vector3<i32>), String> {
-        let h = self.h;
-        let k = self.k;
-        let l = self.l;
-
-        if h == 0 && k == 0 && l == 0 {
+        if self.h == 0 && self.k == 0 && self.l == 0 {
             return Err("Miller indices cannot be (0,0,0)".to_string());
+        }
+
+        let g = gcd(gcd(self.h, self.k), self.l);
+        let (h, k, l) = (self.h / g, self.k / g, self.l / g);
+        if g > 1 {
+            crate::utils::console::log_info(&format!(
+                "Miller indices ({},{},{}) reduced to ({h},{k},{l}) — identical plane orientation",
+                self.h, self.k, self.l
+            ));
         }
 
         // 1. Find Surface Vectors (u, v)

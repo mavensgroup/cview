@@ -182,6 +182,24 @@ fn lattice_length(lat: &[[f64; 3]; 3], i: usize) -> f64 {
     lattice_vec(lat, i).norm()
 }
 
+/// Warning suffix for fractional-axis slices of oblique cells: the map is
+/// rendered on an orthogonal frame, so when the two in-plane axes are not
+/// perpendicular (e.g. hexagonal (001), γ = 120°) distances and symmetry
+/// read off the plot are sheared. Empty for orthogonal planes.
+fn oblique_note(lat: &[[f64; 3]; 3], i: usize, j: usize) -> String {
+    let a = lattice_vec(lat, i);
+    let b = lattice_vec(lat, j);
+    let angle = (a.dot(&b) / (a.norm() * b.norm()))
+        .clamp(-1.0, 1.0)
+        .acos()
+        .to_degrees();
+    if (angle - 90.0).abs() > 0.1 {
+        format!(" — in-plane angle {angle:.1}°, axes not orthogonal: map is sheared")
+    } else {
+        String::new()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Fractional axis slice extraction
 // ---------------------------------------------------------------------------
@@ -209,7 +227,7 @@ pub fn extract_slice(
                     grid[iy][ix] = density[chgcar.index(ix, iy, iz)];
                 }
             }
-            let ann = format!("(001) z = {:.3}", position);
+            let ann = format!("(001) z = {:.3}{}", position, oblique_note(lat, 0, 1));
             (
                 ny,
                 nx,
@@ -229,7 +247,7 @@ pub fn extract_slice(
                     grid[iz][ix] = density[chgcar.index(ix, iy, iz)];
                 }
             }
-            let ann = format!("(010) y = {:.3}", position);
+            let ann = format!("(010) y = {:.3}{}", position, oblique_note(lat, 0, 2));
             (
                 nz,
                 nx,
@@ -249,7 +267,7 @@ pub fn extract_slice(
                     grid[iz][iy] = density[chgcar.index(ix, iy, iz)];
                 }
             }
-            let ann = format!("(100) x = {:.3}", position);
+            let ann = format!("(100) x = {:.3}{}", position, oblique_note(lat, 1, 2));
             (
                 nz,
                 ny,

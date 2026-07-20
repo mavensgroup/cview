@@ -79,6 +79,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
             position: [x, y, z],
             original_index: i,
             oxidation: None,
+            occupancy: 1.0,
         });
     }
 
@@ -91,6 +92,11 @@ pub fn parse(path: &str) -> io::Result<Structure> {
 }
 
 pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
+    if structure.atoms.iter().any(|a| a.occupancy < 0.99) {
+        crate::utils::console::log_warn(
+            "XYZ format has no occupancy field — partial occupancies are discarded on export",
+        );
+    }
     let mut file = std::fs::File::create(path)?;
 
     // 1. Number of atoms
@@ -190,6 +196,7 @@ mod tests {
                 position: [1.0, 2.0, 3.0],
                 original_index: 0,
                 oxidation: None,
+                occupancy: 1.0,
             }],
             formula: String::new(),
             is_periodic: true,

@@ -19,6 +19,17 @@ pub struct Atom {
     /// oxidation state (POSCAR, QE, XYZ).
     #[serde(default)]
     pub oxidation: Option<i32>,
+    /// Site occupancy in [0, 1]. 1.0 (full) for formats without an
+    /// occupancy field (POSCAR, QE, XYZ); CIF fills it from
+    /// `_atom_site_occupancy`. Consumers weight per-site contributions by
+    /// it: XRD scales the atomic form factor (virtual-crystal
+    /// approximation), BVS scales each neighbor's bond valence.
+    #[serde(default = "default_occupancy")]
+    pub occupancy: f64,
+}
+
+fn default_occupancy() -> f64 {
+    1.0
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

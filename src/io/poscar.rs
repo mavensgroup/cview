@@ -164,6 +164,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
                 position,
                 original_index: atom_id,
                 oxidation: None,
+                occupancy: 1.0,
             });
             atom_id += 1;
         }
@@ -186,6 +187,11 @@ pub fn parse(path: &str) -> io::Result<Structure> {
 }
 
 pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
+    if structure.atoms.iter().any(|a| a.occupancy < 0.99) {
+        crate::utils::console::log_warn(
+            "POSCAR format has no occupancy field — partial occupancies are discarded on export",
+        );
+    }
     let mut file = std::fs::File::create(path)?;
 
     // 1. Comment
@@ -358,12 +364,14 @@ mod tests {
                     position: [0.0, 0.0, 0.0],
                     original_index: 0,
                     oxidation: None,
+                    occupancy: 1.0,
                 },
                 Atom {
                     element: "Cl".into(),
                     position: [2.5, 2.5, 2.5],
                     original_index: 1,
                     oxidation: None,
+                    occupancy: 1.0,
                 },
             ],
             formula: String::new(),

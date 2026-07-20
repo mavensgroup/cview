@@ -415,28 +415,9 @@ fn build_structure(data: SprkkrData) -> io::Result<Structure> {
     let mut sorted_ids: Vec<usize> = data.site_positions.keys().cloned().collect();
     sorted_ids.sort();
 
+    let mut cpa_sites = 0usize;
     for site_id in sorted_ids {
         if let Some(site_pos) = data.site_positions.get(&site_id) {
-            // Get occupation for this site
-            let occupations = data.site_occupation.get(&site_id);
-
-            // Find the type with highest concentration (for pure sites, there's only one)
-            let type_id = if let Some(occs) = occupations {
-                occs.iter()
-                    .max_by(|a, b| a.concentration.partial_cmp(&b.concentration).unwrap())
-                    .map(|o| o.type_id)
-                    .unwrap_or(1)
-            } else {
-                1 // Default to type 1
-            };
-
-            // Get element symbol
-            let element = data
-                .type_data
-                .get(&type_id)
-                .map(|(el, _)| el.clone())
-                .unwrap_or_else(|| String::from("X"));
-
             // Convert position to Cartesian if needed
             let position = if data.coord_system == CoordSystem::Direct {
                 // Fractional to Cartesian
@@ -450,13 +431,43 @@ fn build_structure(data: SprkkrData) -> io::Result<Structure> {
                 ]
             };
 
-            atoms.push(Atom {
-                element,
-                position,
-                original_index: atoms.len(),
-                oxidation: None,
-            });
+            // ALL occupants of the site, majority first. A CPA disorder
+            // site (NOQ > 1, e.g. Fe 0.7 / Cr 0.3) becomes coincident
+            // atoms with occupancy = concentration — XRD and BVS weight
+            // them per the virtual-crystal approximation. Previously only
+            // the majority species survived, with occupancy 1.0.
+            let mut occs: Vec<(usize, f64)> = data
+                .site_occupation
+                .get(&site_id)
+                .map(|v| v.iter().map(|o| (o.type_id, o.concentration)).collect())
+                .unwrap_or_else(|| vec![(1, 1.0)]);
+            occs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            if occs.len() > 1 {
+                cpa_sites += 1;
+            }
+
+            for (type_id, concentration) in occs {
+                let element = data
+                    .type_data
+                    .get(&type_id)
+                    .map(|(el, _)| el.clone())
+                    .unwrap_or_else(|| String::from("X"));
+
+                atoms.push(Atom {
+                    element,
+                    position,
+                    original_index: atoms.len(),
+                    oxidation: None,
+                    occupancy: concentration.clamp(0.0, 1.0),
+                });
+            }
         }
+    }
+
+    if cpa_sites > 0 {
+        crate::utils::console::log_info(&format!(
+            "SPR-KKR: {cpa_sites} CPA disorder site(s) imported as coincident atoms with occupancy = concentration"
+        ));
     }
 
     // Generate formula
@@ -483,6 +494,11 @@ fn build_structure(data: SprkkrData) -> io::Result<Structure> {
 // ============================================================================
 
 pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
+    if structure.atoms.iter().any(|a| a.occupancy < 0.99) {
+        crate::utils::console::log_warn(
+            "SPR-KKR format has no occupancy field — partial occupancies are discarded on export",
+        );
+    }
     let mut file = File::create(path)?;
 
     // Prepare data

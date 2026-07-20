@@ -767,21 +767,25 @@ impl Polyhedron {
     }
 }
 
-/// Robinson 1971 Table 1: d₀/V^(1/3) for regular polyhedra of unit volume.
-/// Returns None for coordination numbers without a standard regular reference.
+/// d₀/V^(1/3) for the regular reference polyhedron: d₀ is the
+/// center-to-vertex distance of the regular polyhedron with the same
+/// volume (Robinson et al., Science 172, 567 (1971)).
+/// Exact closed forms — magic-number decimals here have historically
+/// disagreed with their own derivation comments.
+/// Returns None for coordination numbers without a standard reference.
 fn regular_d0_factor(cn: usize) -> Option<f64> {
     match cn {
-        // Regular tetrahedron: V = (8/3)(d/√3)³  =>  d₀ = (3V/8)^(1/3) × √3
-        // Numerically: d₀ = k × V^(1/3), k = √3 × (3/8)^(1/3) ≈ 1.2408
-        4 => Some(1.2408),
-        // Regular octahedron: V = (4/3)d³·(1/√2) × 2 = ...
-        // d₀ = (3V/4)^(1/3) × ... k ≈ 0.9086
-        6 => Some(0.9086),
-        // Cube (8-coordinate): d is half the body diagonal.
-        // V = (2d/√3)³ => d₀ = (V^(1/3) × √3 / 2), k = √3/2 ≈ 0.8660
-        8 => Some(0.8660),
-        // Regular icosahedron (12-coordinate): k ≈ 0.6511
-        12 => Some(0.6511),
+        // Regular tetrahedron: V = (8/(3√3)) d³·(3/8) ⇒ d₀ = √3·(3/8)^(1/3)·V^(1/3) ≈ 1.24902
+        4 => Some(3.0_f64.sqrt() * (3.0 / 8.0_f64).powf(1.0 / 3.0)),
+        // Regular octahedron: V = (4/3) d³ ⇒ d₀ = (3/4)^(1/3)·V^(1/3) ≈ 0.90856
+        6 => Some(0.75_f64.powf(1.0 / 3.0)),
+        // Cube: d = half body diagonal of side V^(1/3) ⇒ d₀ = (√3/2)·V^(1/3) ≈ 0.86603
+        8 => Some(3.0_f64.sqrt() / 2.0),
+        // CN 12: intentionally unsupported. Robinson 1971 defines ⟨λ⟩ for
+        // tetrahedra and octahedra (the cube is a conventional extension);
+        // for CN 12 the reference is ambiguous — icosahedron k = 0.73329
+        // vs cuboctahedron k = 0.75141 differ by 5% in d₀ (≈10% in ⟨λ⟩),
+        // far larger than the physical signal. No value beats a wrong one.
         _ => None,
     }
 }
@@ -808,11 +812,13 @@ fn bond_angle_variance(
     let center = v(atoms[center_idx].cart_pos);
 
     // For each neighbor pair, compute the angle vertex-center-vertex'.
-    // Robinson's original formula averages over nearest-neighbor angles
-    // only (those that define edges of the polyhedron). A common
-    // simplification — and what VESTA reports — is to average over ALL
-    // pairs; this differs from Robinson's original by a constant scale
-    // but is the quantity most users expect. We follow VESTA here.
+    // Robinson's σ² is defined over the EDGE angles of the polyhedron
+    // (nearest-neighbor vertex pairs), not all pairs — and that is also
+    // what VESTA reports. The selection below (m smallest of all pair
+    // angles, m = edge count) implements exactly that; it can mis-select
+    // for extreme distortions where an edge angle exceeds a non-edge one,
+    // which is accepted — such polyhedra are far outside the regime where
+    // σ² is a meaningful regularity metric anyway.
     let mut angles = Vec::with_capacity(neighbors.len() * (neighbors.len() - 1) / 2);
     for i in 0..neighbors.len() {
         for j in (i + 1)..neighbors.len() {
@@ -1097,6 +1103,48 @@ mod tests {
             "regular octahedron volume should be 4/3, got {}",
             m.volume
         );
+        let qe = m.quadratic_elongation.expect("⟨λ⟩ defined for CN=6");
+        assert!(
+            (qe - 1.0).abs() < 1e-6,
+            "regular octahedron must have ⟨λ⟩ = 1, got {qe}"
+        );
+    }
+
+    /// PM-1 acceptance: a PERFECT tetrahedron must give ⟨λ⟩ = 1 to 1e-6.
+    /// The old hardcoded k = 1.2408 (vs exact √3·(3/8)^(1/3) = 1.24902)
+    /// shifted every tetrahedral ⟨λ⟩ by +1.3% — larger than the physical
+    /// signal (λ−1 is typically 0.001–0.05).
+    #[test]
+    fn regular_tetrahedron_unit_elongation() {
+        let s = 1.0 / 3.0_f64.sqrt();
+        let atoms = vec![
+            mock_atom("Si", 0.0, 0.0, 0.0),
+            mock_atom("O", s, s, s),
+            mock_atom("O", s, -s, -s),
+            mock_atom("O", -s, s, -s),
+            mock_atom("O", -s, -s, s),
+        ];
+        let neighbor_cart: Vec<[f64; 3]> = (1..=4).map(|i| atoms[i].cart_pos).collect();
+        let neighbor_indices: Vec<usize> = (1..=4).collect();
+        let faces = convex_hull_3d([0.0; 3], &neighbor_cart, &neighbor_indices);
+        let poly = Polyhedron {
+            center_idx: 0,
+            neighbor_indices,
+            faces,
+            coordination_number: 4,
+        };
+        let m = poly.metrics(&atoms);
+        let qe = m.quadratic_elongation.expect("⟨λ⟩ defined for CN=4");
+        assert!(
+            (qe - 1.0).abs() < 1e-6,
+            "regular tetrahedron must have ⟨λ⟩ = 1, got {qe}"
+        );
+    }
+
+    /// CN 12 has no unambiguous regular reference — ⟨λ⟩ must be None.
+    #[test]
+    fn cn12_elongation_not_reported() {
+        assert!(regular_d0_factor(12).is_none());
     }
 
     #[test]

@@ -51,7 +51,10 @@ pub fn structure_summary(structure: &Structure, filename: &str) -> String {
 
 pub fn bvs_analysis(structure: &Structure) -> String {
   let r = analyze_structure(structure);
-  let quality = BVSQuality::from_deviation(r.mean_abs_dev);
+  // Quality banner is banded on the GII — that's what the literature bands
+  // (Brown 2002: < 0.1 stable, > 0.2 strained) are defined on. Mean |Δ| is
+  // still reported as a statistic below.
+  let quality = BVSQuality::from_deviation(r.gii);
   let mut out = String::new();
 
   out.push_str("═══════════════════════════════════════════════════════════════\n");
@@ -145,7 +148,7 @@ pub fn bvs_analysis(structure: &Structure) -> String {
   }
 
   out.push_str(
-    "\nSource: IUCr = bvparm2020 table   B&OK = Brese-O'Keeffe fallback\n",
+    "\nSource: IUCr = bvparm2020 exact   IUCr* = substituted valence   B&OK = O'Keeffe-Brese estimate\n",
   );
   out.push_str(
     "Δ      = signed deviation BVS − expected (positive = over-bonded)\n",
@@ -157,36 +160,46 @@ pub fn bvs_analysis(structure: &Structure) -> String {
     "GII    = Global Instability Index √⟨Δ²⟩ over validated atoms\n",
   );
 
-  if matches!(quality, BVSQuality::Poor | BVSQuality::Acceptable) {
-    out.push_str("\n⚠ RECOMMENDATIONS:\n");
-    if r.mean_abs_dev > 0.5 {
-      out.push_str("• Likely incorrect atom positions or wrong oxidation states\n");
-      out.push_str("• If only the asymmetric unit was provided, expand symmetry first\n");
-      out.push_str("• Use 'View → Show Full Unit Cell' to verify periodic images\n");
-    } else {
-      out.push_str("• Mild distortion — common in DFT-relaxed and experimental structures\n");
-    }
-    let bok_count = r
+  // Factual notes about the calculation only — no interpretation of the
+  // deviations. What a large Δ *means* is context-dependent (surface atoms
+  // of a slab are legitimately under-bonded, ideal high-symmetry phases can
+  // be genuinely strained, a bad refinement is simply wrong), and guessing
+  // the cause helps one audience while misleading another. The numbers
+  // speak; these notes only qualify how they were obtained.
+  let mut notes: Vec<String> = Vec::new();
+  {
+    use crate::physics::bond_valence::ParamSource;
+    let bok = r
       .atoms
       .iter()
-      .filter(|a| {
-        matches!(
-          a.source,
-          crate::physics::bond_valence::ParamSource::BresOKeeffe
-        )
-      })
+      .filter(|a| matches!(a.source, ParamSource::BresOKeeffe))
       .count();
-    if bok_count > r.atoms.len() / 2 {
-      out.push_str(
-        "• Most bonds rely on the Brese-O'Keeffe fallback — table coverage is sparse here\n",
-      );
+    if bok > 0 {
+      notes.push(format!(
+        "{bok} atom(s) use estimated (B&OK) parameters — R0 accurate to ~±0.05 Å (~15% in valence)"
+      ));
+    }
+    let substituted = r
+      .atoms
+      .iter()
+      .filter(|a| matches!(a.source, ParamSource::IucrSubstituted))
+      .count();
+    if substituted > 0 {
+      notes.push(format!(
+        "{substituted} atom(s) use IUCr parameters for a different valence of the same pair (IUCr*)"
+      ));
     }
     let unknown = r.atoms.iter().filter(|a| a.is_unknown()).count();
     if unknown > 0 {
-      out.push_str(&format!(
-        "• {} atom(s) have no expected oxidation state — pass explicit charges in CIF if known\n",
-        unknown
+      notes.push(format!(
+        "{unknown} atom(s) have no reference oxidation state and are excluded from GII"
       ));
+    }
+  }
+  if !notes.is_empty() {
+    out.push_str("\nNotes:\n");
+    for n in &notes {
+      out.push_str(&format!("• {n}\n"));
     }
   }
 

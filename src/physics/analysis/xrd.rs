@@ -1,4 +1,16 @@
 // src/physics/xrd.rs
+//
+// Powder XRD pattern simulation.
+//
+// Model scope (standard simplifications — keep the docs/paper text in sync):
+//   - Neutral-atom Cromer-Mann form factors (no ionic form factors, no
+//     anomalous dispersion f'/f'')
+//   - Single global isotropic Debye-Waller B factor
+//   - Kα₁ only (no Kα₂ doublet)
+//   - Constant-FWHM display broadening (no Caglioti U,V,W profile)
+//   - Occupancy-weighted form factors (virtual-crystal approximation):
+//     correct Bragg intensities for substitutional disorder, no diffuse
+//     scattering / short-range order
 
 use crate::model::elements;
 use crate::model::structure::Structure;
@@ -173,7 +185,12 @@ pub fn calculate_pattern(structure: &Structure, settings: &XRDSettings) -> Vec<X
                 }
 
                 for (atom, &sp) in structure.atoms.iter().zip(&species_of) {
-                    let f_eff = f0_by_species[sp] * debye;
+                    // Occupancy-weighted form factor (virtual-crystal
+                    // approximation): a half-occupied site scatters with
+                    // half its f0. Exact for the Bragg intensities of a
+                    // substitutionally disordered crystal without
+                    // short-range order (diffuse scattering not modelled).
+                    let f_eff = f0_by_species[sp] * debye * atom.occupancy;
 
                     // Phase = 2 * PI * (g_vector dot position_vector)
                     let pos = Vector3::from(atom.position);
@@ -201,8 +218,10 @@ pub fn calculate_pattern(structure: &Structure, settings: &XRDSettings) -> Vec<X
 
                 let final_intensity = intensity_sq * lp;
 
-                // Threshold to ignore extremely weak peaks
-                if final_intensity > 1e-4 {
+                // No absolute intensity cut here: an absolute threshold's
+                // effect would depend on atom count and Z. Weak peaks are
+                // dropped after normalization instead (scale-free).
+                if final_intensity > 0.0 {
                     raw_peaks.push(XRDPattern {
                         two_theta: two_theta_deg,
                         intensity: final_intensity,
@@ -227,9 +246,26 @@ pub fn calculate_pattern(structure: &Structure, settings: &XRDSettings) -> Vec<X
 
     for peak in raw_peaks {
         match merged_peaks.last_mut() {
-            // If peaks are within 0.05 degrees, consider them the same peak
+            // If peaks are within 0.05 degrees, consider them the same peak.
+            // The merged position is the intensity-weighted mean — anchoring
+            // it at the first member's 2θ let chains of close peaks accrete
+            // past the window while keeping a slightly wrong position.
+            //
+            // Note on `multiplicity`: symmetry-equivalent reflections land at
+            // identical 2θ with identical |F|², so this count reproduces the
+            // true multiplicity — but ACCIDENTALLY coincident non-equivalent
+            // reflections (e.g. cubic (333)/(511)) are also folded into one
+            // peak. Acceptable for a powder pattern; the hkl label list
+            // shows both families.
             Some(last) if (peak.two_theta - last.two_theta).abs() < 0.05 => {
-                last.intensity += peak.intensity;
+                let w_total = last.intensity + peak.intensity;
+                last.two_theta = (last.two_theta * last.intensity
+                    + peak.two_theta * peak.intensity)
+                    / w_total;
+                last.d_spacing = (last.d_spacing * last.intensity
+                    + peak.d_spacing * peak.intensity)
+                    / w_total;
+                last.intensity = w_total;
                 last.multiplicity += 1;
                 // Add index to list if unique (limit to 6 to save UI space)
                 if last.hkl.len() < 6 && !last.hkl.contains(&peak.hkl[0]) {
@@ -240,13 +276,16 @@ pub fn calculate_pattern(structure: &Structure, settings: &XRDSettings) -> Vec<X
         }
     }
 
-    // 8. Normalize intensities (0 to 100)
+    // 8. Normalize intensities (0 to 100) and drop peaks below a relative
+    //    threshold (10⁻⁴ of the strongest peak) — scale-free, unlike the
+    //    old absolute cut whose effect depended on atom count and Z.
     let max_i = merged_peaks.iter().map(|p| p.intensity).fold(0.0, f64::max);
 
     if max_i > 0.0 {
         for p in &mut merged_peaks {
             p.intensity = (p.intensity / max_i) * 100.0;
         }
+        merged_peaks.retain(|p| p.intensity > 0.01);
     }
 
     merged_peaks
@@ -268,6 +307,7 @@ mod tests {
                     position: p,
                     original_index: i,
                     oxidation: None,
+                    occupancy: 1.0,
                 })
                 .collect(),
             formula: String::new(),
@@ -418,6 +458,49 @@ mod tests {
         assert!(
             has_peak_near(20.86),
             "Quartz missing (100) peak near 20.86°"
+        );
+    }
+
+    /// Occupancy weighting: bcc Fe has the (100) reflection extinct
+    /// (f - f = 0). Half-occupying the body-center site breaks the
+    /// extinction (f - 0.5f ≠ 0) — the superstructure peak must appear.
+    /// This is the virtual-crystal signature of partial ordering.
+    #[test]
+    fn test_occupancy_breaks_bcc_extinction() {
+        let a = 2.8665;
+        let lat = [[a, 0.0, 0.0], [0.0, a, 0.0], [0.0, 0.0, a]];
+        let make = |occ: f64| {
+            let mut s = make_structure(
+                lat,
+                vec![("Fe", [0.0, 0.0, 0.0]), ("Fe", [a / 2.0, a / 2.0, a / 2.0])],
+            );
+            s.atoms[1].occupancy = occ;
+            s
+        };
+        let settings = XRDSettings {
+            min_2theta: 20.0,
+            max_2theta: 60.0,
+            ..Default::default()
+        };
+        // 2θ(100) ≈ 31.2° at Cu Kα.
+        let peak_100 = |peaks: &[XRDPattern]| {
+            peaks
+                .iter()
+                .find(|p| (p.two_theta - 31.2).abs() < 0.3)
+                .map(|p| p.intensity)
+        };
+
+        let full = calculate_pattern(&make(1.0), &settings);
+        assert!(
+            peak_100(&full).is_none(),
+            "bcc (100) must be extinct at full occupancy"
+        );
+
+        let partial = calculate_pattern(&make(0.5), &settings);
+        let i100 = peak_100(&partial).expect("(100) must appear at occupancy 0.5");
+        assert!(
+            i100 > 1.0,
+            "(100) superstructure peak too weak: {i100}"
         );
     }
 

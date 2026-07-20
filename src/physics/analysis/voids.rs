@@ -12,7 +12,7 @@ use std::fmt;
 /// Standard molecular probes for void/porosity calculation
 /// Based on kinetic diameters from gas adsorption experiments
 pub const PRESET_PROBES: &[(&str, f64)] = &[
-    ("He", 1.20),        // Helium pycnometry standard
+    ("He", 1.30),        // Kinetic diameter 2.60 Å (consistent with N2/CO2/CH4 rows)
     ("H₂", 1.45),        // Hydrogen storage
     ("H₂O", 1.32),       // Water accessibility
     ("CO₂", 1.65),       // Carbon capture
@@ -128,7 +128,7 @@ impl Default for VoidConfig {
     fn default() -> Self {
         Self {
             grid_resolution: 0.25,          // 0.25 Å - good balance
-            probe_radius: 1.20,             // Helium probe (standard)
+            probe_radius: 1.30,             // Helium probe (kinetic diameter 2.60 Å)
             radii_scale: 1.0,               // No scaling
             radius_type: RadiusType::Ionic, // Best for most crystals
             max_grid_points: 10_000_000,    // ~10M points limit
@@ -140,7 +140,7 @@ impl VoidConfig {
     /// Configuration for helium pycnometry (standard density measurement)
     pub fn helium_probe() -> Self {
         Self {
-            probe_radius: 1.20,
+            probe_radius: 1.30, // He kinetic diameter 2.60 Å
             radius_type: RadiusType::Ionic,
             ..Default::default()
         }
@@ -167,7 +167,7 @@ impl VoidConfig {
     /// For molecular crystals (use vdW radii)
     pub fn molecular_crystal() -> Self {
         Self {
-            probe_radius: 1.20,
+            probe_radius: 1.30, // He probe (kinetic diameter 2.60 Å)
             radius_type: RadiusType::VanDerWaals,
             ..Default::default()
         }
@@ -314,6 +314,17 @@ pub fn calculate_voids(structure: &Structure, config: VoidConfig) -> Result<Void
         })
         .collect();
 
+    // Component-wise fractional rounding is an exact minimum image only
+    // for orthogonal cells; for oblique cells the true nearest image can
+    // be a neighboring offset. Detect obliqueness once and only then pay
+    // for the 27-offset scan in the hot loop.
+    let a_col = basis.column(0);
+    let b_col = basis.column(1);
+    let c_col = basis.column(2);
+    let oblique = a_col.dot(&b_col).abs() > 1e-9
+        || a_col.dot(&c_col).abs() > 1e-9
+        || b_col.dot(&c_col).abs() > 1e-9;
+
     // --- Parallel Grid Sampling ---
     // Parallelize over z-slices for good load balancing
     let results: Vec<(f64, [f64; 3], usize)> = (0..nz)
@@ -344,9 +355,26 @@ pub fn calculate_voids(structure: &Structure, config: VoidConfig) -> Result<Void
                         df.y -= df.y.round();
                         df.z -= df.z.round();
 
-                        // Convert to Cartesian for distance measurement
-                        let d_cart = basis * df;
-                        let center_dist = d_cart.norm();
+                        // Convert to Cartesian for distance measurement.
+                        // Oblique cells: the rounded image may not be the
+                        // nearest — check the 27 offsets around it (V-1).
+                        let center_dist = if oblique {
+                            let mut min2 = f64::MAX;
+                            for ox in -1..=1 {
+                                for oy in -1..=1 {
+                                    for oz in -1..=1 {
+                                        let d = basis
+                                            * (df + Vector3::new(
+                                                ox as f64, oy as f64, oz as f64,
+                                            ));
+                                        min2 = min2.min(d.norm_squared());
+                                    }
+                                }
+                            }
+                            min2.sqrt()
+                        } else {
+                            (basis * df).norm()
+                        };
 
                         // Distance to atom surface = distance to center - radius
                         let surface_dist = center_dist - atom.radius;

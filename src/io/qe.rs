@@ -107,6 +107,7 @@ fn parse_output(content: &str) -> io::Result<Structure> {
                         position: pos,
                         original_index: atoms.len(),
                         oxidation: None,
+                        occupancy: 1.0,
                     });
                 }
                 i += 1;
@@ -249,6 +250,7 @@ fn parse_input(content: &str) -> io::Result<Structure> {
                         position: pos,
                         original_index: atoms.len(),
                         oxidation: None,
+                        occupancy: 1.0,
                     });
                 }
                 i += 1;
@@ -489,6 +491,11 @@ fn contains_celldm_one(line: &str) -> bool {
 }
 
 pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
+    if structure.atoms.iter().any(|a| a.occupancy < 0.99) {
+        crate::utils::console::log_warn(
+            "QE input format has no occupancy field — partial occupancies are discarded on export",
+        );
+    }
     let mut file = std::fs::File::create(path)?;
 
     // Basic Control Block
@@ -633,6 +640,7 @@ mod tests {
                 position: [1.0, 2.0, 3.0],
                 original_index: 0,
                 oxidation: None,
+                occupancy: 1.0,
             }],
             formula: String::new(),
             is_periodic: true,

@@ -19,7 +19,10 @@ use std::path::Path;
 ///   precedence rule), otherwise from component_0 of `_atom_site_label`.
 ///
 /// Not yet supported (silently ignored):
-/// - Partial occupancy (`_atom_site_occupancy`): atoms are kept regardless.
+/// - Partial occupancy (`_atom_site_occupancy`): parsed onto
+///   `Atom.occupancy` (default 1.0). Split sites — coincident positions
+///   with different elements — are kept as separate atoms; XRD and BVS
+///   weight contributions by occupancy (virtual-crystal approximation).
 /// - Cartesian coordinates (`_atom_site_Cartn_{x,y,z}`).
 /// - Hall-symbol-only CIFs (no explicit symop loop): only the identity is
 ///   applied, falling through to the centering fallback if an H-M symbol is
@@ -54,6 +57,11 @@ pub fn parse(path: &str) -> io::Result<Structure> {
 
     let mut in_loop = false;
     let mut current_loop_headers: Vec<String> = Vec::new();
+
+    // Sites with `_atom_site_occupancy` < 1: the Atom model has no occupancy
+    // field, so downstream analyses (BVS, XRD) assume full occupancy. We at
+    // least tell the user at import time.
+    let mut partial_occupancy_sites = 0usize;
 
     // Per CIF spec (IUCr, Hall/Allen/Brown 1991), a `;` at column 1 opens
     // a multi-line text field; the next line beginning with `;` at column 1
@@ -181,6 +189,9 @@ pub fn parse(path: &str) -> io::Result<Structure> {
             }
         } else if is_atom_loop {
             if let Some(atom) = parse_atom_row(trimmed, &current_loop_headers) {
+                if atom.occupancy < 0.99 {
+                    partial_occupancy_sites += 1;
+                }
                 base_atoms.push(atom);
             }
         } else if is_atom_type_loop {
@@ -230,6 +241,11 @@ pub fn parse(path: &str) -> io::Result<Structure> {
     // --- Expand asymmetric unit with symmetry ---
     let mut final_atoms: Vec<Atom> = Vec::new();
     let epsilon = 1e-3;
+    // Coincident sites carrying DIFFERENT elements (split-site disorder,
+    // e.g. Fe/Cr sharing a position) are KEPT — with per-atom occupancy
+    // now on the model, XRD/BVS weight them correctly. Dedup only removes
+    // same-element duplicates (symmetry images of a special position).
+    let mut split_site_pairs = 0usize;
 
     for atom in &base_atoms {
         for op in &symmetry_ops {
@@ -239,22 +255,35 @@ pub fn parse(path: &str) -> io::Result<Structure> {
             let wy = new_pos[1].rem_euclid(1.0);
             let wz = new_pos[2].rem_euclid(1.0);
 
-            let is_duplicate = final_atoms.iter().any(|existing| {
+            let mut is_duplicate = false;
+            let mut coincident_other_element = false;
+            for existing in &final_atoms {
                 let dx = (existing.position[0] - wx).abs();
                 let dy = (existing.position[1] - wy).abs();
                 let dz = (existing.position[2] - wz).abs();
-                (dx < epsilon || (1.0 - dx) < epsilon)
+                let coincident = (dx < epsilon || (1.0 - dx) < epsilon)
                     && (dy < epsilon || (1.0 - dy) < epsilon)
-                    && (dz < epsilon || (1.0 - dz) < epsilon)
-            });
+                    && (dz < epsilon || (1.0 - dz) < epsilon);
+                if coincident {
+                    if existing.element == atom.element {
+                        is_duplicate = true;
+                        break;
+                    }
+                    coincident_other_element = true;
+                }
+            }
 
             if !is_duplicate {
+                if coincident_other_element {
+                    split_site_pairs += 1;
+                }
                 let idx = final_atoms.len();
                 final_atoms.push(Atom {
                     element: atom.element.clone(),
                     position: [wx, wy, wz],
                     original_index: idx,
                     oxidation: atom.oxidation,
+                    occupancy: atom.occupancy,
                 });
             }
         }
@@ -281,6 +310,17 @@ pub fn parse(path: &str) -> io::Result<Structure> {
 
     for atom in &mut final_atoms {
         atom.position = frac_to_cart(atom.position, lattice);
+    }
+
+    if partial_occupancy_sites > 0 {
+        crate::utils::console::log_info(&format!(
+            "CIF: {partial_occupancy_sites} site(s) have occupancy < 1 — XRD form factors and BVS bond valences are occupancy-weighted (virtual-crystal approximation)"
+        ));
+    }
+    if split_site_pairs > 0 {
+        crate::utils::console::log_info(&format!(
+            "CIF: {split_site_pairs} split-site position(s) kept with multiple species — contributions are occupancy-weighted"
+        ));
     }
 
     Ok(Structure {
@@ -488,6 +528,7 @@ fn parse_atom_row(line: &str, headers: &[String]) -> Option<Atom> {
     let mut fx = None;
     let mut fy = None;
     let mut fz = None;
+    let mut occupancy: Option<f64> = None;
 
     for (i, header) in headers.iter().enumerate() {
         if i >= parts.len() {
@@ -508,6 +549,10 @@ fn parse_atom_row(line: &str, headers: &[String]) -> Option<Atom> {
             fy = Some(parse_cif_float(val));
         } else if header.contains("_atom_site_fract_z") {
             fz = Some(parse_cif_float(val));
+        } else if header.contains("_atom_site_occupancy") {
+            // "0.5(2)" parses as 0.5; "." / "?" stay None (full occupancy).
+            let cleaned: String = val.chars().take_while(|c| *c != '(').collect();
+            occupancy = cleaned.parse::<f64>().ok();
         }
     }
 
@@ -531,6 +576,7 @@ fn parse_atom_row(line: &str, headers: &[String]) -> Option<Atom> {
         position: [fx, fy, fz],
         original_index: 0,
         oxidation,
+        occupancy: occupancy.unwrap_or(1.0).clamp(0.0, 1.0),
     })
 }
 
@@ -770,6 +816,7 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
     writeln!(file, " _atom_site_fract_x")?;
     writeln!(file, " _atom_site_fract_y")?;
     writeln!(file, " _atom_site_fract_z")?;
+    writeln!(file, " _atom_site_occupancy")?;
 
     use crate::utils::linalg::cart_to_frac;
 
@@ -778,12 +825,13 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
         let (u, v, w) = (frac[0], frac[1], frac[2]);
         writeln!(
             file,
-            " {}{} {:.6} {:.6} {:.6}",
+            " {}{} {:.6} {:.6} {:.6} {:.4}",
             atom.element,
             i + 1,
             u,
             v,
-            w
+            w,
+            atom.occupancy
         )?;
     }
 

@@ -81,6 +81,7 @@ impl ChgcarData {
                 position: a.frac_coords,
                 original_index: i,
                 oxidation: None,
+                occupancy: 1.0,
             })
             .collect();
         crate::model::structure::Structure {
