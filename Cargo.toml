@@ -2,7 +2,7 @@
 
 [package]
 name = "cview"
-version = "1.0"
+version = "1.0.0"
 edition = "2021"
 license = "MIT"  # Or "GPL-3.0", "Apache-2.0", etc.
 description = "Crystal Structure Visualization & Analysis"

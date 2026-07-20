@@ -23,7 +23,9 @@ jobs:
       - name: Get version from tag
         id: get_version
         run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
+          VERSION=${GITHUB_REF#refs/tags/}
+          VERSION=${VERSION#v}
+          VERSION=${VERSION#test-v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Create Release
@@ -72,11 +74,13 @@ jobs:
 
       - name: Bundle DLLs and Assets
         run: |
+          set -e
           mkdir -p dist
           cp target/x86_64-pc-windows-gnu/release/cview.exe dist/
 
           # Bundle Dependencies (DLLs)
-          ldd target/x86_64-pc-windows-gnu/release/cview.exe | grep '/ucrt64' | awk '{print $3}' | xargs -I '{}' cp -u '{}' dist/
+          ldd target/x86_64-pc-windows-gnu/release/cview.exe \
+            | grep '/ucrt64' | awk '{print $3}' | xargs -I '{}' cp -u '{}' dist/
 
           # Bundle Assets (Schemas & Icons)
           mkdir -p dist/share/glib-2.0/schemas
@@ -86,6 +90,12 @@ jobs:
           mkdir -p dist/share/icons
           cp -r /ucrt64/share/icons/Adwaita dist/share/icons/
           cp -r /ucrt64/share/icons/hicolor dist/share/icons/
+
+          # GDK pixbuf loaders (needed for PNG/SVG icon loading at runtime)
+          if [ -d /ucrt64/lib/gdk-pixbuf-2.0 ]; then
+            mkdir -p dist/lib
+            cp -r /ucrt64/lib/gdk-pixbuf-2.0 dist/lib/
+          fi
 
       - name: Create Installer
         run: |
@@ -108,7 +118,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install Dependencies
-        # Added adwaita-icon-theme specifically
         run: brew install gtk4 libadwaita adwaita-icon-theme
 
       - name: Build
@@ -116,8 +125,11 @@ jobs:
 
       - name: Bundle App
         run: |
+          set -euo pipefail
+
           APP_NAME="CView"
           APP_DIR="$APP_NAME.app"
+          BREW_PREFIX=$(brew --prefix)
 
           mkdir -p "$APP_DIR/Contents/MacOS"
           mkdir -p "$APP_DIR/Contents/Resources"
@@ -127,55 +139,103 @@ jobs:
           cp target/release/cview "$APP_DIR/Contents/MacOS/cview-bin"
 
           # --- Manual Bundling Logic ---
+
+          # Resolve an install-name reported by otool to a real file on disk.
+          # Homebrew bottles increasingly use @rpath/... which is not a real path.
+          resolve_dep() {
+            local dep="$1"
+            case "$dep" in
+              @rpath/*)
+                local base
+                base=$(basename "${dep#@rpath/}")
+                find "$BREW_PREFIX/lib" "$BREW_PREFIX/opt" \
+                     -name "$base" -type f 2>/dev/null | head -n1
+                ;;
+              *)
+                echo "$dep"
+                ;;
+            esac
+          }
+
           bundle_libs() {
             local binary="$1"
-            local deps=$(otool -L "$binary" | awk '/\t+/ {print $1}' | grep -vE "^/usr/lib|^/System/Library|^@executable_path|^@loader_path")
+            local deps
+            # tail -n +2 drops the binary's own LC_ID_DYLIB line
+            deps=$(otool -L "$binary" | tail -n +2 | awk '{print $1}' \
+                    | grep -vE "^/usr/lib|^/System/Library|^@executable_path|^@loader_path" || true)
+
             for dep in $deps; do
-              local lib_name=$(basename "$dep")
-              local target_path="$APP_DIR/Contents/Libs/$lib_name"
+              local lib_name real_path target_path
+              lib_name=$(basename "$dep")
+              target_path="$APP_DIR/Contents/Libs/$lib_name"
+
               if [ ! -f "$target_path" ]; then
+                real_path=$(resolve_dep "$dep")
+                if [ -z "$real_path" ] || [ ! -f "$real_path" ]; then
+                  echo "WARNING: could not resolve $dep -- skipping"
+                  continue
+                fi
                 echo "Bundling $lib_name"
-                cp -L "$dep" "$target_path"
+                cp -L "$real_path" "$target_path"
                 chmod 755 "$target_path"
                 install_name_tool -id "@executable_path/../Libs/$lib_name" "$target_path"
                 bundle_libs "$target_path"
+                codesign --force --sign - "$target_path"
               fi
-              install_name_tool -change "$dep" "@executable_path/../Libs/$lib_name" "$binary"
+
+              install_name_tool -change "$dep" "@executable_path/../Libs/$lib_name" "$binary" || true
             done
+
+            codesign --force --sign - "$binary"
           }
+
           echo "Starting recursive bundling..."
           bundle_libs "$APP_DIR/Contents/MacOS/cview-bin"
           echo "Bundling complete."
           # --- End Bundling Logic ---
 
           # Copy Resources
-          BREW_PREFIX=$(brew --prefix)
           mkdir -p "$APP_DIR/Contents/Resources/share/glib-2.0/schemas"
-          cp "$BREW_PREFIX/share/glib-2.0/schemas/"* "$APP_DIR/Contents/Resources/share/glib-2.0/schemas/"
+          cp "$BREW_PREFIX/share/glib-2.0/schemas/"* \
+             "$APP_DIR/Contents/Resources/share/glib-2.0/schemas/"
           glib-compile-schemas "$APP_DIR/Contents/Resources/share/glib-2.0/schemas"
 
           mkdir -p "$APP_DIR/Contents/Resources/share/icons"
 
-          # Improved Icon Copying: Check if folders exist before copying
-          if [ -d "$BREW_PREFIX/share/icons/Adwaita" ]; then
-            cp -r "$BREW_PREFIX/share/icons/Adwaita" "$APP_DIR/Contents/Resources/share/icons/"
-          else
-            echo "Warning: Adwaita icons not found at $BREW_PREFIX/share/icons/Adwaita"
-          fi
+          for theme in Adwaita hicolor; do
+            if [ -d "$BREW_PREFIX/share/icons/$theme" ]; then
+              cp -r "$BREW_PREFIX/share/icons/$theme" \
+                    "$APP_DIR/Contents/Resources/share/icons/"
+            else
+              echo "Warning: $theme icons not found at $BREW_PREFIX/share/icons/$theme"
+            fi
+          done
 
-          if [ -d "$BREW_PREFIX/share/icons/hicolor" ]; then
-            cp -r "$BREW_PREFIX/share/icons/hicolor" "$APP_DIR/Contents/Resources/share/icons/"
-          else
-            echo "Warning: Hicolor icons not found at $BREW_PREFIX/share/icons/hicolor"
+          # GDK pixbuf loaders + regenerated cache (icons fail silently without this)
+          PIXBUF_SRC=$(find "$BREW_PREFIX/lib/gdk-pixbuf-2.0" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | head -n1)
+          if [ -n "$PIXBUF_SRC" ]; then
+            PIXBUF_VER=$(basename "$PIXBUF_SRC")
+            PIXBUF_DEST="$APP_DIR/Contents/Resources/lib/gdk-pixbuf-2.0/$PIXBUF_VER"
+            mkdir -p "$PIXBUF_DEST"
+            cp -r "$PIXBUF_SRC/"* "$PIXBUF_DEST/"
+            if command -v gdk-pixbuf-query-loaders >/dev/null 2>&1; then
+              GDK_PIXBUF_MODULEDIR="$PIXBUF_DEST/loaders" \
+                gdk-pixbuf-query-loaders > "$PIXBUF_DEST/loaders.cache" || true
+            fi
           fi
 
           # Create Launcher Script
           cat << 'EOF' > "$APP_DIR/Contents/MacOS/cview"
           #!/bin/sh
           DIR=$(cd "$(dirname "$0")" && pwd)
-          export GSETTINGS_SCHEMA_DIR="$DIR/../Resources/share/glib-2.0/schemas"
-          export XDG_DATA_DIRS="$DIR/../Resources/share"
-          export GTK_DATA_PREFIX="$DIR/../Resources"
+          RES="$DIR/../Resources"
+          export GSETTINGS_SCHEMA_DIR="$RES/share/glib-2.0/schemas"
+          export XDG_DATA_DIRS="$RES/share"
+          export GTK_DATA_PREFIX="$RES"
+          CACHE=$(ls "$RES"/lib/gdk-pixbuf-2.0/*/loaders.cache 2>/dev/null | head -n1)
+          if [ -n "$CACHE" ]; then
+            export GDK_PIXBUF_MODULE_FILE="$CACHE"
+          fi
           exec "$DIR/cview-bin" "$@"
           EOF
           chmod +x "$APP_DIR/Contents/MacOS/cview"
@@ -193,16 +253,21 @@ jobs:
               <string>org.mavensgroup.cview</string>
               <key>CFBundleName</key>
               <string>CView</string>
+              <key>CFBundleShortVersionString</key>
+              <string>$VERSION</string>
               <key>CFBundleVersion</key>
               <string>$VERSION</string>
               <key>CFBundlePackageType</key>
               <string>APPL</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
           </dict>
           </plist>
           EOF
 
-          # Ad-hoc sign the bundle
-          codesign --force --deep -s - "$APP_DIR"
+          # Final ad-hoc sign of the whole bundle
+          codesign --force --deep --sign - "$APP_DIR"
+          codesign --verify --verbose "$APP_DIR" || true
 
           # Create DMG
           hdiutil create -volname CView -srcfolder "$APP_DIR" -ov -format UDZO cview-macos.dmg
@@ -229,10 +294,11 @@ jobs:
           pip3 install tomlkit aiohttp
 
           # 1. Add Flathub Remote (System-wide)
-          sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          sudo flatpak remote-add --if-not-exists flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
 
           # 2. Pre-install GNOME 49 Runtimes (System-wide with Sudo)
-          # We use 25.08 for the rust-stable extension as it matches the GNOME 49 base.
+          # 25.08 rust-stable extension matches the GNOME 49 base.
           sudo flatpak install -y --noninteractive flathub \
             org.gnome.Sdk//49 \
             org.gnome.Platform//49 \
@@ -252,7 +318,7 @@ jobs:
           bundle: cview.flatpak
           manifest-path: org.mavensgroup.cview.yml
           cache-key: flatpak-builder-${{ github.sha }}
-          # CRITICAL FIX: Disable auto-install because we already did it with sudo above
+          # Disable auto-install: runtimes were already installed with sudo above
           install-deps-from: false
 
       - name: Upload Flatpak
@@ -291,7 +357,6 @@ jobs:
       - name: Build RPM
         run: |
           cargo generate-rpm
-          # Rename for clarity (optional, but nice)
           mv target/generate-rpm/*.rpm target/generate-rpm/cview.rpm
 
       - name: Upload Linux Packages
