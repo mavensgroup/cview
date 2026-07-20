@@ -9,10 +9,18 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Create the release as a DRAFT. It is only published at the very end, after
+  # every build job has succeeded (see the `finalize` job).
+  # ---------------------------------------------------------------------------
   create-release:
     runs-on: ubuntu-latest
     outputs:
@@ -24,18 +32,36 @@ jobs:
         id: get_version
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
-          VERSION=${VERSION#v}
           VERSION=${VERSION#test-v}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          VERSION=${VERSION#v}
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Create Release
+      - name: Create Draft Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create ${{ github.ref_name }} \
-            --title "Release ${{ github.ref_name }}" \
-            --generate-notes
+          cat > notes.md <<'NOTES'
+          ### macOS users
 
+          These builds are ad-hoc signed, not notarized. On first launch macOS
+          may refuse to open the app. To allow it:
+
+              xattr -cr /Applications/CView.app
+
+          Download the DMG matching your CPU: `arm64` for Apple Silicon
+          (M1/M2/M3/M4), `x86_64` for Intel Macs.
+          NOTES
+
+          gh release create "${{ github.ref_name }}" \
+            --draft \
+            --title "Release ${{ github.ref_name }}" \
+            --generate-notes \
+            --notes-file notes.md
+
+  # ---------------------------------------------------------------------------
+  # Windows — MSYS2/UCRT64. Uses the MSYS2 Rust toolchain only; mixing it with
+  # the rustup toolchain breaks the x86_64-pc-windows-gnu target.
+  # ---------------------------------------------------------------------------
   build-windows:
     needs: create-release
     runs-on: windows-latest
@@ -44,11 +70,6 @@ jobs:
         shell: msys2 {0}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-gnu
 
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
@@ -66,11 +87,11 @@ jobs:
 
       - name: Build
         env:
-          PKG_CONFIG_ALLOW_CROSS: 1
           PKG_CONFIG_PATH: /ucrt64/lib/pkgconfig
           LIBRARY_PATH: /ucrt64/lib
         run: |
-          cargo build --release --target x86_64-pc-windows-gnu
+          set -e
+          cargo build --release --locked --target x86_64-pc-windows-gnu
 
       - name: Bundle DLLs and Assets
         run: |
@@ -78,20 +99,21 @@ jobs:
           mkdir -p dist
           cp target/x86_64-pc-windows-gnu/release/cview.exe dist/
 
-          # Bundle Dependencies (DLLs)
+          # Dependencies (DLLs)
           ldd target/x86_64-pc-windows-gnu/release/cview.exe \
             | grep '/ucrt64' | awk '{print $3}' | xargs -I '{}' cp -u '{}' dist/
 
-          # Bundle Assets (Schemas & Icons)
+          # GSettings schemas
           mkdir -p dist/share/glib-2.0/schemas
           cp /ucrt64/share/glib-2.0/schemas/* dist/share/glib-2.0/schemas/
           glib-compile-schemas dist/share/glib-2.0/schemas/
 
+          # Icon themes
           mkdir -p dist/share/icons
           cp -r /ucrt64/share/icons/Adwaita dist/share/icons/
           cp -r /ucrt64/share/icons/hicolor dist/share/icons/
 
-          # GDK pixbuf loaders (needed for PNG/SVG icon loading at runtime)
+          # GDK pixbuf loaders (PNG/SVG icons fail silently without these)
           if [ -d /ucrt64/lib/gdk-pixbuf-2.0 ]; then
             mkdir -p dist/lib
             cp -r /ucrt64/lib/gdk-pixbuf-2.0 dist/lib/
@@ -99,29 +121,49 @@ jobs:
 
       - name: Create Installer
         run: |
+          set -e
           makensis installer.ini
+          sha256sum cview-installer.exe > cview-installer.exe.sha256
 
       - name: Upload Installer
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
         run: |
-          gh release upload ${{ github.ref_name }} cview-installer.exe
+          set -e
+          gh release upload "${{ github.ref_name }}" \
+            cview-installer.exe cview-installer.exe.sha256
 
+  # ---------------------------------------------------------------------------
+  # macOS — built for BOTH architectures. macos-13 is the last Intel runner;
+  # macos-14 and newer are Apple Silicon.
+  # ---------------------------------------------------------------------------
   build-macos:
     needs: create-release
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-13
+            arch: x86_64
+          - runner: macos-15
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: macos-${{ matrix.arch }}
+
       - name: Install Dependencies
         run: brew install gtk4 libadwaita adwaita-icon-theme
 
       - name: Build
-        run: cargo build --release
+        run: cargo build --release --locked
 
       - name: Bundle App
         run: |
@@ -135,13 +177,11 @@ jobs:
           mkdir -p "$APP_DIR/Contents/Resources"
           mkdir -p "$APP_DIR/Contents/Libs"
 
-          # Rename binary for the wrapper script
           cp target/release/cview "$APP_DIR/Contents/MacOS/cview-bin"
 
-          # --- Manual Bundling Logic ---
-
-          # Resolve an install-name reported by otool to a real file on disk.
-          # Homebrew bottles increasingly use @rpath/... which is not a real path.
+          # --- Manual dylib bundling ------------------------------------------
+          # Homebrew bottles increasingly report @rpath/... install names, which
+          # are not real paths on disk and must be resolved before copying.
           resolve_dep() {
             local dep="$1"
             case "$dep" in
@@ -160,7 +200,7 @@ jobs:
           bundle_libs() {
             local binary="$1"
             local deps
-            # tail -n +2 drops the binary's own LC_ID_DYLIB line
+            # tail -n +2 skips the binary's own LC_ID_DYLIB line
             deps=$(otool -L "$binary" | tail -n +2 | awk '{print $1}' \
                     | grep -vE "^/usr/lib|^/System/Library|^@executable_path|^@loader_path" || true)
 
@@ -180,6 +220,8 @@ jobs:
                 chmod 755 "$target_path"
                 install_name_tool -id "@executable_path/../Libs/$lib_name" "$target_path"
                 bundle_libs "$target_path"
+                # Re-sign immediately: install_name_tool invalidates the
+                # existing signature, which is fatal at load time on arm64.
                 codesign --force --sign - "$target_path"
               fi
 
@@ -192,16 +234,16 @@ jobs:
           echo "Starting recursive bundling..."
           bundle_libs "$APP_DIR/Contents/MacOS/cview-bin"
           echo "Bundling complete."
-          # --- End Bundling Logic ---
+          # --- End bundling ---------------------------------------------------
 
-          # Copy Resources
+          # GSettings schemas
           mkdir -p "$APP_DIR/Contents/Resources/share/glib-2.0/schemas"
           cp "$BREW_PREFIX/share/glib-2.0/schemas/"* \
              "$APP_DIR/Contents/Resources/share/glib-2.0/schemas/"
           glib-compile-schemas "$APP_DIR/Contents/Resources/share/glib-2.0/schemas"
 
+          # Icon themes
           mkdir -p "$APP_DIR/Contents/Resources/share/icons"
-
           for theme in Adwaita hicolor; do
             if [ -d "$BREW_PREFIX/share/icons/$theme" ]; then
               cp -r "$BREW_PREFIX/share/icons/$theme" \
@@ -211,8 +253,8 @@ jobs:
             fi
           done
 
-          # GDK pixbuf loaders + regenerated cache (icons fail silently without this)
-          PIXBUF_SRC=$(find "$BREW_PREFIX/lib/gdk-pixbuf-2.0" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | head -n1)
+          # GDK pixbuf loaders + regenerated cache
+          PIXBUF_SRC=$(find "$BREW_PREFIX/lib/gdk-pixbuf-2.0" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -n1)
           if [ -n "$PIXBUF_SRC" ]; then
             PIXBUF_VER=$(basename "$PIXBUF_SRC")
             PIXBUF_DEST="$APP_DIR/Contents/Resources/lib/gdk-pixbuf-2.0/$PIXBUF_VER"
@@ -224,7 +266,7 @@ jobs:
             fi
           fi
 
-          # Create Launcher Script
+          # Launcher script
           cat << 'EOF' > "$APP_DIR/Contents/MacOS/cview"
           #!/bin/sh
           DIR=$(cd "$(dirname "$0")" && pwd)
@@ -240,8 +282,8 @@ jobs:
           EOF
           chmod +x "$APP_DIR/Contents/MacOS/cview"
 
-          # Create Info.plist
-          VERSION=${{ needs.create-release.outputs.version }}
+          # Info.plist
+          VERSION="${{ needs.create-release.outputs.version }}"
           cat > "$APP_DIR/Contents/Info.plist" << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -261,23 +303,31 @@ jobs:
               <string>APPL</string>
               <key>NSHighResolutionCapable</key>
               <true/>
+              <key>LSMinimumSystemVersion</key>
+              <string>12.0</string>
           </dict>
           </plist>
           EOF
 
-          # Final ad-hoc sign of the whole bundle
+          # Final ad-hoc signature over the whole bundle
           codesign --force --deep --sign - "$APP_DIR"
           codesign --verify --verbose "$APP_DIR" || true
 
-          # Create DMG
-          hdiutil create -volname CView -srcfolder "$APP_DIR" -ov -format UDZO cview-macos.dmg
+          DMG="cview-macos-${{ matrix.arch }}.dmg"
+          hdiutil create -volname CView -srcfolder "$APP_DIR" -ov -format UDZO "$DMG"
+          shasum -a 256 "$DMG" > "$DMG.sha256"
 
       - name: Upload macOS DMG
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.ref_name }} cview-macos.dmg
+          set -e
+          DMG="cview-macos-${{ matrix.arch }}.dmg"
+          gh release upload "${{ github.ref_name }}" "$DMG" "$DMG.sha256"
 
+  # ---------------------------------------------------------------------------
+  # Flatpak
+  # ---------------------------------------------------------------------------
   build-flatpak:
     needs: create-release
     runs-on: ubuntu-latest
@@ -289,26 +339,23 @@ jobs:
 
       - name: Install dependencies
         run: |
+          set -e
           sudo apt-get update
           sudo apt-get install -y flatpak flatpak-builder python3-pip
-          pip3 install tomlkit aiohttp
+          pip3 install --break-system-packages tomlkit aiohttp
 
-          # 1. Add Flathub Remote (System-wide)
           sudo flatpak remote-add --if-not-exists flathub \
             https://dl.flathub.org/repo/flathub.flatpakrepo
 
-          # 2. Pre-install GNOME 49 Runtimes (System-wide with Sudo)
-          # 25.08 rust-stable extension matches the GNOME 49 base.
+          # 25.08 rust-stable extension matches the GNOME 49 base
           sudo flatpak install -y --noninteractive flathub \
             org.gnome.Sdk//49 \
             org.gnome.Platform//49 \
             org.freedesktop.Sdk.Extension.rust-stable//25.08
 
-      - name: Generate Cargo.lock
-        run: cargo generate-lockfile
-
       - name: Generate cargo sources
         run: |
+          set -e
           curl -O https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py
           python3 flatpak-cargo-generator.py ./Cargo.lock -o cargo-sources.json
 
@@ -318,50 +365,126 @@ jobs:
           bundle: cview.flatpak
           manifest-path: org.mavensgroup.cview.yml
           cache-key: flatpak-builder-${{ github.sha }}
-          # Disable auto-install: runtimes were already installed with sudo above
+          # Runtimes were already installed with sudo above
           install-deps-from: false
 
       - name: Upload Flatpak
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.ref_name }} cview.flatpak
+          set -e
+          sha256sum cview.flatpak > cview.flatpak.sha256
+          gh release upload "${{ github.ref_name }}" cview.flatpak cview.flatpak.sha256
 
-  build-linux-pkg:
-    name: Build DEB & RPM
+  # ---------------------------------------------------------------------------
+  # DEB — built on ubuntu-22.04 (glibc 2.35) for wider compatibility. Building
+  # on ubuntu-latest would require glibc 2.39+ on the user's machine.
+  # ---------------------------------------------------------------------------
+  build-deb:
+    name: Build DEB
     needs: create-release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
       - name: Install System Dependencies
         run: |
+          set -e
           sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libadwaita-1-dev librust-gdk4-sys-dev
+          sudo apt-get install -y libgtk-4-dev libadwaita-1-dev
 
-      - name: Install Packaging Tools
-        run: |
-          cargo install cargo-deb
-          cargo install cargo-generate-rpm
+      - name: Install cargo-deb
+        run: cargo install cargo-deb --locked
 
-      - name: Build Binary (Release)
-        run: cargo build --release
+      - name: Build Binary
+        run: cargo build --release --locked
 
       - name: Build DEB
         run: |
+          set -e
           cargo deb --no-build --output target/debian/cview.deb
+          sha256sum target/debian/cview.deb > target/debian/cview.deb.sha256
 
-      - name: Build RPM
-        run: |
-          cargo generate-rpm
-          mv target/generate-rpm/*.rpm target/generate-rpm/cview.rpm
-
-      - name: Upload Linux Packages
+      - name: Upload DEB
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.ref_name }} target/debian/cview.deb
-          gh release upload ${{ github.ref_name }} target/generate-rpm/cview.rpm
+          set -e
+          gh release upload "${{ github.ref_name }}" \
+            target/debian/cview.deb target/debian/cview.deb.sha256
+
+  # ---------------------------------------------------------------------------
+  # RPM — must be built inside a Fedora container. cargo-generate-rpm with
+  # auto-req resolves dependency names against the host package database, so
+  # building on Ubuntu produces requires that no RPM distro can satisfy.
+  # ---------------------------------------------------------------------------
+  build-rpm:
+    name: Build RPM
+    needs: create-release
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:41
+    steps:
+      - name: Install toolchain and dependencies
+        run: |
+          set -e
+          dnf -y install \
+            gcc gcc-c++ make pkgconf-pkg-config \
+            rust cargo \
+            gtk4-devel libadwaita-devel \
+            rpm-build gh git tar findutils
+
+      - uses: actions/checkout@v4
+
+      - name: Mark workspace safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install cargo-generate-rpm
+        run: cargo install cargo-generate-rpm --locked
+
+      - name: Build Binary
+        run: cargo build --release --locked
+
+      - name: Build RPM
+        run: |
+          set -e
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo generate-rpm
+          mv target/generate-rpm/*.rpm target/generate-rpm/cview.rpm
+          sha256sum target/generate-rpm/cview.rpm > target/generate-rpm/cview.rpm.sha256
+
+      - name: Upload RPM
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          gh release upload "${{ github.ref_name }}" \
+            target/generate-rpm/cview.rpm target/generate-rpm/cview.rpm.sha256
+
+  # ---------------------------------------------------------------------------
+  # Publish the draft only if every build succeeded. test-v* tags stay drafts.
+  # ---------------------------------------------------------------------------
+  finalize:
+    needs:
+      - create-release
+      - build-windows
+      - build-macos
+      - build-flatpak
+      - build-deb
+      - build-rpm
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref_name, 'v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Publish Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "${{ github.ref_name }}" --draft=false

@@ -1,11 +1,19 @@
-#// Cargo.toml
-
 [package]
 name = "cview"
 version = "1.0.0"
 edition = "2021"
-license = "MIT"  # Or "GPL-3.0", "Apache-2.0", etc.
-description = "Crystal Structure Visualization & Analysis"
+rust-version = "1.75"
+license = "MIT"
+description = "Crystal structure visualization and analysis for DFT researchers"
+authors = ["MAVENs Research Group"]
+readme = "README.md"
+# TODO: replace with your actual URLs — cargo-deb and cargo-generate-rpm
+# both propagate these into the package metadata.
+repository = "https://github.com/USER/cview"
+homepage = "https://github.com/USER/cview"
+keywords = ["crystallography", "dft", "visualization", "materials", "xrd"]
+categories = ["science", "visualization"]
+exclude = ["assets/screenshots/*", ".github/*"]
 
 [dependencies]
 gtk4 = { version = "0.8", features = ["v4_6"] }
@@ -21,7 +29,6 @@ plotters-cairo = "0.6"
 nalgebra = { version = "0.34", default-features = false, features = ["macros", "std"] }
 num-complex = "0.4"
 rayon = "1.8"
-# spglib = "1.15"
 calamine = "0.24"
 log = "0.4"
 
@@ -36,32 +43,39 @@ unused_imports = "warn"
 unused_variables = "warn"
 unexpected_cfgs = "warn"
 
-[package.metadata.packager]
-product_name = "CView"
-identifier = "org.mavensgroup.cview"
-version = "0.2.0"
-before_packaging_command = "cargo build --release"
-resources = ["assets"]  # This copies the whole assets folder into the package
-
-# CHANGE THIS LINE:
-icons = ["assets/org.mavensgroup.cview.png"]
-
+# -----------------------------------------------------------------------------
+# Debian packaging
+# -----------------------------------------------------------------------------
 [package.metadata.deb]
-maintainer = "Mavens Group"
-copyright = "2026, Mavens Group"
+maintainer = "MAVENs Research Group"
+copyright = "2026, MAVENs Research Group"
 depends = "$auto"
 section = "science"
 priority = "optional"
+extended-description = """\
+CView is a desktop application for visualizing and analyzing crystal \
+structures. It supports k-path generation, XRD pattern simulation, and \
+slab construction for density functional theory workflows."""
 assets = [
     ["target/release/cview", "usr/bin/", "755"],
     ["assets/org.mavensgroup.cview.desktop", "usr/share/applications/", "644"],
-    ["assets/org.mavensgroup.cview.svg", "usr/share/icons/hicolor/scalable/apps/", "644"]
+    ["assets/org.mavensgroup.cview.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    # Uncomment once you have written the AppStream metainfo file (see note below)
+    # ["assets/org.mavensgroup.cview.metainfo.xml", "usr/share/metainfo/", "644"],
+    ["README.md", "usr/share/doc/cview/README", "644"],
 ]
 
+# -----------------------------------------------------------------------------
+# RPM packaging
+# -----------------------------------------------------------------------------
 [package.metadata.generate-rpm]
+summary = "Crystal structure visualization and analysis"
+license = "MIT"
 assets = [
     { source = "target/release/cview", dest = "/usr/bin/cview", mode = "755" },
     { source = "assets/org.mavensgroup.cview.desktop", dest = "/usr/share/applications/org.mavensgroup.cview.desktop", mode = "644" },
-    { source = "assets/org.mavensgroup.cview.svg", dest = "/usr/share/icons/hicolor/scalable/apps/org.mavensgroup.cview.svg", mode = "644" }
+    { source = "assets/org.mavensgroup.cview.svg", dest = "/usr/share/icons/hicolor/scalable/apps/org.mavensgroup.cview.svg", mode = "644" },
+    # { source = "assets/org.mavensgroup.cview.metainfo.xml", dest = "/usr/share/metainfo/org.mavensgroup.cview.metainfo.xml", mode = "644" },
+    { source = "README.md", dest = "/usr/share/doc/cview/README", mode = "644", doc = true },
 ]
 auto-req = "yes"
