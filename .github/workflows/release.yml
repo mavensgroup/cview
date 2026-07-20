@@ -50,6 +50,11 @@ jobs:
 
           Download the DMG matching your CPU: `arm64` for Apple Silicon
           (M1/M2/M3/M4), `x86_64` for Intel Macs.
+
+          ### Linux users
+
+          The `.deb` requires Ubuntu 24.04 / Debian 13 or newer (libadwaita 1.5).
+          Older distributions should use the Flatpak.
           NOTES
 
           gh release create "${{ github.ref_name }}" \
@@ -128,14 +133,19 @@ jobs:
       - name: Upload Installer
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # gh is on the Windows runner's native PATH, NOT inside MSYS2.
+        # This step must override the msys2 shell default above.
+        shell: bash
         run: |
           set -e
           gh release upload "${{ github.ref_name }}" \
             cview-installer.exe cview-installer.exe.sha256
 
   # ---------------------------------------------------------------------------
-  # macOS — built for BOTH architectures. macos-13 is the last Intel runner;
-  # macos-14 and newer are Apple Silicon.
+  # macOS — both architectures.
+  # NOTE: macos-13 was retired on 2025-12-04. `macos-15-intel` is the current
+  # label for x86_64. GitHub plans to end macOS Intel support after the
+  # macos-15 image retires in autumn 2027.
   # ---------------------------------------------------------------------------
   build-macos:
     needs: create-release
@@ -143,7 +153,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: macos-13
+          - runner: macos-15-intel
             arch: x86_64
           - runner: macos-15
             arch: arm64
@@ -377,13 +387,14 @@ jobs:
           gh release upload "${{ github.ref_name }}" cview.flatpak cview.flatpak.sha256
 
   # ---------------------------------------------------------------------------
-  # DEB — built on ubuntu-22.04 (glibc 2.35) for wider compatibility. Building
-  # on ubuntu-latest would require glibc 2.39+ on the user's machine.
+  # DEB — must be ubuntu-24.04 or newer. Jammy (22.04) ships libadwaita 1.1,
+  # but the `adw` crate's v1_5 feature requires libadwaita-1 >= 1.5.
+  # Consequence: the resulting .deb needs glibc 2.39+ (Ubuntu 24.04 / Debian 13).
   # ---------------------------------------------------------------------------
   build-deb:
     name: Build DEB
     needs: create-release
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -398,6 +409,7 @@ jobs:
           set -e
           sudo apt-get update
           sudo apt-get install -y libgtk-4-dev libadwaita-1-dev
+          pkg-config --modversion libadwaita-1   # sanity check: must be >= 1.5
 
       - name: Install cargo-deb
         run: cargo install cargo-deb --locked
