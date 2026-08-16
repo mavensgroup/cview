@@ -813,6 +813,10 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
 
     writeln!(file, "loop_")?;
     writeln!(file, " _atom_site_label")?;
+    // `_atom_site_type_symbol` carries the formal charge (e.g. "Fe3+"). Without
+    // it the oxidation state read from the source file is silently dropped on
+    // export, and BVS falls back to a guessed valence on re-import.
+    writeln!(file, " _atom_site_type_symbol")?;
     writeln!(file, " _atom_site_fract_x")?;
     writeln!(file, " _atom_site_fract_y")?;
     writeln!(file, " _atom_site_fract_z")?;
@@ -823,11 +827,22 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
     for (i, atom) in structure.atoms.iter().enumerate() {
         let frac = cart_to_frac(atom.position, structure.lattice).unwrap_or([0.0, 0.0, 0.0]);
         let (u, v, w) = (frac[0], frac[1], frac[2]);
+        // IUCr canonical form: symbol, magnitude, sign — "Fe3+", "O2-".
+        let type_symbol = match atom.oxidation {
+            Some(n) if n > 0 => format!("{}{}+", atom.element, n),
+            Some(n) if n < 0 => format!("{}{}-", atom.element, -n),
+            // An explicit neutral state (`_atom_type_oxidation_number 0`) is
+            // written in the "0+" convention used by ICSD-derived CIFs. A bare
+            // symbol would re-read as "unknown" rather than "known to be zero".
+            Some(_) => format!("{}0+", atom.element),
+            None => atom.element.clone(),
+        };
         writeln!(
             file,
-            " {}{} {:.6} {:.6} {:.6} {:.4}",
+            " {}{} {} {:.6} {:.6} {:.6} {:.4}",
             atom.element,
             i + 1,
+            type_symbol,
             u,
             v,
             w,
@@ -912,5 +927,53 @@ mod tests {
             }
         }
         assert!(seen_ba && seen_ti && seen_o, "expected Ba/Ti/O atoms");
+    }
+
+    #[test]
+    fn write_then_parse_preserves_oxidation_and_occupancy() {
+        // Regression: the writer used to emit only `_atom_site_label`, so
+        // oxidation state was silently dropped on export and BVS fell back to
+        // a guessed valence after a CIF -> CIF round trip.
+        use crate::model::{Atom, Structure};
+
+        let mk = |el: &str, ox: Option<i32>, occ: f64, pos: [f64; 3]| Atom {
+            element: el.to_string(),
+            position: pos,
+            original_index: 0,
+            oxidation: ox,
+            occupancy: occ,
+        };
+        let original = Structure {
+            lattice: [[4.0, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 4.0]],
+            atoms: vec![
+                mk("Fe", Some(3), 1.0, [0.0, 0.0, 0.0]),
+                mk("O", Some(-2), 0.5, [2.0, 2.0, 2.0]),
+                mk("Na", Some(1), 1.0, [2.0, 0.0, 0.0]),
+                mk("Si", None, 1.0, [0.0, 2.0, 0.0]),
+                // Explicit neutral must stay distinguishable from unknown.
+                mk("Co", Some(0), 1.0, [0.0, 0.0, 2.0]),
+            ],
+            formula: String::new(),
+            is_periodic: true,
+        };
+
+        let mut path = std::env::temp_dir();
+        path.push(format!("cview_cif_roundtrip_{}.cif", std::process::id()));
+        let path_str = path.to_string_lossy().to_string();
+
+        write(&path_str, &original).expect("write failed");
+        let back = parse(&path_str).expect("re-parse failed");
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(back.atoms.len(), original.atoms.len());
+        for (a, b) in original.atoms.iter().zip(back.atoms.iter()) {
+            assert_eq!(a.element, b.element, "element changed");
+            assert_eq!(a.oxidation, b.oxidation, "oxidation lost for {}", a.element);
+            assert!(
+                (a.occupancy - b.occupancy).abs() < 1e-4,
+                "occupancy changed for {}",
+                a.element
+            );
+        }
     }
 }

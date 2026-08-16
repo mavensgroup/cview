@@ -2,3 +2,6 @@
 *.un~
 *.swp
 docs/book
+
+# Corpus audit working data (COD archive, extracted CIFs, results)
+/.audit_work

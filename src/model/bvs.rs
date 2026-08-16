@@ -6,7 +6,9 @@
 //! Falls back to the O'Keeffe & Brese (1991) estimation scheme when a pair
 //! is untabulated:
 //!
-//!     R0 = r_i + r_j - r_i·r_j·(√c_i - √c_j)² / (c_i·r_i + c_j·r_j)
+//! ```text
+//! R0 = r_i + r_j - r_i·r_j·(√c_i - √c_j)² / (c_i·r_i + c_j·r_j)
+//! ```
 //!
 //! with their fitted atomic parameters (r, c) — see
 //! `elements::get_bvs_atom_props`. Typical accuracy of the estimate is

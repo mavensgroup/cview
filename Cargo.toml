@@ -15,6 +15,24 @@ keywords = ["crystallography", "dft", "visualization", "materials", "xrd"]
 categories = ["science", "visualization"]
 exclude = ["assets/screenshots/*", ".github/*"]
 
+[lib]
+name = "cview"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cview"
+path = "src/main.rs"
+
+# Corpus round-trip fidelity audit (Supporting Information for the JAC
+# manuscript). Feature-gated so a normal build never compiles it.
+[[bin]]
+name = "corpus_audit"
+path = "src/bin/corpus_audit.rs"
+required-features = ["audit"]
+
+[features]
+audit = []
+
 [dependencies]
 gtk4 = { version = "0.8", features = ["v4_6"] }
 adw = { package = "libadwaita", version = "0.6", features = ["v1_5"] }

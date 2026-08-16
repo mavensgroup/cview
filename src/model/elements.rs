@@ -1861,7 +1861,9 @@ fn blue_white_red(t: f64) -> (f64, f64, f64) {
 /// O'Keeffe-Brese fitted atomic parameters for estimating untabulated
 /// bond-valence R0 values:
 ///
-///     R0 = r_i + r_j - r_i·r_j·(√c_i - √c_j)² / (c_i·r_i + c_j·r_j)
+/// ```text
+/// R0 = r_i + r_j - r_i·r_j·(√c_i - √c_j)² / (c_i·r_i + c_j·r_j)
+/// ```
 ///
 /// `r` is their fitted size parameter (Å, covalent-radius scale — NOT a
 /// Shannon ionic radius) and `c` their fitted electronegativity-like
