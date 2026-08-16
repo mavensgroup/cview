@@ -1,0 +1,141 @@
+{
+  "classification_counts": {
+    "inorganic": 258,
+    "organic_or_metalorganic": 742
+  },
+  "crystal_systems": {
+    "Cubic": 33,
+    "Hexagonal": 12,
+    "Monoclinic": 417,
+    "Orthorhombic": 154,
+    "Tetragonal": 23,
+    "Triclinic": 242,
+    "Trigonal": 21,
+    "Undetermined": 98
+  },
+  "declared_vs_detected_space_group": {
+    "agree": 854,
+    "differ": 20,
+    "not_comparable": 126
+  },
+  "feature_counts": {
+    "oxidation_states": 28,
+    "partial_occupancy": 265,
+    "refln_block": 748,
+    "semicolon_text": 999,
+    "split_sites": 102
+  },
+  "machine": {
+    "build_profile": "release",
+    "cpu_model": "Intel(R) Core(TM) Ultra 5 125H",
+    "cview_version": "1.0.0",
+    "kernel": "7.1.8-200.fc44.x86_64",
+    "logical_cores": 18,
+    "memory": "MemTotal:       15707408 kB",
+    "os": "Fedora Linux 44 (Workstation Edition)",
+    "rustc": "rustc 1.94.0 (4a4ef493e 2026-03-02)",
+    "symprec": 0.0001,
+    "tolerances": {
+      "cell_angle_deg": 0.0001,
+      "cell_length_A": 0.00001,
+      "occupancy_absolute": 0.001,
+      "site_position_A": 0.0001,
+      "volume_relative": 0.00001
+    }
+  },
+  "outcomes": {
+    "round_trip_A_cif_cif": {
+      "all": {
+        "PASS": 902,
+        "SYMMETRY_UNDETERMINED_BOTH": 98
+      },
+      "inorganic": {
+        "PASS": 168,
+        "SYMMETRY_UNDETERMINED_BOTH": 90
+      },
+      "organic_or_metalorganic": {
+        "PASS": 734,
+        "SYMMETRY_UNDETERMINED_BOTH": 8
+      }
+    },
+    "round_trip_B_cif_poscar_cif": {
+      "all": {
+        "LOSS_OCCUPANCY_EXPECTED": 265,
+        "LOSS_OXIDATION_EXPECTED": 20,
+        "PASS": 714,
+        "SYMMETRY_UNDETERMINED_BOTH": 1
+      },
+      "inorganic": {
+        "LOSS_OCCUPANCY_EXPECTED": 116,
+        "LOSS_OXIDATION_EXPECTED": 14,
+        "PASS": 127,
+        "SYMMETRY_UNDETERMINED_BOTH": 1
+      },
+      "organic_or_metalorganic": {
+        "LOSS_OCCUPANCY_EXPECTED": 149,
+        "LOSS_OXIDATION_EXPECTED": 6,
+        "PASS": 587
+      }
+    }
+  },
+  "run": {
+    "corpus": ".audit_work/pool_early",
+    "files_audited": 1000,
+    "per_file_timeout_s": 60,
+    "requested_sample": 1000,
+    "seed": 42
+  },
+  "symprec_sensitivity": {
+    "files_considered": 1000,
+    "identical_across_all_three": 977,
+    "note": "space group of the parsed original at symprec 1e-3 / 1e-4 / 1e-5",
+    "observed_patterns": {
+      "143 / 143 / 1": 2,
+      "162 / 162 / 8": 1,
+      "163 / 5 / 5": 1,
+      "164 / 12 / 12": 1,
+      "164 / 164 / 5": 1,
+      "167 / 1 / 1": 1,
+      "173 / 173 / 4": 1,
+      "176 / 1 / 1": 2,
+      "185 / 185 / 9": 1,
+      "186 / 186 / 36": 2,
+      "186 / 9 / 9": 1,
+      "189 / 189 / 1": 1,
+      "193 / 15 / 15": 1,
+      "194 / 11 / 11": 1,
+      "194 / 194 / 40": 1,
+      "194 / 194 / 63": 2,
+      "194 / 194 / 9": 1,
+      "194 / 63 / 63": 1,
+      "227 / 141 / 141": 1
+    },
+    "search_failed_at_some_tolerance": 98,
+    "varies_with_tolerance": 23
+  },
+  "timing": {
+    "parse_ms": {
+      "max": 13.888154,
+      "median": 0.272267,
+      "n": 1000,
+      "p95": 1.3774289999999998
+    },
+    "roundtrip_A_ms": {
+      "max": 34.862127,
+      "median": 0.6453599999999999,
+      "p95": 2.618924
+    },
+    "roundtrip_B_ms": {
+      "max": 58.394756,
+      "median": 1.237426,
+      "p95": 4.658892000000001
+    },
+    "slowest_file": {
+      "cod_id": "2019361",
+      "file_bytes": 56093,
+      "has_refln_block": true,
+      "n_atoms": 5664,
+      "parse_ms": 13.888154
+    }
+  }
+}

@@ -146,6 +146,9 @@ struct FileResult {
     has_split_site: bool,
     crystal_system: String,
     sg_declared: String,
+    /// Space group of the parsed original at symprec 1e-3 / 1e-4 / 1e-5.
+    /// Used for the tolerance sensitivity check; "NA" when the search failed.
+    sg_symprec_sweep: Vec<String>,
     trip_a: TripResult,
     trip_b: TripResult,
 }
@@ -341,16 +344,19 @@ fn compare(orig: &Structure, fin: &Structure, via_poscar: bool) -> Compared {
     }
 
     // --- occupancy ---
+    // POSCAR has no occupancy field at all, so ANY occupancy difference across
+    // round trip B is format-inherent. Gating this on a separate "is the
+    // original partially occupied" threshold would be wrong: a site at 0.999
+    // is just as unrepresentable in POSCAR as one at 0.5, and a threshold
+    // inconsistent with TOL_OCCUPANCY would misreport it as a parser defect.
     let (oo, of_) = (occupancy_multiset(orig), occupancy_multiset(fin));
-    let orig_has_partial = oo.iter().any(|x| *x < 0.99);
     let occ_differs = oo.len() != of_.len()
         || oo
             .iter()
             .zip(of_.iter())
             .any(|(x, y)| (x - y).abs() > TOL_OCCUPANCY);
     if occ_differs {
-        if via_poscar && orig_has_partial {
-            // POSCAR has no occupancy field. Format-inherent, not a defect.
+        if via_poscar {
             set("LOSS_OCCUPANCY_EXPECTED", &mut notes);
         } else {
             set("LOSS_UNEXPECTED", &mut notes);
@@ -358,11 +364,10 @@ fn compare(orig: &Structure, fin: &Structure, via_poscar: bool) -> Compared {
         }
     }
 
-    // --- oxidation ---
+    // --- oxidation --- (same reasoning: POSCAR has no oxidation field)
     let (xo, xf) = (oxidation_multiset(orig), oxidation_multiset(fin));
-    let orig_has_ox = xo.iter().any(|x| x.is_some());
     if xo != xf {
-        if via_poscar && orig_has_ox {
+        if via_poscar {
             set("LOSS_OXIDATION_EXPECTED", &mut notes);
         } else {
             set("LOSS_UNEXPECTED", &mut notes);
@@ -544,7 +549,12 @@ fn run_worker(path: &str, tmpdir: &Path) -> FileResult {
 
     res.n_atoms = orig.atoms.len();
     res.classification = classify(&orig).to_string();
-    res.has_partial_occ = orig.atoms.iter().any(|a| a.occupancy < 0.99);
+    // "Partial" means differing from full occupancy by more than the tolerance
+    // the comparison itself uses — otherwise the flag and the verdict disagree.
+    res.has_partial_occ = orig
+        .atoms
+        .iter()
+        .any(|a| (a.occupancy - 1.0).abs() > TOL_OCCUPANCY);
     res.has_oxidation = orig.atoms.iter().any(|a| a.oxidation.is_some());
     res.has_split_site = detect_split_site(&orig);
 
@@ -565,6 +575,13 @@ fn run_worker(path: &str, tmpdir: &Path) -> FileResult {
         Ok(i) => i.system.clone(),
         Err(_) => "Undetermined".to_string(),
     };
+
+    // Tolerance sensitivity: is the detected symmetry stable around the single
+    // SYMPREC the whole application shares? Recorded, never used for pass/fail.
+    res.sg_symprec_sweep = [1e-3, 1e-4, 1e-5]
+        .iter()
+        .map(|p| sg_string(&symmetry::analyze_with_symprec(&orig, *p)))
+        .collect();
 
     // =================== ROUND TRIP A: CIF -> CIF ===================
     res.trip_a = {
@@ -899,18 +916,25 @@ fn main() {
     let tmproot = std::env::temp_dir().join(format!("cview_audit_{}", std::process::id()));
     std::fs::create_dir_all(&tmproot).ok();
 
-    // Build the file list.
-    let mut files: Vec<PathBuf> = match &args.manifest {
-        Some(m) => {
-            let text = std::fs::read_to_string(m).expect("cannot read manifest");
-            text.lines()
-                .map(|l| l.trim())
-                .filter(|l| !l.is_empty() && !l.starts_with('#'))
-                .map(|id| args.corpus.join(format!("{id}.cif")))
-                .collect()
+    // Build the file list. The corpus is a nested tree (cif/2/00/16/…), so a
+    // manifest of bare COD IDs is resolved against an index of the whole tree
+    // rather than assumed to sit in one flat directory.
+    let mut files: Vec<PathBuf> = collect_cifs(&args.corpus);
+    if let Some(m) = &args.manifest {
+        let text = std::fs::read_to_string(m).expect("cannot read manifest");
+        let wanted: std::collections::HashSet<String> = text
+            .lines()
+            .map(|l| l.trim())
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .map(|s| s.to_string())
+            .collect();
+        files.retain(|p| wanted.contains(&cod_id_of(p)));
+        let found: std::collections::HashSet<String> =
+            files.iter().map(|p| cod_id_of(p)).collect();
+        for id in wanted.difference(&found) {
+            eprintln!("corpus_audit: WARNING manifest id not found in corpus: {id}");
         }
-        None => collect_cifs(&args.corpus),
-    };
+    }
     files.sort();
 
     if args.sample > 0 && args.sample < files.len() {
@@ -1163,6 +1187,39 @@ fn write_outputs(args: &Args, results: &[FileResult]) {
         m
     };
 
+    // Sensitivity of the detected space group to the symmetry tolerance.
+    // A result that moves between 1e-3 / 1e-4 / 1e-5 is a finding in itself.
+    let symprec_sensitivity = {
+        let (mut stable, mut varies, mut na_any, mut considered) = (0, 0, 0, 0);
+        let mut shifts: BTreeMap<String, usize> = BTreeMap::new();
+        for r in results {
+            if r.sg_symprec_sweep.len() != 3 {
+                continue;
+            }
+            considered += 1;
+            let s = &r.sg_symprec_sweep;
+            if s.iter().any(|x| x == "NA") {
+                na_any += 1;
+            }
+            if s[0] == s[1] && s[1] == s[2] {
+                stable += 1;
+            } else {
+                varies += 1;
+                *shifts
+                    .entry(format!("{} / {} / {}", s[0], s[1], s[2]))
+                    .or_insert(0) += 1;
+            }
+        }
+        serde_json::json!({
+            "note": "space group of the parsed original at symprec 1e-3 / 1e-4 / 1e-5",
+            "files_considered": considered,
+            "identical_across_all_three": stable,
+            "varies_with_tolerance": varies,
+            "search_failed_at_some_tolerance": na_any,
+            "observed_patterns": shifts,
+        })
+    };
+
     let summary = serde_json::json!({
         "run": {
             "seed": args.seed,
@@ -1197,6 +1254,7 @@ fn write_outputs(args: &Args, results: &[FileResult]) {
         },
         "crystal_systems": crystal_systems,
         "declared_vs_detected_space_group": sg_declared_vs_detected,
+        "symprec_sensitivity": symprec_sensitivity,
         "timing": timing,
     });
     std::fs::write(

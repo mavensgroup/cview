@@ -29,6 +29,17 @@ pub struct SymmetryInfo {
 // ANALYSIS: Read-only check of the Space Group (Used by UI)
 // =========================================================================
 pub fn analyze(structure: &Structure) -> Result<SymmetryInfo, String> {
+    analyze_with_symprec(structure, SYMPREC)
+}
+
+/// Same search with an explicit tolerance. The application always goes through
+/// [`analyze`] so every panel agrees; this variant exists for tolerance
+/// sensitivity studies, which must be able to vary `symprec` without
+/// disturbing the single value the UI uses.
+pub fn analyze_with_symprec(
+    structure: &Structure,
+    symprec: f64,
+) -> Result<SymmetryInfo, String> {
     let lattice_mat = lattice_to_matrix3(structure.lattice);
 
     let mut positions = Vec::new();
@@ -42,7 +53,7 @@ pub fn analyze(structure: &Structure) -> Result<SymmetryInfo, String> {
     }
 
     let cell = Cell::new(Lattice::new(lattice_mat), positions, numbers);
-    let dataset = MoyoDataset::new(&cell, SYMPREC, AngleTolerance::Default, Setting::Spglib, true)
+    let dataset = MoyoDataset::new(&cell, symprec, AngleTolerance::Default, Setting::Spglib, true)
         .map_err(|_| "Symmetry search failed".to_string())?;
 
     let sys_name = match dataset.number {
