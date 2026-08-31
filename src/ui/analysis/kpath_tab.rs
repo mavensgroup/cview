@@ -177,7 +177,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
 
         // ================= RIGHT PANE: VASP KPOINTS =================
         let right_pane = Box::new(Orientation::Vertical, 10);
-        right_pane.set_width_request(350);
+        right_pane.set_width_request(super::CONTROL_PANE_WIDTH);
 
         let lbl_sg = Label::new(Some(&format!("Space Group: {}", res.spacegroup_str)));
         lbl_sg.set_halign(Align::Start);

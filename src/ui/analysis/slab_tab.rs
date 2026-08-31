@@ -44,7 +44,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
 
     // Right Pane: Controls
     let right_pane = Box::new(Orientation::Vertical, 10);
-    right_pane.set_width_request(250);
+    right_pane.set_width_request(super::CONTROL_PANE_WIDTH);
 
     let title = Label::new(Some("Slab Generator"));
     title.add_css_class("title-2");
@@ -54,7 +54,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     grid.set_column_spacing(10);
     grid.set_row_spacing(10);
 
-    grid.attach(&Label::new(Some("Miller Indices:")), 0, 0, 3, 1);
+    grid.attach(&Label::new(Some("Miller Indices:")), 0, 0, 2, 1);
     let spin_h = SpinButton::with_range(-10.0, 10.0, 1.0);
     spin_h.set_value(1.0);
     let spin_k = SpinButton::with_range(-10.0, 10.0, 1.0);
@@ -62,30 +62,36 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     let spin_l = SpinButton::with_range(-10.0, 10.0, 1.0);
     spin_l.set_value(0.0);
 
-    let row_hkl = Box::new(Orientation::Horizontal, 5);
-    row_hkl.append(&Label::new(Some("h")));
-    row_hkl.append(&spin_h);
-    grid.attach(&row_hkl, 0, 1, 1, 1);
+    // One index per row, matching the Thickness/Vacuum rows below. Side by
+    // side they cannot fit: a GtkSpinButton will not go below ~95 px however
+    // few characters it is asked for, so three of them plus their labels set
+    // a 349 px floor on this column -- far wider than the other tabs'.
+    for (row, (name, spin)) in [("h", &spin_h), ("k", &spin_k), ("l", &spin_l)]
+        .into_iter()
+        .enumerate()
+    {
+        let lbl = Label::new(Some(name));
+        lbl.set_halign(gtk4::Align::Start);
+        grid.attach(&lbl, 0, row as i32 + 1, 1, 1);
+        spin.set_hexpand(true);
+        grid.attach(spin, 1, row as i32 + 1, 1, 1);
+    }
 
-    let row_k = Box::new(Orientation::Horizontal, 5);
-    row_k.append(&Label::new(Some("k")));
-    row_k.append(&spin_k);
-    grid.attach(&row_k, 1, 1, 1, 1);
-
-    let row_l = Box::new(Orientation::Horizontal, 5);
-    row_l.append(&Label::new(Some("l")));
-    row_l.append(&spin_l);
-    grid.attach(&row_l, 2, 1, 1, 1);
-
-    grid.attach(&Label::new(Some("Thickness:")), 0, 2, 2, 1);
+    let lbl_thick = Label::new(Some("Thickness:"));
+    lbl_thick.set_halign(gtk4::Align::Start);
+    grid.attach(&lbl_thick, 0, 4, 1, 1);
     let spin_thick = SpinButton::with_range(1.0, 50.0, 1.0);
     spin_thick.set_value(1.0);
-    grid.attach(&spin_thick, 2, 2, 1, 1);
+    spin_thick.set_hexpand(true);
+    grid.attach(&spin_thick, 1, 4, 1, 1);
 
-    grid.attach(&Label::new(Some("Vacuum (Å):")), 0, 3, 2, 1);
+    let lbl_vac = Label::new(Some("Vacuum (Å):"));
+    lbl_vac.set_halign(gtk4::Align::Start);
+    grid.attach(&lbl_vac, 0, 5, 1, 1);
     let spin_vac = SpinButton::with_range(0.0, 100.0, 1.0);
     spin_vac.set_value(10.0);
-    grid.attach(&spin_vac, 2, 3, 1, 1);
+    spin_vac.set_hexpand(true);
+    grid.attach(&spin_vac, 1, 5, 1, 1);
 
     right_pane.append(&grid);
 

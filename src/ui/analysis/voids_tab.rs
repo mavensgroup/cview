@@ -3,7 +3,7 @@ use crate::state::AppState;
 use gtk4::prelude::*;
 use gtk4::{
     Align, Box, Button, DrawingArea, DropDown, Frame, Grid, Label, Notebook, Orientation,
-    ScrolledWindow, Separator, SpinButton, StringList,
+    PolicyType, ScrolledWindow, Separator, SpinButton, StringList,
 };
 use std::cell::RefCell;
 use std::f64::consts::PI;
@@ -54,7 +54,6 @@ pub fn build(state: Rc<RefCell<AppState>>, main_notebook: &Notebook) -> Box {
 
     // --- RIGHT PANE (Controls) ---
     let right_pane = Box::new(Orientation::Vertical, 10);
-    right_pane.set_width_request(300);
 
     let title = Label::new(Some("Void Analysis"));
     title.add_css_class("title-2");
@@ -102,13 +101,17 @@ pub fn build(state: Rc<RefCell<AppState>>, main_notebook: &Notebook) -> Box {
     ctrl_box.append(&row_probe);
 
     // 5. Dynamic Probe Buttons (Source: Physics)
+    // Three columns, not four: at four the "Geometric" button lands in a
+    // column of its own and drags the whole control panel out to 316 px,
+    // wider than the other analysis tabs.
+    const PROBE_COLS: usize = 3;
     let grid_probes = Grid::builder().row_spacing(5).column_spacing(5).build();
     for (i, (name, rad)) in voids::PRESET_PROBES.iter().enumerate() {
         let btn = Button::with_label(name);
         let sp = spin_probe.clone();
         let r_val = *rad;
         btn.connect_clicked(move |_| sp.set_value(r_val));
-        grid_probes.attach(&btn, (i % 4) as i32, (i / 4) as i32, 1, 1);
+        grid_probes.attach(&btn, (i % PROBE_COLS) as i32, (i / PROBE_COLS) as i32, 1, 1);
     }
     ctrl_box.append(&grid_probes);
 
@@ -168,10 +171,14 @@ pub fn build(state: Rc<RefCell<AppState>>, main_notebook: &Notebook) -> Box {
             .margin_top(8)
             .build(),
     );
+    // max_width_chars matters as much as wrap here: a wrapping Label still
+    // reports its *unwrapped* width as natural, so a long candidate list
+    // would stretch the control column.
     let val_cand = Label::builder()
         .label("-")
         .halign(Align::Start)
         .wrap(true)
+        .max_width_chars(28)
         .build();
     right_pane.append(&val_cand);
 
@@ -183,8 +190,8 @@ pub fn build(state: Rc<RefCell<AppState>>, main_notebook: &Notebook) -> Box {
     val_sites.add_css_class("heading");
     right_pane.append(&val_sites);
 
-    // Fixed height: the site list can run to hundreds of rows on a porous
-    // framework and must not push the controls off the panel.
+    // The list scrolls: on a porous framework it can run to hundreds of rows,
+    // which must not push the controls off the panel.
     let site_list = Label::builder()
         .label("")
         .halign(Align::Start)
@@ -193,29 +200,44 @@ pub fn build(state: Rc<RefCell<AppState>>, main_notebook: &Notebook) -> Box {
         .build();
     site_list.add_css_class("monospace");
 
-    let site_scroll = ScrolledWindow::builder()
-        .child(&site_list)
-        .min_content_height(150)
-        .vexpand(true)
-        .build();
-    right_pane.append(&site_scroll);
-
-    // The screen is geometry only. Say so where the numbers are read, not
-    // just in the manual — a site list this concrete invites being taken for
-    // more than it is.
+    // The screen is geometry only, and the caveat goes directly under the
+    // heading rather than after the list: a list hundreds of rows long would
+    // scroll it out of sight, and this is the line that stops the numbers
+    // being read as energetics. Full wording in the tooltip.
     let caveat = Label::builder()
-        .label(
+        .label("Geometry only — no electrostatics, no barriers.")
+        .tooltip_text(
             "Geometric screen: rigid framework, hard spheres. \
              No electrostatics and no migration barriers.",
         )
         .halign(Align::Start)
         .wrap(true)
-        .margin_top(6)
+        .max_width_chars(28)
         .build();
     caveat.add_css_class("dim-label");
     right_pane.append(&caveat);
 
-    root.append(&right_pane);
+    // Horizontal scrolling only, growing to whatever height the list needs:
+    // the vertical scrolling is the column's job (below), and two nested
+    // vertical scrollers would fight over the wheel.
+    let site_scroll = ScrolledWindow::builder()
+        .child(&site_list)
+        .hscrollbar_policy(PolicyType::Automatic)
+        .vscrollbar_policy(PolicyType::Never)
+        .propagate_natural_height(true)
+        .build();
+    right_pane.append(&site_scroll);
+
+    // The controls scroll as a unit. Without this the column's natural
+    // height -- which the site list can push to any value -- becomes the
+    // Analysis window's minimum height, and the window grows to fit it.
+    let right_scroll = ScrolledWindow::builder()
+        .child(&right_pane)
+        .hscrollbar_policy(PolicyType::Never)
+        .vscrollbar_policy(PolicyType::Automatic)
+        .build();
+    right_scroll.set_width_request(super::CONTROL_PANE_WIDTH);
+    root.append(&right_scroll);
 
     // --- INTERACTION LOGIC ---
     let vis_state = Rc::new(RefCell::new(VoidsVisState {

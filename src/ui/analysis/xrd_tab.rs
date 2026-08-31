@@ -150,7 +150,10 @@ pub fn build(state: Rc<RefCell<AppState>>) -> gtk4::Box {
 
     let frame_plot = Frame::new(Some(" Diffractogram "));
     let drawing_area = gtk4::DrawingArea::new();
-    drawing_area.set_content_width(600);
+    // 400, matching every other analysis tab: this is a *minimum*, and a
+    // 600 px one pushed the whole window past its 950 px default width,
+    // which is what made the XRD split look different from the rest.
+    drawing_area.set_content_width(400);
     drawing_area.set_content_height(400);
     drawing_area.set_hexpand(true);
     drawing_area.set_vexpand(true);
@@ -161,7 +164,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> gtk4::Box {
 
     // RIGHT PANE (Controls)
     let right_pane = gtk4::Box::new(Orientation::Vertical, 10);
-    right_pane.set_width_request(260);
+    right_pane.set_width_request(super::CONTROL_PANE_WIDTH);
 
     let title = Label::new(Some("Settings"));
     title.add_css_class("title-3");
