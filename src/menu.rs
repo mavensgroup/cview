@@ -53,7 +53,8 @@ pub fn build_menu_and_actions(
     app.set_accels_for_action("app.quit", &["<Primary>q"]);
     app.set_accels_for_action("app.view_reset", &["<Primary>r"]);
     app.set_accels_for_action("app.toggle_cell_view", &["<Primary>t"]);
-    app.set_accels_for_action("app.toggle_boundaries", &["<Primary>b"]);
+    app.set_accels_for_action("app.toggle_bonds", &["<Primary>b"]);
+    app.set_accels_for_action("app.toggle_boundaries", &["<Primary><Shift>b"]);
     app.set_accels_for_action("app.supercell", &["<Primary><Shift>c"]);
     app.set_accels_for_action("app.miller_planes", &["<Primary>m"]);
 
@@ -80,6 +81,7 @@ pub fn build_menu_and_actions(
     view_along_submenu.append(Some("Along c-axis (Z)"), Some("app.view_along_c"));
     view_menu.append_submenu(Some("View Along"), &view_along_submenu);
 
+    view_menu.append(Some("Show Bonds"), Some("app.toggle_bonds"));
     view_menu.append(Some("Hide Symmetric Basis"), Some("app.toggle_boundaries"));
     root_model.append_submenu(Some("View"), &view_menu);
 

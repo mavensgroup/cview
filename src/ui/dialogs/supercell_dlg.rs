@@ -105,8 +105,13 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
                         }
                     }
 
-                    if let Some(orig) = &tab.original_structure {
-                        let new_s = supercell::transform(orig, mat);
+                    // Transform the structure as it stands now, so edits made
+                    // since load (deletions, element swaps, an earlier
+                    // transform) are carried into the supercell. `Reset` below
+                    // is what goes back to the as-loaded cell.
+                    let source = tab.structure.as_ref().or(tab.original_structure.as_ref());
+                    if let Some(src) = source {
+                        let new_s = supercell::transform(src, mat);
                         tab.structure = Some(new_s);
                         tab.interaction.selected.clear();
                         tab.invalidate_bvs_cache();

@@ -26,6 +26,8 @@ pub fn setup(app: &Application, window: &ApplicationWindow) {
 • <b>Ctrl + P:</b> Preferences
 • <b>Ctrl + R:</b> Reset View
 • <b>Ctrl + B:</b> Toggle Bonds
+• <b>Ctrl + Shift + B:</b> Toggle Symmetric Basis (full unit cell)
+• <b>Ctrl + T:</b> Toggle Primitive/Conventional Cell
 • <b>Ctrl + Shift + C:</b> Supercell Tool
 • <b>Ctrl + M:</b> Miller Indices Tool
 "#;

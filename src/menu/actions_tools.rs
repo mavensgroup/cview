@@ -115,14 +115,16 @@ pub fn setup(
 
 // --- HELPER FUNCTION ---
 fn convert_and_update(state: &Rc<RefCell<AppState>>, da: &DrawingArea, cell_type: CellType) {
-    // Read the source structure (original if available, else current).
+    // Convert the structure as it stands now, so edits made since load
+    // (deletions, element swaps, a supercell) survive the toggle. Falls back to
+    // the as-loaded cell only if the tab somehow holds no structure.
     // Use shared borrow — we only need to read here.
     let source = {
         let st = state.borrow();
         let tab = st.active_tab();
-        tab.original_structure
+        tab.structure
             .as_ref()
-            .or(tab.structure.as_ref())
+            .or(tab.original_structure.as_ref())
             .cloned()
     };
 
