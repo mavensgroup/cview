@@ -37,15 +37,15 @@ In cubic systems, $(100)$, $(010)$, and $(001)$ are equivalent by symmetry. In l
 1. Open the Miller Planes dialog
 2. Enter the desired indices $(h, k, l)$
    - Example: `1`, `1`, `1` for the $(111)$ plane
-3. Click "Show Plane"
+3. Click **Add**
 
 **What you see**:
 - A semi-transparent plane rendered in the viewport
 - The plane intersects the unit cell edges
-- If the structure is periodic, the plane extends across multiple cells
+- The plane is clipped to its intersection polygon inside the displayed unit cell
 
 >[!TIP]
->The plane geometry is computed using the **Diophantine algorithm** implemented in `physics/operations/miller_algo.rs`. This ensures the plane is positioned exactly at integer linear combinations of lattice vectors.
+>The viewport polygon is calculated by intersecting the Miller plane with the unit-cell edges. The related integer-basis routine in `physics/operations/miller_algo.rs` is used for slab construction rather than viewport-plane placement.
 
 ### Plane Shape
 
@@ -69,13 +69,11 @@ CView solves for two in-plane vectors $\mathbf{u}$, $\mathbf{v}$ that:
 2. Are expressed as integer combinations of $\mathbf{a}$, $\mathbf{b}$, $\mathbf{c}$
 3. Have minimal length (primitive surface cell)
 
-**Implementation**: `find_plane_basis()` in `miller_algo.rs`
-
-This is the same algorithm used internally for [slab generation](slabs.md) — when you create a slab along $(hkl)$, these vectors become the new in-plane lattice vectors.
+**Implementation**: `find_plane_basis()` in `miller_algo.rs` is used internally for [slab generation](slabs.md), where these vectors become the new in-plane lattice vectors. Viewport-plane rendering instead uses direct plane–cell intersection.
 
 ### Plane Position
 
-By default, the plane passes through the origin. For slab generation, you can specify:
+The viewport dialog creates the conventional intercept plane $hx + ky + lz = 1$ in fractional coordinates. For slab generation, you can specify:
 - **Number of atomic layers** to include
 - **Vacuum thickness** above and below
 
@@ -112,17 +110,17 @@ This helps you understand which atoms will be exposed in a slab calculation.
 
 For hexagonal structures like graphite, the $(0001)$ plane (also called the "c-plane") is perpendicular to the stacking direction.
 
-**Indices**: `0`, `0`, `0`, `1` (four-index notation for hexagonal)
+**Indices**: Enter `0`, `0`, `1`. CView uses the three-index $(hkl)$ convention.
 
 >[!NOTE]
->CView uses the three-index $(hkl)$ convention. For hexagonal systems, convert from Miller-Bravais $(hkil)$ by dropping the third index.
+>For hexagonal systems, convert from Miller-Bravais $(hkil)$ to CView's three-index $(hkl)$ convention before entering indices.
 
 ---
 
 ## Keyboard Shortcuts
 
-- **Show Plane**: No dedicated shortcut — use `Tools → Miller Planes`
-- **Clear Plane**: Closing the dialog removes the overlay
+- **Add Plane**: No dedicated shortcut — use `Tools → Miller Indices`
+- **Clear Plane**: Use **Clear All** in the dialog. Closing or cancelling the dialog leaves existing planes visible.
 
 ---
 

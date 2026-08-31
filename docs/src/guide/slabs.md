@@ -7,7 +7,7 @@ Creating surface models from bulk crystals is a prerequisite for surface science
 ### 1. Basis Transformation
 The core challenge is finding two lattice vectors ($u, v$) that lie perfectly within the plane defined by the normal vector $(hkl)$, and a third vector ($w$) that projects out of the plane.
 
-The algorithm (`find_plane_basis` in `miller_algo`) solves the Diophantine equation to ensure integer linear combinations of the original lattice vectors form the new surface basis. This ensures the surface unit cell area is minimized (primitive surface cell).
+The algorithm (`find_plane_basis` in `miller_algo`) solves the Diophantine equation so integer linear combinations of the original lattice vectors form the new surface basis. It selects short vectors in index space; for strongly anisotropic lattices this is valid but is not guaranteed to minimize the physical surface-cell area.
 
 ### 2. Basis Re-mapping
 Once the new basis matrix $M_{surf}$ is found, all atomic positions $r$ are transformed:

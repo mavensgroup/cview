@@ -37,29 +37,29 @@ Valences are not hardcoded. The algorithm iteratively tests a sequence of plausi
 
 **Location**: Sidebar → **Bond Valence** expander
 
-When you expand this section, CView automatically:
-1. Computes BVS for all atoms using the current bond cutoff
-2. Assigns oxidation states based on best-fit valences
-3. Displays the results in a scrollable list
+Select **Bond Valence** from **Sidebar → Bond Valence → Color Mode**. CView then computes BVS for the loaded structure, applies BVS colours in the viewport, and writes a detailed per-atom report to the Structure Info panel.
 
 **Output format** (per atom):
 ```
-Fe(1): BVS = 2.93 [expected: 3+]
-O(2):  BVS = -1.98 [expected: 2-]
+Idx   Elem   Ox      BVS   Expect        Δ   CN  Status
+0     Fe     +3    2.930    3.000   -0.070    6  ✓ Excel
+1     O      -2    1.980    2.000   -0.020    6  ✓ Excel
 ```
 
 ### BVS Color Mode
 
-**How to enable**: Sidebar → **Appearance** → **Color Mode** dropdown → Select **Bond Valence**
+**How to enable**: Sidebar → **Bond Valence** → **Color Mode** dropdown → Select **Bond Valence**
 
-**Effect**: Atoms are colored by their BVS deviation:
-- **Blue**: Under-coordinated (BVS < formal valence) — vacancies nearby, surface atoms
-- **White**: Ideal coordination (BVS ≈ formal valence)
-- **Red**: Over-coordinated (BVS > formal valence) — interstitials, compressed regions
+**Effect**: Atoms are coloured by the magnitude of their BVS deviation:
+- **Green**: Good agreement with the inferred expected valence
+- **Yellow/orange**: Intermediate deviation
+- **Red**: Large deviation
+
+The colour does not encode the sign of the deviation, so it does not distinguish under-bonding from over-bonding.
 
 This heatmap is particularly useful for:
 - Identifying structurally strained sites in defective crystals
-- Validating relaxed DFT geometries (all sites should be near-white)
+- Validating relaxed DFT geometries (all sites should be near-green)
 - Spotting charge transfer in interfaces or heterostructures
 
 >[!TIP]

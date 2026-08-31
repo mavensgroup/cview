@@ -1,6 +1,6 @@
 # Supercells
 
-A **supercell** is an expanded version of the unit cell, created by replicating the structure along the lattice vectors. This is essential for modeling defects, surfaces, interfaces, and finite-size effects in *ab-initio* calculations.
+A **supercell** is an integer transformation of the unit cell. Diagonal transformations replicate along lattice vectors; general integer matrices can also shear or swap axes. This is essential for modeling defects, surfaces, interfaces, and finite-size effects in *ab-initio* calculations.
 
 ---
 
@@ -64,20 +64,18 @@ Phonon calculations (via DFPT or frozen phonons) often require supercells to sam
 
 ### Interface
 
-The supercell dialog presents three integer input fields:
+The dialog is titled **Matrix Transformation** and presents a 3×3 integer matrix. Its default is the identity matrix, which leaves the structure unchanged.
 
-- **N_a**: Repetitions along the **a**-axis
-- **N_b**: Repetitions along the **b**-axis  
-- **N_c**: Repetitions along the **c**-axis
-
-**Default**: `1×1×1` (no expansion)
+- In the default diagonal mode, use diagonal values such as `2, 2, 3` for a 2×2×3 replication.
+- Enable **General Matrix (Shear/Swap)** to edit off-diagonal entries for non-diagonal cell transformations.
+- The matrix must be non-singular; a singular matrix leaves the original structure unchanged.
 
 ### Workflow
 
 1. Load your structure (e.g., a primitive cell)
 2. Open `Tools → Supercell`
-3. Enter desired dimensions (e.g., `2`, `2`, `3`)
-4. Click "Generate Supercell"
+3. Enter the desired diagonal values (for example, `2`, `2`, `3`)
+4. Click **Transform**
 5. The new structure replaces the current tab
 
 >[!TIP]
@@ -125,10 +123,12 @@ Remember that DFT cost scales as $O(N^3)$ with atom count. A 2×2×2 supercell (
 After generating a supercell, you can export it via `File → Save Structure As`:
 
 - **VASP (POSCAR)**: Commonly used for DFT
-- **Quantum Espresso**: Automatically adjusts `nat` parameter
+- **Quantum Espresso input**: Writes the transformed structure
 - **CIF**: For archival or database submission
+- **XYZ**: Cartesian-coordinate interchange
+- **SPR-KKR**: Potential/system-oriented structure export
 
-The lattice vectors are correctly scaled, and all atomic coordinates are in fractional form.
+The transformed structure retains the correct lattice vectors and atomic positions. Output coordinate conventions follow the selected file format.
 
 ---
 

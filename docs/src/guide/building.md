@@ -6,7 +6,7 @@ CView provides several tools to manipulate and construct crystal structures. The
 
 ## Basis Operations
 
-The **Basis** dialog (`Tools → Geometry → Basis/Chemistry`) allows you to perform chemical modifications to your structure.
+The **Basis** dialog (`Tools → Basis`) allows you to perform chemical modifications to your structure.
 
 ### Element Substitution
 
@@ -18,10 +18,10 @@ The **Basis** dialog (`Tools → Geometry → Basis/Chemistry`) allows you to pe
 - Creating hypothetical structures for screening
 
 **How to use**:
-1. Open `Tools → Geometry → Basis/Chemistry`
-2. Select the target element from the dropdown
-3. Enter the new element symbol
-4. Click "Apply Global Substitution"
+1. Open `Tools → Basis`
+2. Select the **Global** tab
+3. Enter the source and replacement element symbols
+4. Click **Replace All**
 
 >[!NOTE]
 >This operation preserves all atomic positions and lattice parameters — only the element identity changes.
@@ -32,11 +32,11 @@ The **Basis** dialog (`Tools → Geometry → Basis/Chemistry`) allows you to pe
 
 **Workflow**:
 1. Select atoms in the viewport (click + Shift to multi-select)
-2. Open the Basis dialog
-3. The selected atoms will be highlighted
-4. Choose the new element and apply
+2. Open the **Selection** tab in the Basis dialog
+3. Enter the replacement element symbol
+4. Click **Change Element**
 
-**Atom Removal**: You can also delete selected atoms to create vacancies or remove unwanted species.
+**Atom Removal**: Press `Delete` after selecting atoms to create vacancies or remove unwanted species.
 
 ---
 
@@ -59,41 +59,30 @@ Crystallographic structures can be represented in two standard forms:
 
 **Keyboard Shortcut**: Press `Ctrl + T` to toggle between primitive and conventional representations.
 
-**Menu Access**: `Tools → Toggle Cell View`
+**Menu Access**: `Tools → Toggle Primitive/Conventional`
 
 **What happens**:
 - CView uses the `moyo` library (spglib wrapper) to detect space group symmetry
 - Atomic positions are transformed to the new basis
-- The structure is reloaded in the active tab
+- The converted cell replaces the active structure. Conversion is derived from the originally loaded structure, so edits made after loading are not carried through this operation.
 
 >[!TIP]
 >Use **primitive cells** for DFT calculations to minimize computational cost. Use **conventional cells** for visualizing crystallographic relationships and comparing to literature structures.
 
 ### Standardization
 
-When you load a CIF file with arbitrary lattice vectors, CView can standardize the cell to match the IUCr conventions:
-
-1. Detection of space group symmetry
-2. Rotation to standard orientation (e.g., c-axis vertical for hexagonal)
-3. Choice of conventional or primitive representation
-
-This ensures your structure matches reference databases like ICSD or Materials Project.
+The **Tools** tab of the Basis dialog provides **Standardize Positions [0, 1)**, which wraps atomic fractional coordinates into the unit cell. It does not perform crystallographic IUCr standardization; use primitive/conventional conversion for Moyo-based standard cells.
 
 ---
 
 ## Atom Instance Management
 
-The **Atom Instances** dialog controls how periodic images (ghost atoms) are displayed.
-
-**Purpose**: When visualizing a unit cell, atoms near boundaries may have periodic images partially inside the cell. This tool lets you:
-- Show/hide ghost atoms outside the central unit cell
-- Expand to show neighboring cells (useful for understanding connectivity)
-- Clean up cluttered visualizations
+The **Atom Instances** dialog provides session-only cosmetic overrides for individual atoms. It lets you filter the atom list and apply or reset a display label and colour for selected sites.
 
 **Access**: `Tools → Atom Instances`
 
 >[!NOTE]
->Ghost atoms are always computed for physics calculations (BVS, polyhedra) even when hidden — the "show" setting only affects rendering.
+>These overrides are not written to structure files. Use `View → Hide Symmetric Basis` or `Ctrl + B` to toggle visible periodic images.
 
 ---
 

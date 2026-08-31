@@ -1,6 +1,6 @@
 # Installation
 
-CView is available as **ready-to-install packages** for all major operating systems. No compilation needed — just download and install like any other application.
+CView releases may provide ready-to-install packages. Check the release assets for your platform; package availability can vary by release.
 
 >[!TIP]
 >**New to software installation?** Just pick your operating system below and follow the pictures-and-clicks instructions. It's as easy as installing any app!
@@ -106,7 +106,7 @@ Choose your distribution below:
 
 ```bash
 # Download
-wget https://github.com/mavensgroup/cview/releases/download/v0.8.4/cview.deb
+wget https://github.com/mavensgroup/cview/releases/latest/download/cview.deb
 
 # Install
 sudo dpkg -i cview.deb
@@ -137,10 +137,10 @@ cview
 
 ```bash
 # Fedora
-sudo dnf install https://github.com/mavensgroup/cview/releases/download/v0.8.4/cview.rpm
+sudo dnf install https://github.com/mavensgroup/cview/releases/latest/download/cview.rpm
 
 # RHEL/CentOS/AlmaLinux
-sudo yum install https://github.com/mavensgroup/cview/releases/download/v0.8.4/cview.rpm
+sudo yum install https://github.com/mavensgroup/cview/releases/latest/download/cview.rpm
 
 # Run CView
 cview
@@ -174,7 +174,7 @@ sudo zypper install flatpak
 
 ```bash
 # Download
-wget https://github.com/mavensgroup/cview/releases/download/v0.8.4/cview.flatpak
+wget https://github.com/mavensgroup/cview/releases/latest/download/cview.flatpak
 
 # Install (no sudo needed with --user)
 flatpak install --user cview.flatpak
@@ -211,7 +211,7 @@ If you want the latest development version or prefer to compile yourself, you ca
 ### Prerequisites
 
 You need:
-- **Rust** (1.70 or newer)
+- **Rust** (1.75 or newer)
 - **GTK4 development libraries**
 - **Git**
 

@@ -68,6 +68,8 @@ PNG Image: Renders a high-resolution raster image (default resolution: $2000\tim
 
 PDF Document: Exports the scene as a vector graphic. This is recommended for academic papers, as it allows for infinite scaling without loss of quality.
 
+SVG Document: Exports an editable vector graphic.
+
 ---
 
 ## Advanced Appearance Controls
@@ -79,22 +81,23 @@ The **Sidebar** (right panel) is the primary control interface for customizing t
 1. **View Controls**: Camera orientation, rotation center
 2. **Appearance**: Atom size, bond thickness, colors
 3. **Bond Valence**: BVS-based coloring (see [BVS Guide](bvs.md))
-4. **Atom List**: Per-element visibility and transparency
+4. **Element Colors**: Per-element colour, transparency, and polyhedra controls
 
 ### Color Modes
 
-CView offers three distinct coloring schemes, accessible via the **Color Mode** dropdown in the sidebar:
+CView offers two coloring schemes, accessible via the **Bond Valence** expander's **Color Mode** dropdown:
 
 | Mode | Description | Use Case |
 |:---|:---|:---|
-| **Element** | Standard CPK colors (C=gray, O=red, etc.) | General visualization, publication figures |
-| **Bond Valence** | Heatmap based on oxidation state deviation | Identifying strained bonds, charge transfer |
-| **Uniform** | Single color for all atoms | Minimalist renders, presentations |
+| **Element Colors** | Standard CPK colours (C=gray, O=red, etc.) | General visualization, publication figures |
+| **Bond Valence** | Heatmap based on the magnitude of BVS deviation | Identifying poorly matched coordination environments |
 
-**Bond Valence Mode**: Colors atoms by their BVS deviation:
-- **Blue**: Under-coordinated (BVS < expected valence)
-- **White**: Ideal coordination (BVS ≈ expected valence)
-- **Red**: Over-coordinated (BVS > expected valence)
+**Bond Valence Mode**: Colors atoms by the absolute difference between calculated and expected BVS:
+- **Green**: Good agreement
+- **Yellow/orange**: Increasing deviation
+- **Red**: Large deviation
+
+Selecting this mode recalculates BVS and writes a detailed report to the Structure Info panel.
 
 See the [Bond Valence Sum Guide](bvs.md) for details on the calculation.
 
@@ -111,8 +114,8 @@ Each element in the structure has an individual transparency slider in the **Ato
 
 The **Bonds** section in the sidebar controls:
 
-- **Bond Radius**: Thickness of bond cylinders (default: 0.1 Å)
-- **Bond Cutoff**: Maximum distance for drawing bonds (default: 2.5× covalent radius sum)
+- **Bond Radius**: Thickness of bond cylinders (default: 0.12 Å)
+- **Bond Tolerance**: Multiplier on the covalent-radius sum used for drawing bonds (default: 1.15)
 - **Bond Color**: RGB picker for custom bond colors
 
 Bonds are drawn between atoms whose distance $d$ satisfies:
@@ -137,13 +140,14 @@ A coordination polyhedron is the 3D shape formed by connecting the nearest-neigh
 
 ### Accessing Polyhedra Controls
 
-**Location**: Sidebar → **Appearance** section → Polyhedra expander
+**Location**: Sidebar → **Appearance** → **Element Colors**
 
 **Controls**:
-1. **Auto-Detect** button: Automatically enables polyhedra for elements with average coordination number 4–8
+1. **Auto-detect Polyhedra** button: Automatically enables polyhedra for elements with average coordination number 4–8
 2. **Per-element checkboxes**: Manually enable/disable polyhedra for specific elements
    - Checkbox labels show the average CN (e.g., "Ti (CN 6)")
-3. **Transparency slider**: Adjust polyhedra opacity (0–100%)
+3. **Poly Transparency** slider: Adjust polyhedra opacity (5–95%)
+4. **Poly Color** control: Use the central element colour or choose a custom colour
 
 ### How Polyhedra are Computed
 
@@ -161,16 +165,7 @@ A coordination polyhedron is the 3D shape formed by connecting the nearest-neigh
 
 ### Settings
 
-**Coordination Number Filter** (in `Preferences`):
-- **Min CN**: Minimum coordination to display (default: 4)
-- **Max CN**: Maximum coordination to display (default: 12)
-- Filters out isolated atoms or highly over-coordinated sites
-
-**Color Mode**:
-- **Element**: Polyhedra inherit the color of the central cation
-- **Coordination**: Color-coded by CN (e.g., CN=4 → yellow, CN=6 → blue)
-
-**Max Bond Distance**: Hard cutoff in Ångströms for coordination bonds (overrides covalent radius heuristic)
+Polyhedra use the configured bond tolerance, a maximum bond-distance cap, and an internal coordination range of 4–12. The current UI exposes element selection, auto-detection, transparency, and element/custom colour controls; it does not expose coordination-number filters in Preferences.
 
 ### Practical Example: BaTiO₃
 
@@ -193,10 +188,12 @@ This visualization immediately reveals the corner-sharing connectivity character
 | Shortcut | Action |
 |:---|:---|
 | `Ctrl + O` | Open file |
-| `Ctrl + S` | Save structure |
 | `Shift + Ctrl + S` | Save structure as... |
-| `Ctrl + E` | Export image (PNG/PDF) |
+| `Ctrl + E` | Export image (PNG/PDF/SVG) |
 | `Ctrl + T` | Toggle Primitive ↔ Conventional cell |
+| `Ctrl + Shift + C` | Matrix transformation tool |
+| `Ctrl + M` | Add Miller plane |
+| `Ctrl + B` | Toggle full-unit-cell/ghost display |
 | **Mouse scroll** | Zoom in/out |
 | **Left-click drag** | Rotate structure |
 | **Shift + click** | Multi-select atoms |

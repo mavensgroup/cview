@@ -9,7 +9,7 @@ This module performs geometric analysis to identify empty space within the cryst
 The analysis does not rely on Voronoi decomposition but rather a robust **Grid Probe Method**.
 
 ### 1. Grid Generation
-A Cartesian grid is superimposed over the unit cell. The resolution is determined dynamically or fixed (standard grid spacing is generally $\leq 0.2 \text{\AA}$ for high precision).
+A regular fractional grid is superimposed over the unit cell. The configured value is a target grid spacing in Å; the engine default is 0.25 Å and the UI initially uses 0.3 Å.
 $$P_{grid} = u \cdot a + v \cdot b + w \cdot c \quad \text{where } u,v,w \in [0, 1]$$
 
 ### 2. Distance Field Calculation
@@ -21,12 +21,12 @@ Where $R_{vdw}$ is the Van der Waals radius of the atom.
 A geometric probe (representing a gas molecule or ion) with radius $R_{probe}$ is tested at each grid point. A point is considered a "Void" if:
 $$D_{surf} > R_{probe}$$
 
-### 4. Clustering (Largest Sphere)
-To find discrete void centers (e.g., for `max_sphere_center`), the algorithm aggregates contiguous void points. The implementation explicitly identifies the point with the maximum clearance radius to locate the largest cavity center.
+### 4. Largest-Sphere Search
+The implementation tracks the sampled point with the greatest clearance from every atomic surface. It reports that single global maximum as `max_sphere_center`; it does not currently cluster connected void regions into separate cavities.
 
 ## Presets and Data
 The module includes standard probe definitions for common applications:
-* **Gases**: He ($1.20 Å$), N$_2$ ($1.82 Å$), CO$_2$ ($1.65 Å$).
+* **Gases**: He ($1.30 Å$), H$_2$ ($1.45 Å$), H$_2$O ($1.32 Å$), CO$_2$ ($1.65 Å$), N$_2$ ($1.82 Å$), O$_2$ ($1.73 Å$), Ar ($1.70 Å$), Kr ($1.80 Å$), CH$_4$ ($1.90 Å$), and C$_2$H$_6$ ($2.20 Å$).
 * **Ions**: Li$^+$ ($0.76 Å$), Na$^+$ ($1.02 Å$), Mg$^{2+}$ ($0.72 Å$).
 
 The void fraction is calculated as:

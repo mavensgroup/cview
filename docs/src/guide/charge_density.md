@@ -30,6 +30,8 @@ The software calculates $\\Delta\\rho(r) = \\rho_A(r) - \\rho_B(r)$ on the fly, 
 ### Exporting
 Slices can be instantly exported as high-resolution `png` or `pdf` images directly from the visualization tab, complete with isolines, heatmaps, and atomic projections.
 
+The **Export Data (NumPy .npy)** action also saves the raw 2D slice as a float64 NumPy array with a JSON sidecar containing the axis extents and labels.
+
 **Export Configuration**: Settings (font sizes, colorbar tick labels, line thickness) are read **live** from the Preferences dialog at the moment you click export — not when the window opens. This ensures your exports always match your current preferences.
 
 ---

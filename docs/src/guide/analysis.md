@@ -10,6 +10,9 @@ The analysis suite is accessible via the **Analysis** menu in the main applicati
 2.  **XRD**: X-Ray Diffraction pattern simulation.
 3.  **Voids**: Porosity and intercalation site analysis.
 4.  **K-Path**: Reciprocal space path generation for band structures.
+5.  **Slab**: Surface-slab generation from Miller indices, thickness, and vacuum.
+
+**Charge Density** is opened separately from **Analysis → Charge Density**; it is not a tab in the Analysis Tools window.
 
 ## Documentation Modules
 

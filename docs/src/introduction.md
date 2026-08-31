@@ -1,7 +1,7 @@
 # CView: Crystal Structure Visualization & Analysis
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Language](https://img.shields.io/badge/rust-1.70%2B-orange.svg)
+![Language](https://img.shields.io/badge/rust-1.75%2B-orange.svg)
 ![GTK4](https://img.shields.io/badge/Toolkit-GTK4-46a946?logo=gtk&logoColor=white)
 ![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)
 ![Windows](https://img.shields.io/badge/Windows-fcc624?logo=microsoft&logoColor=white)
@@ -31,7 +31,7 @@
 | **Fast & Lightweight** | Built on Rust/GTK4. No GPU drivers required. Runs on any laptop. |
 | **Analysis First** | Dedicated tools for [K-Paths](guide/kpath.md), [Slabs](guide/slabs.md), and [Void Analysis](guide/voids.md). |
 | **DFT Ready** | Native support for VASP, Quantum Espresso, and SPRKKR formats. |
-| **Publication Quality** | Export high-resolution, transparent PNGs and PDFs using PBR rendering. |
+| **Publication Quality** | Export high-resolution PNG, PDF, and SVG figures with Cairo-based rendering. |
 
 ---
 

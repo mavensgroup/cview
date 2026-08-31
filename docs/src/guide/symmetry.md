@@ -16,7 +16,7 @@ CView utilizes the **Moyo** library (a Rust ecosystem equivalent to Spglib) to p
     where $r$ and $r'$ are atomic positions of the same species.
 
 ### Tolerance (`SYMPREC`)
-The code applies a default symmetry precision (`SYMPREC`) of **1e-3 Å**. This tolerance accommodates minor numerical noise common in file formats like `.cif` or `.xyz`, ensuring that slightly distorted experimental structures are correctly identified.
+The code applies a default symmetry precision (`SYMPREC`) of **1e-4 Å**. This tolerance is shared by symmetry analysis, k-path generation, and primitive/conventional-cell conversion.
 
 ## Outputs
 

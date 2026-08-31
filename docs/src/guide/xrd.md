@@ -42,6 +42,7 @@ In powder diffraction, symmetry-equivalent planes (e.g., $(100)$ and $(010)$ in 
 You can load the experimental ascii/xlsx file to compare the xrd using the "`Load Experiment`" button.
 
 ## Settings
-* **Wavelength**: Default fixed to Cu K$\alpha$ ($1.5406 Å$).
-* **Range**: $10^\circ$ to $90^\circ$ $2\theta$.
+* **Wavelength**: Defaults to Cu K$\alpha_1$ ($1.5406 Å$), but is editable in the XRD tab.
+* **Range**: Defaults to $10^\circ$ to $90^\circ$ $2\theta$; both limits are editable.
 * **Filtering**: Peaks with intensity $\leq 10^{-4}$ relative to the maximum are discarded to reduce noise.
+* **Additional model terms**: The calculation includes an occupancy-weighted Cromer–Mann form factor and one global isotropic Debye–Waller factor. It models K$\alpha_1$ only, without a K$\alpha_2$ doublet or anomalous dispersion.
