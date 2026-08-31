@@ -29,6 +29,31 @@ pub struct SceneBounds {
     pub scale: f64,
     pub width: f64,
     pub height: f64,
+    /// Everything needed to put an arbitrary Cartesian point through the same
+    /// transform the atoms took. Kept here rather than recomputed by callers
+    /// so overlays (interstitial sites, and anything else drawn in crystal
+    /// coordinates) cannot drift out of register with the structure.
+    rotation: Matrix3<f64>,
+    center: Vector3<f64>,
+    box_center: [f64; 2],
+    win_center: [f64; 2],
+}
+
+impl SceneBounds {
+    /// Project a Cartesian point to screen space.
+    ///
+    /// Returns `[x, y, depth]` — depth in the same units as
+    /// `RenderAtom::screen_pos[2]`, so an overlay can be depth-tested against
+    /// the atoms.
+    pub fn project(&self, cart: [f64; 3]) -> [f64; 3] {
+        let p = Vector3::new(cart[0], cart[1], cart[2]) - self.center;
+        let r = self.rotation * p;
+        [
+            (r.x - self.box_center[0]) * self.scale + self.win_center[0],
+            (r.y - self.box_center[1]) * self.scale + self.win_center[1],
+            r.z,
+        ]
+    }
 }
 
 // Return: (Atoms, Lattice Corners [Screen X, Y], Bounds)
@@ -49,6 +74,10 @@ pub fn calculate_scene(
                 vec![],
                 SceneBounds {
                     scale: 1.0,
+                    rotation: Matrix3::identity(),
+                    center: Vector3::zeros(),
+                    box_center: [0.0, 0.0],
+                    win_center: [0.0, 0.0],
                     width: 100.0,
                     height: 100.0,
                 },
@@ -277,6 +306,10 @@ pub fn calculate_scene(
         final_corners,
         SceneBounds {
             scale: final_scale,
+            rotation: rotation_matrix.into(),
+            center,
+            box_center: [box_cx, box_cy],
+            win_center: [win_cx, win_cy],
             width: if is_export { export_w } else { win_w },
             height: if is_export { export_h } else { win_h },
         },

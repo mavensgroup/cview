@@ -2,15 +2,17 @@ use crate::model::structure::Structure;
 use crate::state::AppState;
 use gtk4::prelude::*;
 use gtk4::{
-    Align, Box, Button, DrawingArea, DropDown, Frame, Grid, Label, Orientation, Separator,
-    SpinButton, StringList,
+    Align, Box, Button, DrawingArea, DropDown, Frame, Grid, Label, Notebook, Orientation,
+    ScrolledWindow, Separator, SpinButton, StringList,
 };
 use std::cell::RefCell;
 use std::f64::consts::PI;
 use std::rc::Rc;
 
 // Import constants and types from Physics
+use crate::physics::analysis::interstitial::{self, InterstitialSite};
 use crate::physics::analysis::voids::{self, RadiusType, VoidConfig, VoidResult};
+use crate::state::InterstitialOverlay;
 use crate::utils::console;
 use crate::utils::task::{self, JobHandle};
 use std::time::Instant;
@@ -18,6 +20,7 @@ use std::time::Instant;
 struct VoidsVisState {
     structure: Option<Structure>,
     result: Option<VoidResult>,
+    sites: Vec<InterstitialSite>,
 }
 
 struct DrawableAtom {
@@ -29,7 +32,7 @@ struct DrawableAtom {
     is_void: bool,
 }
 
-pub fn build(state: Rc<RefCell<AppState>>) -> Box {
+pub fn build(state: Rc<RefCell<AppState>>, main_notebook: &Notebook) -> Box {
     let root = Box::new(Orientation::Horizontal, 15);
     root.set_margin_top(15);
     root.set_margin_bottom(15);
@@ -109,6 +112,24 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     }
     ctrl_box.append(&grid_probes);
 
+    // 6. Candidate ion for the interstitial site search.
+    //
+    // Separate from the probe radius above: the probe decides what counts as
+    // open space for the void fraction, while this decides which of the sites
+    // found are big enough to report. Keeping them apart means changing the
+    // ion does not silently redefine the porosity number next to it.
+    let row_ion = Box::new(Orientation::Horizontal, 10);
+    row_ion.append(&Label::new(Some("Insert ion:")));
+    let ion_names: Vec<&str> = voids::CANDIDATE_IONS.iter().map(|(n, _)| *n).collect();
+    let drop_ion = DropDown::new(
+        Some(StringList::new(&ion_names)),
+        None::<&gtk4::Expression>,
+    );
+    drop_ion.set_selected(0); // Li+
+    drop_ion.set_hexpand(true);
+    row_ion.append(&drop_ion);
+    ctrl_box.append(&row_ion);
+
     let btn_calc = Button::with_label("Calculate");
     btn_calc.add_css_class("suggested-action");
     ctrl_box.append(&btn_calc);
@@ -154,16 +175,58 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         .build();
     right_pane.append(&val_cand);
 
+    let val_sites = Label::builder()
+        .label("Interstitial sites: -")
+        .halign(Align::Start)
+        .margin_top(10)
+        .build();
+    val_sites.add_css_class("heading");
+    right_pane.append(&val_sites);
+
+    // Fixed height: the site list can run to hundreds of rows on a porous
+    // framework and must not push the controls off the panel.
+    let site_list = Label::builder()
+        .label("")
+        .halign(Align::Start)
+        .valign(Align::Start)
+        .wrap(false)
+        .build();
+    site_list.add_css_class("monospace");
+
+    let site_scroll = ScrolledWindow::builder()
+        .child(&site_list)
+        .min_content_height(150)
+        .vexpand(true)
+        .build();
+    right_pane.append(&site_scroll);
+
+    // The screen is geometry only. Say so where the numbers are read, not
+    // just in the manual — a site list this concrete invites being taken for
+    // more than it is.
+    let caveat = Label::builder()
+        .label(
+            "Geometric screen: rigid framework, hard spheres. \
+             No electrostatics and no migration barriers.",
+        )
+        .halign(Align::Start)
+        .wrap(true)
+        .margin_top(6)
+        .build();
+    caveat.add_css_class("dim-label");
+    right_pane.append(&caveat);
+
     root.append(&right_pane);
 
     // --- INTERACTION LOGIC ---
     let vis_state = Rc::new(RefCell::new(VoidsVisState {
         structure: state.borrow().active_tab().structure.clone(),
         result: None,
+        sites: Vec::new(),
     }));
     let state_c = state.clone();
     let vis_c = vis_state.clone();
     let da_c = drawing_area.clone();
+    let nb_weak = main_notebook.downgrade();
 
     // One slot for the in-flight job. Dropping a JobHandle cancels its
     // worker, so assigning here is what stops a superseded run: the user can
@@ -172,9 +235,16 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     let job_c = job.clone();
 
     btn_calc.connect_clicked(move |btn| {
-        let structure = match state_c.borrow().active_tab().structure.clone() {
-            Some(s) => s,
-            None => return,
+        // Pin the tab this run belongs to. A sweep takes long enough that the
+        // user can switch tabs before it lands, and the overlay has to follow
+        // the structure it was computed from, not whatever is on screen when
+        // the worker happens to finish.
+        let (structure, tab_index) = {
+            let st = state_c.borrow();
+            match st.active_tab().structure.clone() {
+                Some(s) => (s, st.active_tab_index),
+                None => return,
+            }
         };
 
         // Map Index -> Enum
@@ -201,6 +271,12 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         btn.set_label("Calculating…");
         val_cand.set_markup("<i>Working…</i>");
 
+        let ion_index = drop_ion.selected() as usize;
+        let (ion_name, ion_radius) = voids::CANDIDATE_IONS
+            .get(ion_index)
+            .copied()
+            .unwrap_or(("Li\u{207a}", 0.76));
+
         // The worker gets its own copy; the UI keeps one to draw against so
         // neither thread has to reach for the other's state.
         let work_structure = structure.clone();
@@ -210,14 +286,26 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         let val_d = val_d.clone();
         let val_vol = val_vol.clone();
         let val_cand = val_cand.clone();
+        let val_sites = val_sites.clone();
+        let site_list = site_list.clone();
         let vis_done = vis_c.clone();
         let da_done = da_c.clone();
+        let state_done = Rc::downgrade(&state_c);
+        let nb_done = nb_weak.clone();
 
         let handle = task::spawn(
             move |cancel| {
                 let started = Instant::now();
-                match voids::calculate_voids_cancellable(&work_structure, config, &cancel) {
-                    Ok(Some(result)) => Some(Ok((result, started.elapsed()))),
+                // One field, both answers — sampling the cell is the whole
+                // cost, and running it twice to get the void numbers and the
+                // sites separately would double it for nothing.
+                match interstitial::screen_structure(
+                    &work_structure,
+                    config,
+                    ion_radius,
+                    &cancel,
+                ) {
+                    Ok(Some((result, sites))) => Some(Ok((result, sites, started.elapsed()))),
                     // Superseded — the UI has already moved on, say nothing.
                     Ok(None) => None,
                     Err(e) => Some(Err(e)),
@@ -228,7 +316,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
                 btn_done.set_label("Calculate");
 
                 match outcome {
-                    Ok((result, elapsed)) => {
+                    Ok((result, sites, elapsed)) => {
                         let r_max = result.max_sphere_radius;
 
                         val_r.set_text(&format!("{:.3} Å", r_max));
@@ -252,24 +340,87 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
                             val_cand.set_markup("<span color='red'>Overlap Detected</span>");
                         }
 
+                        // --- interstitial sites ---
+                        if sites.is_empty() {
+                            val_sites.set_markup(&format!(
+                                "Interstitial sites: <b>none</b> fit {} ({:.2} Å)",
+                                ion_name, ion_radius
+                            ));
+                            site_list.set_text("");
+                        } else {
+                            val_sites.set_markup(&format!(
+                                "Interstitial sites: <b>{}</b> fit {} ({:.2} Å)",
+                                sites.len(),
+                                ion_name,
+                                ion_radius
+                            ));
+
+                            // Sites are sorted largest-first; a porous cell can
+                            // yield hundreds, and the tail is all but identical.
+                            const SHOWN: usize = 40;
+                            let mut text = String::from("   #   radius      a      b      c\n");
+                            for (i, s) in sites.iter().take(SHOWN).enumerate() {
+                                text.push_str(&format!(
+                                    "{:>4}  {:>6.3}  {:>5.3}  {:>5.3}  {:>5.3}\n",
+                                    i + 1,
+                                    s.radius,
+                                    s.frac[0],
+                                    s.frac[1],
+                                    s.frac[2]
+                                ));
+                            }
+                            if sites.len() > SHOWN {
+                                text.push_str(&format!(
+                                    "… and {} more\n",
+                                    sites.len() - SHOWN
+                                ));
+                            }
+                            site_list.set_text(&text);
+                        }
+
                         console::log_info(&format!(
-                            "Void analysis: {}×{}×{} grid ({} points) in {:.0} ms",
+                            "Void analysis: {}×{}×{} grid ({} points), {} site(s) for {} in {:.0} ms",
                             result.grid_info.nx,
                             result.grid_info.ny,
                             result.grid_info.nz,
                             result.grid_info.total_points,
+                            sites.len(),
+                            ion_name,
                             elapsed.as_secs_f64() * 1000.0
                         ));
+
+                        // Hand the overlay to the tab so the main 3D view can
+                        // draw it, then repaint both views.
+                        if let Some(st) = state_done.upgrade() {
+                            let mut st = st.borrow_mut();
+                            // Bounds-checked: the tab may have been closed
+                            // while the sweep was running.
+                            if let Some(tab) = st.tabs.get_mut(tab_index) {
+                                tab.interstitial = Some(InterstitialOverlay {
+                                    ion: ion_name.to_string(),
+                                    ion_radius,
+                                    sites: sites.clone(),
+                                });
+                            }
+                        }
+                        if let Some(nb) = nb_done.upgrade() {
+                            if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
+                                da.queue_draw();
+                            }
+                        }
 
                         let mut vs = vis_done.borrow_mut();
                         vs.structure = Some(structure);
                         vs.result = Some(result);
+                        vs.sites = sites;
                         drop(vs);
                         da_done.queue_draw();
                     }
                     Err(e) => {
                         val_cand.set_markup(&format!("<span color='red'>Error: {}</span>", e));
                         val_r.set_text("-");
+                        val_sites.set_text("Interstitial sites: -");
+                        site_list.set_text("");
                     }
                 }
             },
@@ -395,6 +546,24 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
                         is_void: true,
                     });
                 }
+            }
+
+            // Interstitial sites, at their fitted radius so a tight site reads
+            // as tight. Teal, to separate them from the red largest-sphere
+            // marker above and the grey framework atoms.
+            for site in &vs.sites {
+                let sx = site.frac[0] * ax + site.frac[1] * bx + site.frac[2] * cx_vec;
+                let sy = site.frac[0] * ay + site.frac[1] * by + site.frac[2] * cy_vec;
+                let sz = site.frac[0] * az + site.frac[1] * bz + site.frac[2] * cz_vec;
+                let (px, py, pz) = project(sx - center_x, sy - center_y, sz - center_z);
+                list.push(DrawableAtom {
+                    x: px,
+                    y: py,
+                    z: pz,
+                    r: site.radius * view_scale,
+                    color: (0.0, 0.72, 0.66, 0.55),
+                    is_void: true,
+                });
             }
 
             // CRITICAL FIX: Sort DESCENDING (Far to Near) so atoms close to camera overlap atoms behind.

@@ -42,7 +42,7 @@ pub fn build_menu_and_actions(
         sidebar_handles,
     );
     actions_tools::setup(app, window, state.clone(), notebook, drawing_area);
-    actions_analysis::setup(app, window, state.clone());
+    actions_analysis::setup(app, window, state.clone(), notebook);
     actions_help::setup(app, window);
 
     // --- 2. KEYBOARD SHORTCUTS ---
@@ -55,6 +55,7 @@ pub fn build_menu_and_actions(
     app.set_accels_for_action("app.toggle_cell_view", &["<Primary>t"]);
     app.set_accels_for_action("app.toggle_bonds", &["<Primary>b"]);
     app.set_accels_for_action("app.toggle_boundaries", &["<Primary><Shift>b"]);
+    app.set_accels_for_action("app.toggle_interstitial_sites", &["<Primary>i"]);
     app.set_accels_for_action("app.supercell", &["<Primary><Shift>c"]);
     app.set_accels_for_action("app.miller_planes", &["<Primary>m"]);
 
@@ -82,6 +83,10 @@ pub fn build_menu_and_actions(
     view_menu.append_submenu(Some("View Along"), &view_along_submenu);
 
     view_menu.append(Some("Show Bonds"), Some("app.toggle_bonds"));
+    view_menu.append(
+        Some("Show Interstitial Sites"),
+        Some("app.toggle_interstitial_sites"),
+    );
     view_menu.append(Some("Hide Symmetric Basis"), Some("app.toggle_boundaries"));
     root_model.append_submenu(Some("View"), &view_menu);
 

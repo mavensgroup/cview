@@ -114,7 +114,7 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
                         let new_s = supercell::transform(src, mat);
                         tab.structure = Some(new_s);
                         tab.interaction.selected.clear();
-                        tab.invalidate_bvs_cache();
+                        tab.invalidate_derived();
 
                         if let Some(nb) = notebook_weak.upgrade() {
                             if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
@@ -127,7 +127,7 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
                     if let Some(orig) = &tab.original_structure {
                         tab.structure = Some(orig.clone());
                         tab.interaction.selected.clear();
-                        tab.invalidate_bvs_cache();
+                        tab.invalidate_derived();
 
                         for (i, spin) in spins_final.iter().enumerate() {
                             let r = i / 3;

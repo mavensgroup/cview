@@ -27,6 +27,15 @@ pub const PRESET_PROBES: &[(&str, f64)] = &[
     ("Geometric", 0.00), // Pure geometric void (no probe)
 ];
 
+/// Ceiling on grid points, and so on memory: samples are `f32`, so 30M
+/// points is 120 MB for the field plus the cell list over atom images.
+///
+/// Sized by memory rather than time. Since the sampling kernel became a
+/// cell-list scan (~44 ns per point regardless of atom count) and moved to a
+/// cancellable worker thread, 30M points is about a second of wall clock --
+/// a 310^3 grid, or a 30 A cell at 0.1 A resolution.
+pub const DEFAULT_MAX_GRID_POINTS: usize = 30_000_000;
+
 /// Common ions for intercalation analysis
 /// Ionic radii from Shannon (1976) - coordination-dependent values
 pub const CANDIDATE_IONS: &[(&str, f64)] = &[
@@ -133,7 +142,7 @@ impl Default for VoidConfig {
             probe_radius: 1.30,             // Helium probe (kinetic diameter 2.60 Å)
             radii_scale: 1.0,               // No scaling
             radius_type: RadiusType::Ionic, // Best for most crystals
-            max_grid_points: 10_000_000,    // ~10M points limit
+            max_grid_points: DEFAULT_MAX_GRID_POINTS,
         }
     }
 }
@@ -852,6 +861,18 @@ pub fn calculate_voids_cancellable(
         None => return Ok(None),
     };
 
+    Ok(Some(summarize(&field)))
+}
+
+/// Reduce a sampled field to the headline void numbers.
+///
+/// Split out so a caller that needs the field for something else -- the
+/// interstitial site search -- can have both from one sweep instead of
+/// sampling the cell twice.
+pub fn summarize(field: &DistanceField) -> VoidResult {
+    let config = field.config();
+
+
     // The sampled maximum is quantized by the grid; refine it off-lattice
     // before reporting. This number decides which ions are said to fit, and
     // at a 0.25 A grid the quantization error straddles Li+ and Mg2+.
@@ -876,7 +897,7 @@ pub fn calculate_voids_cancellable(
         0.0
     };
 
-    Ok(Some(VoidResult {
+    VoidResult {
         max_sphere_radius,
         max_sphere_center,
         void_fraction,
@@ -888,7 +909,7 @@ pub fn calculate_voids_cancellable(
             total_points,
             void_points,
         },
-    }))
+    }
 }
 
 // --- 6. CONVENIENCE FUNCTIONS ---

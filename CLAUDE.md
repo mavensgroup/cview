@@ -77,6 +77,7 @@ Tagged pushes (`v*`, `test-v*`) trigger `.github/workflows/release.yml` which bu
 ## Conventions in this codebase
 
 - Widgets are downgraded to weak refs (`.downgrade()`) before being captured by long-lived callbacks to avoid reference cycles. Follow this pattern when adding new actions.
-- BVS cache is invalidated explicitly via `tab.invalidate_bvs_cache()` after any structure mutation (delete, undo, supercell, etc.). New mutations must do the same.
+- Derived state is invalidated explicitly via `tab.invalidate_derived()` after any structure mutation (delete, undo, supercell, cell conversion, element substitution). It clears the BVS cache, `kpath_result`, `void_result` and the interstitial overlay together. New mutations must call it; `invalidate_bvs_cache()` alone is not enough and leaves stale analysis attached to a structure it no longer describes.
 - The bottom console has two tabs: "Structure Info" for scientific output (`console::info_report`), "System Log" for I/O and errors (`console::log_info` / `log_error`). Keep them separate.
-- Analysis results (`KPathResult`, `VoidResult`) are cached on the tab so re-opening the Analysis window doesn't recompute. Invalidate them when the structure changes.
+- Analysis results (`KPathResult`, `VoidResult`, `InterstitialOverlay`) are cached on the tab so re-opening the Analysis window doesn't recompute. `invalidate_derived()` is what drops them.
+- Long analysis runs go through `utils::task::spawn`, which runs the work on a worker thread and delivers the result back on the main loop. Dropping the returned `JobHandle` cancels the job, so a panel keeps one handle and starting a new run supersedes the old one. Work that can take seconds must poll its `CancelToken` and return `None` rather than a partial result.

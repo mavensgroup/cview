@@ -176,4 +176,30 @@ pub fn setup(
         }
     });
     app.add_action(&act_boundary);
+
+    // 7. Toggle Interstitial Site Overlay
+    let act_sites = gtk4::gio::SimpleAction::new("toggle_interstitial_sites", None);
+    let s_sites = state.clone();
+    let nb_sites = notebook.downgrade();
+
+    act_sites.connect_activate(move |_, _| {
+        if let Some(da) = get_da(&nb_sites) {
+            let mut st = s_sites.borrow_mut();
+            let tab = st.active_tab_mut();
+
+            tab.view.show_interstitial_sites = !tab.view.show_interstitial_sites;
+
+            // Say so when there is nothing to show: the menu item otherwise
+            // looks broken on a tab that has never been screened.
+            if tab.interstitial.is_none() {
+                crate::utils::console::log_info(
+                    "No interstitial sites computed for this tab \u{2014} run Analysis \u{2192} \
+                     Void Analysis and pick a candidate ion.",
+                );
+            }
+
+            da.queue_draw();
+        }
+    });
+    app.add_action(&act_sites);
 }

@@ -510,7 +510,7 @@ pub fn build(
 
         // Recalculate BVS if switching to BVS mode
         if matches!(mode, ColorMode::BondValence) {
-            tab.invalidate_bvs_cache();
+            tab.invalidate_derived();
             let _ = tab.get_bvs_values();
 
             // Show BVS report in Structure Info tab

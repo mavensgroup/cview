@@ -15,9 +15,11 @@
 // substitute for one.
 
 use super::voids::{
-    calculate_distance_field, DistanceField, RadiusType, VoidConfig, VoidError,
+    calculate_distance_field, calculate_distance_field_cancellable, summarize, DistanceField,
+    RadiusType, VoidConfig, VoidError, VoidResult,
 };
 use crate::model::Structure;
+use crate::utils::task::CancelToken;
 use nalgebra::Vector3;
 use rayon::prelude::*;
 
@@ -106,6 +108,20 @@ impl DisjointSet {
 ///
 /// Sites come back sorted by radius, largest first.
 pub fn find_sites(field: &DistanceField, search: SiteSearch) -> Vec<InterstitialSite> {
+    find_sites_cancellable(field, search, &CancelToken::never())
+        .expect("an uncancellable search cannot be cancelled")
+}
+
+/// [`find_sites`], abandoning the work if `cancel` is tripped.
+///
+/// The local-maxima scan touches all 26 neighbours of every grid point, so on
+/// a 25M-point field it is comparable in cost to building the field itself and
+/// has to be interruptible for the same reason.
+pub fn find_sites_cancellable(
+    field: &DistanceField,
+    search: SiteSearch,
+    cancel: &CancelToken,
+) -> Option<Vec<InterstitialSite>> {
     let (nx, ny, nz) = field.dims();
     let (inx, iny, inz) = (nx as isize, ny as isize, nz as isize);
 
@@ -115,6 +131,11 @@ pub fn find_sites(field: &DistanceField, search: SiteSearch) -> Vec<Interstitial
         .into_par_iter()
         .flat_map_iter(|k| {
             let mut local = Vec::new();
+
+            // Checked per slice, as in the field sweep.
+            if cancel.is_cancelled() {
+                return local;
+            }
 
             for j in 0..ny {
                 for i in 0..nx {
@@ -155,8 +176,12 @@ pub fn find_sites(field: &DistanceField, search: SiteSearch) -> Vec<Interstitial
         })
         .collect();
 
+    if cancel.is_cancelled() {
+        return None;
+    }
+
     if candidates.is_empty() {
-        return Vec::new();
+        return Some(Vec::new());
     }
 
     // Deterministic order regardless of how rayon interleaved the slices.
@@ -228,6 +253,10 @@ pub fn find_sites(field: &DistanceField, search: SiteSearch) -> Vec<Interstitial
         .merge_tolerance
         .unwrap_or_else(|| field.spacing_hint().max(0.05));
 
+    if cancel.is_cancelled() {
+        return None;
+    }
+
     let mut sites: Vec<InterstitialSite> = Vec::new();
 
     for (frac, radius) in refined {
@@ -251,7 +280,7 @@ pub fn find_sites(field: &DistanceField, search: SiteSearch) -> Vec<Interstitial
         });
     }
 
-    sites
+    Some(sites)
 }
 
 /// Find the sites in `structure` that could host an ion of the given
@@ -275,6 +304,33 @@ pub fn find_sites_for_ion(
 
     let field = calculate_distance_field(structure, config)?;
     Ok(find_sites(&field, SiteSearch::for_ion(ionic_radius)))
+}
+
+/// One sweep of the cell answering both questions the voids panel asks: the
+/// headline void numbers, and every site that could host the candidate ion.
+///
+/// Sampling the distance field is the expensive part and both answers come
+/// out of the same field, so they are computed together rather than by two
+/// passes over the same grid.
+///
+/// Returns `Ok(None)` when the run was cancelled.
+pub fn screen_structure(
+    structure: &Structure,
+    config: VoidConfig,
+    ion_radius: f64,
+    cancel: &CancelToken,
+) -> Result<Option<(VoidResult, Vec<InterstitialSite>)>, VoidError> {
+    let field = match calculate_distance_field_cancellable(structure, config, cancel)? {
+        Some(field) => field,
+        None => return Ok(None),
+    };
+
+    let voids = summarize(&field);
+
+    match find_sites_cancellable(&field, SiteSearch::for_ion(ion_radius), cancel) {
+        Some(sites) => Ok(Some((voids, sites))),
+        None => Ok(None),
+    }
 }
 
 #[cfg(test)]

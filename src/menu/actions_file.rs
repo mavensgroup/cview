@@ -166,7 +166,7 @@ pub fn setup(
                                             tab.miller_planes.clear();
                                             tab.kpath_result = None;
                                             tab.void_result = None;
-                                            tab.invalidate_bvs_cache();
+                                            tab.invalidate_derived();
                                             replace_current_tab = true;
                                         } else {
                                             s.add_tab(structure, filename.clone());
