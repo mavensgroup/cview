@@ -5,3 +5,15 @@ docs/book
 
 # Corpus audit working data (COD archive, extracted CIFs, results)
 /.audit_work
+
+# Manuscript sources and sample-data working dirs (kept out of history:
+# ~32 MB, mostly generated PDFs, tarballs and CHGCARs)
+/article
+/excmples
+
+# Scratch planning notes and one-off scripts
+/todo.md
+/chg.md
+/linalg.md
+/color_scheme_tables.rs
+/plot_chgcar_npy.py
