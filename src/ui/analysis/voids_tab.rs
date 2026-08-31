@@ -11,6 +11,9 @@ use std::rc::Rc;
 
 // Import constants and types from Physics
 use crate::physics::analysis::voids::{self, RadiusType, VoidConfig, VoidResult};
+use crate::utils::console;
+use crate::utils::task::{self, JobHandle};
+use std::time::Instant;
 
 struct VoidsVisState {
     structure: Option<Structure>,
@@ -162,62 +165,117 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     let vis_c = vis_state.clone();
     let da_c = drawing_area.clone();
 
-    btn_calc.connect_clicked(move |_| {
-        let st = state_c.borrow();
-        if let Some(structure) = &st.active_tab().structure {
-            // Map Index -> Enum
-            let idx = drop_type.selected();
-            let r_type = match idx {
-                0 => RadiusType::Ionic,
-                1 => RadiusType::VanDerWaals,
-                _ => RadiusType::Covalent,
-            };
+    // One slot for the in-flight job. Dropping a JobHandle cancels its
+    // worker, so assigning here is what stops a superseded run: the user can
+    // hammer Calculate and only the newest sweep survives to touch the UI.
+    let job: Rc<RefCell<Option<JobHandle>>> = Rc::new(RefCell::new(None));
+    let job_c = job.clone();
 
-            // Create Config
-            let config = VoidConfig {
-                grid_resolution: spin_res.value(),
-                probe_radius: spin_probe.value(),
-                radii_scale: spin_scale.value(),
-                radius_type: r_type,
-                max_grid_points: 10_000_000,
-            };
+    btn_calc.connect_clicked(move |btn| {
+        let structure = match state_c.borrow().active_tab().structure.clone() {
+            Some(s) => s,
+            None => return,
+        };
 
-            // Calculate & Handle Result
-            match voids::calculate_voids(structure, config) {
-                Ok(result) => {
-                    let r_max = result.max_sphere_radius;
+        // Map Index -> Enum
+        let idx = drop_type.selected();
+        let r_type = match idx {
+            0 => RadiusType::Ionic,
+            1 => RadiusType::VanDerWaals,
+            _ => RadiusType::Covalent,
+        };
 
-                    val_r.set_text(&format!("{:.3} Å", r_max));
-                    val_d.set_text(&format!("{:.3} Å", r_max * 2.0));
-                    val_vol.set_text(&format!("{:.2} %", result.void_fraction));
+        // Create Config
+        let config = VoidConfig {
+            grid_resolution: spin_res.value(),
+            probe_radius: spin_probe.value(),
+            radii_scale: spin_scale.value(),
+            radius_type: r_type,
+            max_grid_points: 10_000_000,
+        };
 
-                    if r_max > 0.0 {
-                        let mut fits = Vec::new();
-                        for (ion, rad) in voids::CANDIDATE_IONS {
-                            if *rad <= r_max {
-                                fits.push(*ion);
+        // Cancel whatever was running before starting the replacement.
+        *job_c.borrow_mut() = None;
+
+        btn.set_sensitive(false);
+        btn.set_label("Calculating…");
+        val_cand.set_markup("<i>Working…</i>");
+
+        // The worker gets its own copy; the UI keeps one to draw against so
+        // neither thread has to reach for the other's state.
+        let work_structure = structure.clone();
+
+        let btn_done = btn.clone();
+        let val_r = val_r.clone();
+        let val_d = val_d.clone();
+        let val_vol = val_vol.clone();
+        let val_cand = val_cand.clone();
+        let vis_done = vis_c.clone();
+        let da_done = da_c.clone();
+
+        let handle = task::spawn(
+            move |cancel| {
+                let started = Instant::now();
+                match voids::calculate_voids_cancellable(&work_structure, config, &cancel) {
+                    Ok(Some(result)) => Some(Ok((result, started.elapsed()))),
+                    // Superseded — the UI has already moved on, say nothing.
+                    Ok(None) => None,
+                    Err(e) => Some(Err(e)),
+                }
+            },
+            move |outcome| {
+                btn_done.set_sensitive(true);
+                btn_done.set_label("Calculate");
+
+                match outcome {
+                    Ok((result, elapsed)) => {
+                        let r_max = result.max_sphere_radius;
+
+                        val_r.set_text(&format!("{:.3} Å", r_max));
+                        val_d.set_text(&format!("{:.3} Å", r_max * 2.0));
+                        val_vol.set_text(&format!("{:.2} %", result.void_fraction));
+
+                        if r_max > 0.0 {
+                            let mut fits = Vec::new();
+                            for (ion, rad) in voids::CANDIDATE_IONS {
+                                if *rad <= r_max {
+                                    fits.push(*ion);
+                                }
                             }
-                        }
-                        if fits.is_empty() {
-                            val_cand.set_markup("<span color='orange'>None (Too Small)</span>");
+                            if fits.is_empty() {
+                                val_cand
+                                    .set_markup("<span color='orange'>None (Too Small)</span>");
+                            } else {
+                                val_cand.set_markup(&format!("<b>{}</b>", fits.join(", ")));
+                            }
                         } else {
-                            val_cand.set_markup(&format!("<b>{}</b>", fits.join(", ")));
+                            val_cand.set_markup("<span color='red'>Overlap Detected</span>");
                         }
-                    } else {
-                        val_cand.set_markup("<span color='red'>Overlap Detected</span>");
-                    }
 
-                    let mut vs = vis_c.borrow_mut();
-                    vs.structure = Some(structure.clone());
-                    vs.result = Some(result);
-                    da_c.queue_draw();
+                        console::log_info(&format!(
+                            "Void analysis: {}×{}×{} grid ({} points) in {:.0} ms",
+                            result.grid_info.nx,
+                            result.grid_info.ny,
+                            result.grid_info.nz,
+                            result.grid_info.total_points,
+                            elapsed.as_secs_f64() * 1000.0
+                        ));
+
+                        let mut vs = vis_done.borrow_mut();
+                        vs.structure = Some(structure);
+                        vs.result = Some(result);
+                        drop(vs);
+                        da_done.queue_draw();
+                    }
+                    Err(e) => {
+                        val_cand.set_markup(&format!("<span color='red'>Error: {}</span>", e));
+                        val_r.set_text("-");
+                    }
                 }
-                Err(e) => {
-                    val_cand.set_markup(&format!("<span color='red'>Error: {}</span>", e));
-                    val_r.set_text("-");
-                }
-            }
-        }
+            },
+        );
+
+        *job_c.borrow_mut() = Some(handle);
     });
 
     // --- DRAWING LOGIC (Cartesian + Fixed Sorting) ---

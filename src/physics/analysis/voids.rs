@@ -3,9 +3,11 @@
 use crate::model::elements::{get_atom_cov, get_atom_ionic_radius, get_atom_vdw};
 use crate::model::structure::Structure;
 use crate::utils::linalg::cart_to_frac;
+use crate::utils::task::CancelToken;
 use nalgebra::{Matrix3, Vector3};
 use rayon::prelude::*;
 use std::fmt;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // --- 1. PUBLIC CONSTANTS (Single Source of Truth) ---
 
@@ -254,9 +256,11 @@ struct ProbeAtom {
 
 /// Distance from `point` (fractional) to the nearest atom *surface*, in Å.
 ///
-/// Positive in open space, negative inside an atom. This is the single
-/// quantity the whole void/interstitial stack is built on:
-/// `d(x) = min_i (|x - r_i|_pbc - R_i)`.
+/// Brute-force reference implementation: scans every atom, and for an oblique
+/// cell every one of the 27 images around the component-wise-rounded offset.
+/// [`ImageGrid`] is what the sampling loops actually use; this is kept as the
+/// definition the fast path is tested against.
+#[cfg(test)]
 fn min_surface_distance(
     point: Vector3<f64>,
     atoms: &[ProbeAtom],
@@ -272,9 +276,6 @@ fn min_surface_distance(
         df.y -= df.y.round();
         df.z -= df.z.round();
 
-        // Component-wise fractional rounding is an exact minimum image only
-        // for orthogonal cells; for oblique cells the true nearest image can
-        // be a neighboring offset, so scan the 27 around it.
         let center_dist = if oblique {
             let mut best_sq = f64::MAX;
             for ox in -1..=1 {
@@ -294,6 +295,173 @@ fn min_surface_distance(
     }
 
     min_dist
+}
+
+/// Uniform cell list over the periodic images of the framework atoms.
+///
+/// The naive kernel is O(grid points x atoms), and for an oblique cell every
+/// one of those pairs pays a further 27-image rescan to find the true minimum
+/// image — 6 s for a 216-atom cell at 0.15 Å, all of it on one user action.
+///
+/// Expanding each atom into its 27 images once, up front, does two things:
+/// the minimum-image search disappears (the images are explicit, so a plain
+/// Cartesian distance is exact), and a spatial hash over them turns the inner
+/// loop into a local neighbourhood scan whose cost does not grow with the
+/// size of the cell.
+struct ImageGrid {
+    /// Flat cell array, indexed `z * dims[0] * dims[1] + y * dims[0] + x`.
+    /// Each entry indexes into `positions`/`radii`.
+    cells: Vec<Vec<u32>>,
+    dims: [usize; 3],
+    origin: Vector3<f64>,
+    cell_size: f64,
+    positions: Vec<Vector3<f64>>,
+    radii: Vec<f64>,
+    /// Largest radius present, needed by the shell-termination bound.
+    max_radius: f64,
+}
+
+impl ImageGrid {
+    fn build(atoms: &[ProbeAtom], basis: &Matrix3<f64>) -> Self {
+        // Every atom in its own cell plus the 26 surrounding ones. A grid
+        // point lies in the central cell, so its true nearest image is always
+        // among these — the same guarantee the brute-force path relies on.
+        let mut positions = Vec::with_capacity(atoms.len() * 27);
+        let mut radii = Vec::with_capacity(atoms.len() * 27);
+
+        for atom in atoms {
+            for ox in -1..=1 {
+                for oy in -1..=1 {
+                    for oz in -1..=1 {
+                        let shifted =
+                            atom.frac + Vector3::new(ox as f64, oy as f64, oz as f64);
+                        positions.push(basis * shifted);
+                        radii.push(atom.radius);
+                    }
+                }
+            }
+        }
+
+        let max_radius = radii.iter().cloned().fold(0.0f64, f64::max);
+
+        // One cell per atom on average keeps both the per-cell scan and the
+        // number of shells small.
+        let volume = basis.determinant().abs();
+        let mean_spacing = if atoms.is_empty() {
+            2.0
+        } else {
+            (volume / atoms.len() as f64).cbrt()
+        };
+        let cell_size = mean_spacing.clamp(1.0, 8.0);
+
+        let mut lo = Vector3::repeat(f64::MAX);
+        let mut hi = Vector3::repeat(f64::MIN);
+        for p in &positions {
+            lo = lo.inf(p);
+            hi = hi.sup(p);
+        }
+        // Guard against a degenerate span in any direction.
+        let origin = lo - Vector3::repeat(cell_size);
+        let span = (hi - lo) + Vector3::repeat(2.0 * cell_size);
+
+        let dims = [
+            ((span.x / cell_size).ceil() as usize).max(1),
+            ((span.y / cell_size).ceil() as usize).max(1),
+            ((span.z / cell_size).ceil() as usize).max(1),
+        ];
+
+        let mut cells = vec![Vec::new(); dims[0] * dims[1] * dims[2]];
+
+        for (idx, p) in positions.iter().enumerate() {
+            let c = Self::cell_of(*p, origin, cell_size, dims);
+            cells[c[2] * dims[0] * dims[1] + c[1] * dims[0] + c[0]].push(idx as u32);
+        }
+
+        Self {
+            cells,
+            dims,
+            origin,
+            cell_size,
+            positions,
+            radii,
+            max_radius,
+        }
+    }
+
+    fn cell_of(
+        p: Vector3<f64>,
+        origin: Vector3<f64>,
+        cell_size: f64,
+        dims: [usize; 3],
+    ) -> [usize; 3] {
+        let raw = (p - origin) / cell_size;
+        [
+            (raw.x.floor() as isize).clamp(0, dims[0] as isize - 1) as usize,
+            (raw.y.floor() as isize).clamp(0, dims[1] as isize - 1) as usize,
+            (raw.z.floor() as isize).clamp(0, dims[2] as isize - 1) as usize,
+        ]
+    }
+
+    /// Distance from a Cartesian point to the nearest atom surface.
+    ///
+    /// Searches cells in expanding Chebyshev shells. After shell `s` is done,
+    /// nothing unsearched can be nearer than `s * cell_size` (the query point
+    /// may sit anywhere within its own cell, which costs one shell), so the
+    /// best possible remaining surface distance is `s * cell_size - r_max`.
+    /// Once that cannot beat the best found, the answer is settled.
+    fn nearest_surface_distance(&self, p: Vector3<f64>) -> f64 {
+        let base = Self::cell_of(p, self.origin, self.cell_size, self.dims);
+        let base = [base[0] as isize, base[1] as isize, base[2] as isize];
+
+        let max_shell = self.dims[0].max(self.dims[1]).max(self.dims[2]) as isize;
+        let mut best = f64::MAX;
+
+        for s in 0..=max_shell {
+            for dz in -s..=s {
+                let z = base[2] + dz;
+                if z < 0 || z >= self.dims[2] as isize {
+                    continue;
+                }
+                let z_face = dz.abs() == s;
+
+                for dy in -s..=s {
+                    let y = base[1] + dy;
+                    if y < 0 || y >= self.dims[1] as isize {
+                        continue;
+                    }
+                    let y_face = dy.abs() == s;
+
+                    // Only the surface of the cube is new at shell s; the
+                    // interior was covered by earlier shells.
+                    let step = if z_face || y_face { 1 } else { 2 * s.max(1) };
+
+                    let mut dx = -s;
+                    while dx <= s {
+                        let x = base[0] + dx;
+                        if x >= 0 && x < self.dims[0] as isize {
+                            let cell = &self.cells[z as usize * self.dims[0] * self.dims[1]
+                                + y as usize * self.dims[0]
+                                + x as usize];
+                            for &i in cell {
+                                let i = i as usize;
+                                let d = (self.positions[i] - p).norm() - self.radii[i];
+                                if d < best {
+                                    best = d;
+                                }
+                            }
+                        }
+                        dx += step;
+                    }
+                }
+            }
+
+            if s as f64 * self.cell_size - self.max_radius >= best {
+                break;
+            }
+        }
+
+        best
+    }
 }
 
 /// The distance function sampled on a regular fractional grid over the cell.
@@ -317,7 +485,7 @@ pub struct DistanceField {
     basis: Matrix3<f64>,
     /// Cartesian → fractional.
     inv_basis: Matrix3<f64>,
-    atoms: Vec<ProbeAtom>,
+    images: ImageGrid,
     oblique: bool,
     config: VoidConfig,
 }
@@ -352,7 +520,7 @@ impl DistanceField {
     /// The same distance function the grid samples, evaluated off-lattice.
     /// Sub-grid refinement of a site hill-climbs on this.
     pub fn distance_at_frac(&self, frac: Vector3<f64>) -> f64 {
-        min_surface_distance(frac, &self.atoms, &self.basis, self.oblique)
+        self.images.nearest_surface_distance(self.basis * frac)
     }
 
     pub fn to_cart(&self, frac: Vector3<f64>) -> Vector3<f64> {
@@ -526,6 +694,21 @@ pub fn calculate_distance_field(
     structure: &Structure,
     config: VoidConfig,
 ) -> Result<DistanceField, VoidError> {
+    // Cannot be cancelled, so the Option is always Some.
+    Ok(calculate_distance_field_cancellable(structure, config, &CancelToken::never())?
+        .expect("an uncancellable run cannot be cancelled"))
+}
+
+/// Sample the distance function, abandoning the work if `cancel` is tripped.
+///
+/// Returns `Ok(None)` when the run was cancelled. Superseded runs are the
+/// normal case in the UI: every spin-button change starts a new one, and the
+/// previous is dropped mid-sweep.
+pub fn calculate_distance_field_cancellable(
+    structure: &Structure,
+    config: VoidConfig,
+    cancel: &CancelToken,
+) -> Result<Option<DistanceField>, VoidError> {
     config.validate()?;
 
     if structure.atoms.is_empty() {
@@ -586,39 +769,58 @@ pub fn calculate_distance_field(
         || a_col.dot(&c_col).abs() > 1e-9
         || b_col.dot(&c_col).abs() > 1e-9;
 
+    let images = ImageGrid::build(&atoms, &basis);
+
     // --- Parallel Grid Sampling ---
-    // Parallelize over z-slices for good load balancing.
+    // Parallelize over z-slices for good load balancing. Grid points are
+    // stepped in Cartesian space directly — `p = i*da + j*db + k*dc` — so the
+    // inner loop is one vector add rather than a fractional-to-Cartesian
+    // matrix multiply.
+    let da = basis.column(0) / nx as f64;
+    let db = basis.column(1) / ny as f64;
+    let dc = basis.column(2) / nz as f64;
+
     let mut data = vec![0f32; total_points];
     let slice_len = nx * ny;
+    let cancelled = AtomicBool::new(false);
 
     data.par_chunks_mut(slice_len)
         .enumerate()
         .for_each(|(k, slice)| {
-            let frac_k = k as f64 / nz as f64;
+            // Checked once per slice: fine-grained enough to abandon a stale
+            // run promptly, coarse enough to stay off the hot path.
+            if cancel.is_cancelled() {
+                cancelled.store(true, Ordering::Relaxed);
+                return;
+            }
+
+            let base_k = dc * k as f64;
 
             for j in 0..ny {
-                let frac_j = j as f64 / ny as f64;
+                let base_jk = base_k + db * j as f64;
 
                 for i in 0..nx {
-                    let frac_i = i as f64 / nx as f64;
-                    let pt = Vector3::new(frac_i, frac_j, frac_k);
-                    slice[j * nx + i] =
-                        min_surface_distance(pt, &atoms, &basis, oblique) as f32;
+                    let p = base_jk + da * i as f64;
+                    slice[j * nx + i] = images.nearest_surface_distance(p) as f32;
                 }
             }
         });
 
-    Ok(DistanceField {
+    if cancelled.load(Ordering::Relaxed) || cancel.is_cancelled() {
+        return Ok(None);
+    }
+
+    Ok(Some(DistanceField {
         nx,
         ny,
         nz,
         data,
         basis,
         inv_basis,
-        atoms,
+        images,
         oblique,
         config,
-    })
+    }))
 }
 
 /// Calculate void space in a crystal structure.
@@ -630,7 +832,25 @@ pub fn calculate_distance_field(
 /// - `Ok(VoidResult)` with void analysis
 /// - `Err(VoidError)` if inputs are invalid
 pub fn calculate_voids(structure: &Structure, config: VoidConfig) -> Result<VoidResult, VoidError> {
-    let field = calculate_distance_field(structure, config)?;
+    // Cannot be cancelled, so the Option is always Some.
+    Ok(
+        calculate_voids_cancellable(structure, config, &CancelToken::never())?
+            .expect("an uncancellable run cannot be cancelled"),
+    )
+}
+
+/// Calculate void space, abandoning the work if `cancel` is tripped.
+///
+/// Returns `Ok(None)` when the run was cancelled.
+pub fn calculate_voids_cancellable(
+    structure: &Structure,
+    config: VoidConfig,
+    cancel: &CancelToken,
+) -> Result<Option<VoidResult>, VoidError> {
+    let field = match calculate_distance_field_cancellable(structure, config, cancel)? {
+        Some(field) => field,
+        None => return Ok(None),
+    };
 
     // The sampled maximum is quantized by the grid; refine it off-lattice
     // before reporting. This number decides which ions are said to fit, and
@@ -656,7 +876,7 @@ pub fn calculate_voids(structure: &Structure, config: VoidConfig) -> Result<Void
         0.0
     };
 
-    Ok(VoidResult {
+    Ok(Some(VoidResult {
         max_sphere_radius,
         max_sphere_center,
         void_fraction,
@@ -668,7 +888,7 @@ pub fn calculate_voids(structure: &Structure, config: VoidConfig) -> Result<Void
             total_points,
             void_points,
         },
-    })
+    }))
 }
 
 // --- 6. CONVENIENCE FUNCTIONS ---
@@ -688,4 +908,162 @@ pub fn analyze_ion_intercalation(
         .iter()
         .map(|(name, radius)| (*name, *radius <= result.max_sphere_radius))
         .collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::structure::Atom;
+
+    fn structure(lattice: [[f64; 3]; 3], fracs: &[[f64; 3]]) -> Structure {
+        let basis = Matrix3::from_columns(&[
+            Vector3::from(lattice[0]),
+            Vector3::from(lattice[1]),
+            Vector3::from(lattice[2]),
+        ]);
+        Structure {
+            lattice,
+            atoms: fracs
+                .iter()
+                .enumerate()
+                .map(|(i, f)| {
+                    let c = basis * Vector3::from(*f);
+                    Atom {
+                        element: if i % 2 == 0 { "Ti".into() } else { "O".into() },
+                        position: [c.x, c.y, c.z],
+                        original_index: i,
+                        oxidation: None,
+                        occupancy: 1.0,
+                    }
+                })
+                .collect(),
+            formula: "test".into(),
+            is_periodic: true,
+        }
+    }
+
+    /// Deterministic pseudo-random fractional coordinates — a fixed set beats
+    /// a seeded RNG dependency, and a failure is reproducible.
+    fn sample_points(n: usize) -> Vec<Vector3<f64>> {
+        (0..n)
+            .map(|i| {
+                let a = (i as f64 * 0.6180339887).fract();
+                let b = (i as f64 * 0.4142135624).fract();
+                let c = (i as f64 * 0.7320508076).fract();
+                Vector3::new(a, b, c)
+            })
+            .collect()
+    }
+
+    /// The cell list must agree with the brute-force definition everywhere,
+    /// not just on average — it is the only thing standing between a fast
+    /// kernel and quietly wrong void radii.
+    fn assert_matches_brute_force(lattice: [[f64; 3]; 3], fracs: &[[f64; 3]]) {
+        let s = structure(lattice, fracs);
+        let field = calculate_distance_field(&s, VoidConfig::geometric()).unwrap();
+
+        let atoms: Vec<ProbeAtom> = s
+            .atoms
+            .iter()
+            .map(|a| ProbeAtom {
+                frac: Vector3::from(cart_to_frac(a.position, lattice).unwrap()),
+                radius: get_atom_ionic_radius(&a.element),
+            })
+            .collect();
+
+        for p in sample_points(400) {
+            let fast = field.distance_at_frac(p);
+            let slow = min_surface_distance(p, &atoms, &field.basis, field.oblique);
+            assert!(
+                (fast - slow).abs() < 1e-9,
+                "cell list {} != brute force {} at {:?}",
+                fast,
+                slow,
+                p
+            );
+        }
+    }
+
+    #[test]
+    fn cell_list_matches_brute_force_orthogonal() {
+        assert_matches_brute_force(
+            [[6.0, 0.0, 0.0], [0.0, 6.0, 0.0], [0.0, 0.0, 6.0]],
+            &[
+                [0.0, 0.0, 0.0],
+                [0.5, 0.5, 0.5],
+                [0.25, 0.75, 0.1],
+                [0.9, 0.2, 0.6],
+            ],
+        );
+    }
+
+    #[test]
+    fn cell_list_matches_brute_force_oblique() {
+        // Heavily sheared: component-wise rounding is nowhere near the true
+        // minimum image here, which is exactly where a cell list can drift.
+        assert_matches_brute_force(
+            [[7.0, 0.0, 0.0], [3.4, 6.2, 0.0], [2.1, 2.8, 5.5]],
+            &[
+                [0.0, 0.0, 0.0],
+                [0.5, 0.5, 0.5],
+                [0.3, 0.1, 0.8],
+                [0.7, 0.65, 0.2],
+            ],
+        );
+    }
+
+    /// A single atom in a large cell leaves most of the box empty, so the
+    /// shell search has to walk several rings out before it can terminate.
+    #[test]
+    fn cell_list_matches_brute_force_sparse() {
+        assert_matches_brute_force(
+            [[14.0, 0.0, 0.0], [0.0, 14.0, 0.0], [0.0, 0.0, 14.0]],
+            &[[0.1, 0.1, 0.1]],
+        );
+    }
+
+    /// `grid_resolution` is a perpendicular spacing, so a sheared cell gets
+    /// the divisions its interplanar spacings call for, not its edge lengths.
+    #[test]
+    fn grid_divisions_follow_interplanar_spacing() {
+        let cubic = structure(
+            [[10.0, 0.0, 0.0], [0.0, 10.0, 0.0], [0.0, 0.0, 10.0]],
+            &[[0.0, 0.0, 0.0]],
+        );
+        let field = calculate_distance_field(&cubic, VoidConfig::geometric()).unwrap();
+        // 10 A / 0.25 A
+        assert_eq!(field.dims(), (40, 40, 40));
+
+        // Shear b within the ab plane. The (100) planes are spanned by b and
+        // c, so tilting b tilts them: d_a = V / |b x c| = 1000 / sqrt(100^2 +
+        // 60^2) = 8.575 A, needing 35 divisions rather than the 40 that |a| =
+        // 10 A would ask for. d_b and d_c are untouched at 10 A.
+        let sheared = structure(
+            [[10.0, 0.0, 0.0], [6.0, 10.0, 0.0], [0.0, 0.0, 10.0]],
+            &[[0.0, 0.0, 0.0]],
+        );
+        let field = calculate_distance_field(&sheared, VoidConfig::geometric()).unwrap();
+        assert_eq!(
+            field.dims(),
+            (35, 40, 40),
+            "divisions must follow interplanar spacings, not edge lengths"
+        );
+    }
+
+    /// A cancelled sweep must report cancellation rather than a half-filled
+    /// field, or the UI would render garbage from an abandoned run.
+    #[test]
+    fn a_cancelled_run_yields_no_field() {
+        let s = structure(
+            [[8.0, 0.0, 0.0], [0.0, 8.0, 0.0], [0.0, 0.0, 8.0]],
+            &[[0.0, 0.0, 0.0], [0.5, 0.5, 0.5]],
+        );
+
+        let cancel = CancelToken::new();
+        cancel.cancel();
+
+        let result =
+            calculate_distance_field_cancellable(&s, VoidConfig::geometric(), &cancel).unwrap();
+        assert!(result.is_none());
+    }
 }
