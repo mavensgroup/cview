@@ -242,21 +242,290 @@ impl VoidResult {
     }
 }
 
-// --- 5. MAIN CALCULATION ---
+// --- 5. DISTANCE FIELD ---
 
-/// Calculate void space in a crystal structure
+/// One atom prepared for distance queries: fractional position plus the
+/// scaled radius selected by [`RadiusType`].
+#[derive(Clone, Copy, Debug)]
+struct ProbeAtom {
+    frac: Vector3<f64>,
+    radius: f64,
+}
+
+/// Distance from `point` (fractional) to the nearest atom *surface*, in Å.
+///
+/// Positive in open space, negative inside an atom. This is the single
+/// quantity the whole void/interstitial stack is built on:
+/// `d(x) = min_i (|x - r_i|_pbc - R_i)`.
+fn min_surface_distance(
+    point: Vector3<f64>,
+    atoms: &[ProbeAtom],
+    basis: &Matrix3<f64>,
+    oblique: bool,
+) -> f64 {
+    let mut min_dist = f64::MAX;
+
+    for atom in atoms {
+        // Minimum image convention (periodic boundaries).
+        let mut df = point - atom.frac;
+        df.x -= df.x.round();
+        df.y -= df.y.round();
+        df.z -= df.z.round();
+
+        // Component-wise fractional rounding is an exact minimum image only
+        // for orthogonal cells; for oblique cells the true nearest image can
+        // be a neighboring offset, so scan the 27 around it.
+        let center_dist = if oblique {
+            let mut best_sq = f64::MAX;
+            for ox in -1..=1 {
+                for oy in -1..=1 {
+                    for oz in -1..=1 {
+                        let d = basis * (df + Vector3::new(ox as f64, oy as f64, oz as f64));
+                        best_sq = best_sq.min(d.norm_squared());
+                    }
+                }
+            }
+            best_sq.sqrt()
+        } else {
+            (basis * df).norm()
+        };
+
+        min_dist = min_dist.min(center_dist - atom.radius);
+    }
+
+    min_dist
+}
+
+/// The distance function sampled on a regular fractional grid over the cell.
+///
+/// [`calculate_voids`] reduces this to a single maximum and a void count;
+/// `physics::analysis::interstitial` walks it for distinct interstitial
+/// sites. Keeping the samples is what separates "how big is the biggest
+/// hole" from "where are all the holes, and do they connect".
+///
+/// Samples are stored as `f32` — 4 bytes per point, so even the 10M-point
+/// default cap costs 40 MB, and ordinary unit cells are orders of magnitude
+/// below it. All arithmetic is done in `f64`; only storage is narrowed.
+pub struct DistanceField {
+    nx: usize,
+    ny: usize,
+    nz: usize,
+    /// Indexed `k * (nx * ny) + j * nx + i` — `i` fastest, matching the
+    /// sampling loops and the z-slice parallelism.
+    data: Vec<f32>,
+    /// Columns are the lattice vectors: maps fractional → Cartesian.
+    basis: Matrix3<f64>,
+    /// Cartesian → fractional.
+    inv_basis: Matrix3<f64>,
+    atoms: Vec<ProbeAtom>,
+    oblique: bool,
+    config: VoidConfig,
+}
+
+impl DistanceField {
+    pub fn dims(&self) -> (usize, usize, usize) {
+        (self.nx, self.ny, self.nz)
+    }
+
+    pub fn config(&self) -> VoidConfig {
+        self.config
+    }
+
+    /// Sampled distance at a grid index. Indices wrap periodically, so
+    /// neighbor scans do not need to special-case cell edges.
+    pub fn at(&self, i: isize, j: isize, k: isize) -> f64 {
+        let i = i.rem_euclid(self.nx as isize) as usize;
+        let j = j.rem_euclid(self.ny as isize) as usize;
+        let k = k.rem_euclid(self.nz as isize) as usize;
+        self.data[k * self.nx * self.ny + j * self.nx + i] as f64
+    }
+
+    /// Fractional coordinates of a grid index.
+    pub fn frac_of(&self, i: usize, j: usize, k: usize) -> Vector3<f64> {
+        Vector3::new(
+            i as f64 / self.nx as f64,
+            j as f64 / self.ny as f64,
+            k as f64 / self.nz as f64,
+        )
+    }
+
+    /// The same distance function the grid samples, evaluated off-lattice.
+    /// Sub-grid refinement of a site hill-climbs on this.
+    pub fn distance_at_frac(&self, frac: Vector3<f64>) -> f64 {
+        min_surface_distance(frac, &self.atoms, &self.basis, self.oblique)
+    }
+
+    pub fn to_cart(&self, frac: Vector3<f64>) -> Vector3<f64> {
+        self.basis * frac
+    }
+
+    pub fn to_frac(&self, cart: Vector3<f64>) -> Vector3<f64> {
+        self.inv_basis * cart
+    }
+
+    /// Shortest Cartesian distance between two fractional points under PBC.
+    pub fn min_image_distance(&self, a: Vector3<f64>, b: Vector3<f64>) -> f64 {
+        let mut df = a - b;
+        df.x -= df.x.round();
+        df.y -= df.y.round();
+        df.z -= df.z.round();
+
+        if self.oblique {
+            let mut best_sq = f64::MAX;
+            for ox in -1..=1 {
+                for oy in -1..=1 {
+                    for oz in -1..=1 {
+                        let d = self.basis * (df + Vector3::new(ox as f64, oy as f64, oz as f64));
+                        best_sq = best_sq.min(d.norm_squared());
+                    }
+                }
+            }
+            best_sq.sqrt()
+        } else {
+            (self.basis * df).norm()
+        }
+    }
+
+    /// Smallest perpendicular spacing between adjacent sampling planes, in Å.
+    /// The natural starting step for a sub-grid search.
+    pub fn spacing_hint(&self) -> f64 {
+        let (da, db, dc) = interplanar_spacings(&self.basis);
+        (da / self.nx as f64)
+            .min(db / self.ny as f64)
+            .min(dc / self.nz as f64)
+    }
+
+    /// Walk a grid maximum to the true continuous maximum nearby.
+    ///
+    /// A compass (pattern) search rather than a gradient step: at a maximum of
+    /// the distance function several atoms are equidistant, so the gradient is
+    /// discontinuous there and a descent method stalls or oscillates. Halving
+    /// the step on failure converges cleanly to well below the grid spacing.
+    ///
+    /// Steps are taken in Cartesian space and converted to fractional, so the
+    /// search is isotropic in real space even in a sheared cell.
+    pub fn refine_maximum(&self, start: Vector3<f64>) -> (Vector3<f64>, f64) {
+        let dirs = compass_directions();
+
+        let mut best = start;
+        let mut best_d = self.distance_at_frac(best);
+
+        // Start at the grid spacing — the maximum is by construction within one
+        // grid step of where we started — and stop well under any radius
+        // difference that could matter chemically.
+        let mut step = self.spacing_hint();
+        const MIN_STEP: f64 = 1e-4;
+
+        while step > MIN_STEP {
+            let mut improved = false;
+
+            for dir in &dirs {
+                let trial = best + self.to_frac(dir * step);
+                let d = self.distance_at_frac(trial);
+                if d > best_d {
+                    best_d = d;
+                    best = trial;
+                    improved = true;
+                }
+            }
+
+            if !improved {
+                step *= 0.5;
+            }
+        }
+
+        (wrap_frac(best), best_d)
+    }
+
+    /// Largest sampled clearance and the fractional point where it occurs.
+    /// Grid-quantized — callers that report the value should refine it.
+    fn global_max(&self) -> (f64, Vector3<f64>) {
+        let mut best = f64::NEG_INFINITY;
+        let mut best_idx = 0usize;
+
+        for (idx, &v) in self.data.iter().enumerate() {
+            if v as f64 > best {
+                best = v as f64;
+                best_idx = idx;
+            }
+        }
+
+        if best == f64::NEG_INFINITY {
+            return (0.0, Vector3::zeros());
+        }
+
+        let i = best_idx % self.nx;
+        let j = (best_idx / self.nx) % self.ny;
+        let k = best_idx / (self.nx * self.ny);
+
+        (best, self.frac_of(i, j, k))
+    }
+
+    /// Number of samples with more clearance than `threshold`.
+    fn count_above(&self, threshold: f64) -> usize {
+        self.data.iter().filter(|&&v| v as f64 > threshold).count()
+    }
+}
+
+/// 26 unit vectors covering the face, edge and corner directions of a cube.
+/// The step set for the pattern search in [`refine_site`].
+fn compass_directions() -> Vec<Vector3<f64>> {
+    let mut dirs = Vec::with_capacity(26);
+    for dx in -1..=1 {
+        for dy in -1..=1 {
+            for dz in -1..=1 {
+                if dx == 0 && dy == 0 && dz == 0 {
+                    continue;
+                }
+                dirs.push(Vector3::new(dx as f64, dy as f64, dz as f64).normalize());
+            }
+        }
+    }
+    dirs
+}
+
+fn wrap_frac(v: Vector3<f64>) -> Vector3<f64> {
+    Vector3::new(
+        v.x.rem_euclid(1.0),
+        v.y.rem_euclid(1.0),
+        v.z.rem_euclid(1.0),
+    )
+}
+
+/// Perpendicular spacings of the (100), (010) and (001) planes, in Å.
+///
+/// `d_a = V / |b × c|` is what actually limits how finely a sphere is
+/// resolved along `a` — not `|a|`. The two coincide for an orthogonal cell;
+/// for a sheared cell `d_a < |a|`, so sizing the grid off vector lengths
+/// oversamples triclinic cells relative to the requested resolution.
+fn interplanar_spacings(basis: &Matrix3<f64>) -> (f64, f64, f64) {
+    let a = basis.column(0).into_owned();
+    let b = basis.column(1).into_owned();
+    let c = basis.column(2).into_owned();
+
+    let volume = a.dot(&b.cross(&c)).abs();
+
+    (
+        volume / b.cross(&c).norm(),
+        volume / c.cross(&a).norm(),
+        volume / a.cross(&b).norm(),
+    )
+}
+
+/// Sample the distance function over the unit cell.
 ///
 /// # Algorithm
-/// 1. Create 3D grid in fractional coordinates
-/// 2. For each grid point, find distance to nearest atom surface
-/// 3. Points farther than probe_radius from all atoms = voids
-/// 4. Track largest inscribed sphere
+/// 1. Size a regular fractional grid from the requested resolution.
+/// 2. For each grid point, find the distance to the nearest atom surface
+///    under the minimum image convention.
 ///
 /// # Returns
-/// - `Ok(VoidResult)` with void analysis
-/// - `Err(VoidError)` if inputs are invalid
-pub fn calculate_voids(structure: &Structure, config: VoidConfig) -> Result<VoidResult, VoidError> {
-    // --- Validation ---
+/// - `Ok(DistanceField)` with one sample per grid point
+/// - `Err(VoidError)` if inputs are invalid or the grid would be too large
+pub fn calculate_distance_field(
+    structure: &Structure,
+    config: VoidConfig,
+) -> Result<DistanceField, VoidError> {
     config.validate()?;
 
     if structure.atoms.is_empty() {
@@ -271,16 +540,15 @@ pub fn calculate_voids(structure: &Structure, config: VoidConfig) -> Result<Void
         Vector3::from(lat[1]),
         Vector3::from(lat[2]),
     ]);
-    basis.try_inverse().ok_or(VoidError::SingularLattice)?; // singular check
+    let inv_basis = basis.try_inverse().ok_or(VoidError::SingularLattice)?;
 
-    // Grid dimensions from lattice vector lengths
-    let a_len = Vector3::from(lat[0]).norm();
-    let b_len = Vector3::from(lat[1]).norm();
-    let c_len = Vector3::from(lat[2]).norm();
+    // Grid dimensions from the interplanar spacings, so `grid_resolution`
+    // means the same perpendicular sample spacing in every cell shape.
+    let (d_a, d_b, d_c) = interplanar_spacings(&basis);
 
-    let nx = ((a_len / config.grid_resolution).ceil() as usize).max(1);
-    let ny = ((b_len / config.grid_resolution).ceil() as usize).max(1);
-    let nz = ((c_len / config.grid_resolution).ceil() as usize).max(1);
+    let nx = ((d_a / config.grid_resolution).ceil() as usize).max(1);
+    let ny = ((d_b / config.grid_resolution).ceil() as usize).max(1);
+    let nz = ((d_c / config.grid_resolution).ceil() as usize).max(1);
 
     let total_points = nx * ny * nz;
 
@@ -292,12 +560,7 @@ pub fn calculate_voids(structure: &Structure, config: VoidConfig) -> Result<Void
     }
 
     // --- Preprocess Atoms ---
-    struct ProcessedAtom {
-        frac: Vector3<f64>,
-        radius: f64,
-    }
-
-    let atoms_data: Vec<ProcessedAtom> = structure
+    let atoms: Vec<ProbeAtom> = structure
         .atoms
         .iter()
         .filter_map(|a| {
@@ -307,17 +570,15 @@ pub fn calculate_voids(structure: &Structure, config: VoidConfig) -> Result<Void
                 RadiusType::VanDerWaals => get_atom_vdw(&a.element),
                 RadiusType::Covalent => get_atom_cov(&a.element),
             };
-            Some(ProcessedAtom {
+            Some(ProbeAtom {
                 frac: Vector3::from(frac),
                 radius: raw_radius * config.radii_scale,
             })
         })
         .collect();
 
-    // Component-wise fractional rounding is an exact minimum image only
-    // for orthogonal cells; for oblique cells the true nearest image can
-    // be a neighboring offset. Detect obliqueness once and only then pay
-    // for the 27-offset scan in the hot loop.
+    // Detect obliqueness once so the 27-offset scan is paid for only where
+    // component-wise rounding is not already the exact minimum image.
     let a_col = basis.column(0);
     let b_col = basis.column(1);
     let c_col = basis.column(2);
@@ -326,14 +587,13 @@ pub fn calculate_voids(structure: &Structure, config: VoidConfig) -> Result<Void
         || b_col.dot(&c_col).abs() > 1e-9;
 
     // --- Parallel Grid Sampling ---
-    // Parallelize over z-slices for good load balancing
-    let results: Vec<(f64, [f64; 3], usize)> = (0..nz)
-        .into_par_iter()
-        .map(|k| {
-            let mut local_max_dist = f64::NEG_INFINITY;
-            let mut local_best_point = [0.0; 3];
-            let mut local_void_count = 0;
+    // Parallelize over z-slices for good load balancing.
+    let mut data = vec![0f32; total_points];
+    let slice_len = nx * ny;
 
+    data.par_chunks_mut(slice_len)
+        .enumerate()
+        .for_each(|(k, slice)| {
             let frac_k = k as f64 / nz as f64;
 
             for j in 0..ny {
@@ -341,85 +601,57 @@ pub fn calculate_voids(structure: &Structure, config: VoidConfig) -> Result<Void
 
                 for i in 0..nx {
                     let frac_i = i as f64 / nx as f64;
-
-                    // Current grid point in fractional coordinates
-                    let pt_frac = Vector3::new(frac_i, frac_j, frac_k);
-
-                    // Find minimum distance to any atom surface
-                    let mut min_dist_to_surface = f64::MAX;
-
-                    for atom in &atoms_data {
-                        // Apply minimum image convention (periodic boundaries)
-                        let mut df = pt_frac - atom.frac;
-                        df.x -= df.x.round();
-                        df.y -= df.y.round();
-                        df.z -= df.z.round();
-
-                        // Convert to Cartesian for distance measurement.
-                        // Oblique cells: the rounded image may not be the
-                        // nearest — check the 27 offsets around it (V-1).
-                        let center_dist = if oblique {
-                            let mut min2 = f64::MAX;
-                            for ox in -1..=1 {
-                                for oy in -1..=1 {
-                                    for oz in -1..=1 {
-                                        let d = basis
-                                            * (df + Vector3::new(
-                                                ox as f64, oy as f64, oz as f64,
-                                            ));
-                                        min2 = min2.min(d.norm_squared());
-                                    }
-                                }
-                            }
-                            min2.sqrt()
-                        } else {
-                            (basis * df).norm()
-                        };
-
-                        // Distance to atom surface = distance to center - radius
-                        let surface_dist = center_dist - atom.radius;
-
-                        min_dist_to_surface = min_dist_to_surface.min(surface_dist);
-                    }
-
-                    // Track largest sphere
-                    if min_dist_to_surface > local_max_dist {
-                        local_max_dist = min_dist_to_surface;
-                        let cart = basis * pt_frac;
-                        local_best_point = [cart.x, cart.y, cart.z];
-                    }
-
-                    // Count as void if probe can fit
-                    if min_dist_to_surface > config.probe_radius {
-                        local_void_count += 1;
-                    }
+                    let pt = Vector3::new(frac_i, frac_j, frac_k);
+                    slice[j * nx + i] =
+                        min_surface_distance(pt, &atoms, &basis, oblique) as f32;
                 }
             }
+        });
 
-            (local_max_dist, local_best_point, local_void_count)
-        })
-        .collect();
+    Ok(DistanceField {
+        nx,
+        ny,
+        nz,
+        data,
+        basis,
+        inv_basis,
+        atoms,
+        oblique,
+        config,
+    })
+}
 
-    // --- Aggregate Results ---
-    let mut max_sphere_radius = f64::NEG_INFINITY;
-    let mut max_sphere_center = [0.0; 3];
-    let mut total_void_points = 0;
+/// Calculate void space in a crystal structure.
+///
+/// A reduction over [`calculate_distance_field`]: the largest inscribed
+/// sphere, and the fraction of samples the probe fits into.
+///
+/// # Returns
+/// - `Ok(VoidResult)` with void analysis
+/// - `Err(VoidError)` if inputs are invalid
+pub fn calculate_voids(structure: &Structure, config: VoidConfig) -> Result<VoidResult, VoidError> {
+    let field = calculate_distance_field(structure, config)?;
 
-    for (max_dist, point, void_count) in results {
-        total_void_points += void_count;
-        if max_dist > max_sphere_radius {
-            max_sphere_radius = max_dist;
-            max_sphere_center = point;
-        }
-    }
+    // The sampled maximum is quantized by the grid; refine it off-lattice
+    // before reporting. This number decides which ions are said to fit, and
+    // at a 0.25 A grid the quantization error straddles Li+ and Mg2+.
+    let (grid_max, grid_frac) = field.global_max();
+    let (centre_frac, max_sphere_radius) = if grid_max > f64::NEG_INFINITY {
+        field.refine_maximum(grid_frac)
+    } else {
+        (grid_frac, grid_max)
+    };
 
-    // Handle edge case where all points are inside atoms
-    if max_sphere_radius == f64::NEG_INFINITY {
-        max_sphere_radius = 0.0;
-    }
+    let centre = field.to_cart(centre_frac);
+    let max_sphere_center = [centre.x, centre.y, centre.z];
+
+    let void_points = field.count_above(config.probe_radius);
+
+    let (nx, ny, nz) = field.dims();
+    let total_points = nx * ny * nz;
 
     let void_fraction = if total_points > 0 {
-        (total_void_points as f64 / total_points as f64) * 100.0
+        (void_points as f64 / total_points as f64) * 100.0
     } else {
         0.0
     };
@@ -434,7 +666,7 @@ pub fn calculate_voids(structure: &Structure, config: VoidConfig) -> Result<Void
             ny,
             nz,
             total_points,
-            void_points: total_void_points,
+            void_points,
         },
     })
 }

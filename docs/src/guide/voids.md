@@ -9,7 +9,7 @@ This module performs geometric analysis to identify empty space within the cryst
 The analysis does not rely on Voronoi decomposition but rather a robust **Grid Probe Method**.
 
 ### 1. Grid Generation
-A regular fractional grid is superimposed over the unit cell. The configured value is a target grid spacing in Å; the engine default is 0.25 Å and the UI initially uses 0.3 Å.
+A regular fractional grid is superimposed over the unit cell. The configured value is a target grid spacing in Å; the engine default is 0.25 Å and the UI initially uses 0.3 Å. The number of divisions along each axis comes from the *interplanar* spacings ($d_a = V / |b \times c|$, and cyclic), so the configured value is the perpendicular sample spacing whatever the cell shape — for an orthogonal cell $d_a = |a|$.
 $$P_{grid} = u \cdot a + v \cdot b + w \cdot c \quad \text{where } u,v,w \in [0, 1]$$
 
 ### 2. Distance Field Calculation
@@ -22,7 +22,9 @@ A geometric probe (representing a gas molecule or ion) with radius $R_{probe}$ i
 $$D_{surf} > R_{probe}$$
 
 ### 4. Largest-Sphere Search
-The implementation tracks the sampled point with the greatest clearance from every atomic surface. It reports that single global maximum as `max_sphere_center`; it does not currently cluster connected void regions into separate cavities.
+The implementation tracks the sampled point with the greatest clearance from every atomic surface, then refines it off the grid with a compass search on the continuous distance function. A pattern search is used rather than a gradient step because several atoms are equidistant at a maximum, so the gradient is discontinuous there. The reported radius is therefore *not* quantized by the grid spacing — which matters, because at 0.25 Å the quantization error is wide enough to straddle Li$^+$ (0.76 Å) and Mg$^{2+}$ (0.72 Å).
+
+It reports that single global maximum as `max_sphere_center`; it does not cluster connected void regions into separate cavities.
 
 ## Presets and Data
 The module includes standard probe definitions for common applications:
