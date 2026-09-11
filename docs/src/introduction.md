@@ -65,10 +65,10 @@ See the [Installation Page](installation.md) for detailed OS-specific instructio
 
 ## Supported Formats
 
-Format | VASP | Quantum Espresso | SPRKKR | CIF / XYZ |
-| :--- | :---: | :---: | :---: | :---: |
-| **Read** | 🟢 | 🟢 | 🟢 | 🟢 |
-| **Write** | 🟢 | 🟠 | 🟠 | 🟢 |
+Format | VASP | Quantum Espresso | SPRKKR | CIF / XYZ | PDB |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Read** | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 |
+| **Write** | 🟢 | 🟠 | 🟠 | 🟢 | 🟢 |
 
 ---
 

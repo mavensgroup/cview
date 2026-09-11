@@ -127,6 +127,7 @@ After generating a supercell, you can export it via `File → Save Structure As`
 - **CIF**: For archival or database submission
 - **XYZ**: Cartesian-coordinate interchange
 - **SPR-KKR**: Potential/system-oriented structure export
+- **PDB**: Molecular-viewer interchange (non-periodic structures write the placeholder `1 1 1 90 90 90` cell)
 
 The transformed structure retains the correct lattice vectors and atomic positions. Output coordinate conventions follow the selected file format.
 
