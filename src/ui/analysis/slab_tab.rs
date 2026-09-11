@@ -319,6 +319,12 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
             match slab::generate_slab(structure, h, k, l, thick, vac) {
                 Ok(new_struct) => {
                     tab.structure = Some(new_struct);
+                    // A slab has a different cell, a different atom count and
+                    // different indices than the bulk it came from, so every
+                    // cached analysis and the selection describe a structure
+                    // that no longer exists.
+                    tab.interaction.selected.clear();
+                    tab.invalidate_derived();
                     lbl_gen.set_markup("<span color='green'>Slab generated.</span>");
                     btn_undo_gen.set_sensitive(true);
                 }
@@ -339,6 +345,9 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         let tab = st.active_tab_mut();
         if let Some(backup) = undo_store_ref.borrow_mut().take() {
             tab.structure = Some(backup);
+            // Restoring the bulk invalidates anything derived from the slab.
+            tab.interaction.selected.clear();
+            tab.invalidate_derived();
             lbl_undo.set_text("Undone.");
             btn_undo_ref.set_sensitive(false);
         }
