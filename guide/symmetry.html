@@ -35,8 +35,8 @@
         <link rel="icon" href="../favicon-de23e50b.svg">
         <link rel="shortcut icon" href="../favicon-8114d1fc.png">
         <link rel="stylesheet" href="../css/variables-8adf115d.css">
-        <link rel="stylesheet" href="../css/general-0392ca55.css">
-        <link rel="stylesheet" href="../css/chrome-fc474251.css">
+        <link rel="stylesheet" href="../css/general-e96d0476.css">
+        <link rel="stylesheet" href="../css/chrome-d279d366.css">
         <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
@@ -56,7 +56,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-63f11321.js";
+            window.path_to_searchindex_js = "../searchindex-3b451d78.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6b4ea5f4.js"></script>
@@ -211,7 +211,7 @@ $$R \cdot r + t \equiv r’ \pmod 1$$
 where $r$ and $r’$ are atomic positions of the same species.</li>
 </ol>
 <h3 id="tolerance-symprec"><a class="header" href="#tolerance-symprec">Tolerance (<code>SYMPREC</code>)</a></h3>
-<p>The code applies a default symmetry precision (<code>SYMPREC</code>) of <strong>1e-3 Å</strong>. This tolerance accommodates minor numerical noise common in file formats like <code>.cif</code> or <code>.xyz</code>, ensuring that slightly distorted experimental structures are correctly identified.</p>
+<p>The code applies a default symmetry precision (<code>SYMPREC</code>) of <strong>1e-4 Å</strong>. This tolerance is shared by symmetry analysis, k-path generation, and primitive/conventional-cell conversion.</p>
 <h2 id="outputs"><a class="header" href="#outputs">Outputs</a></h2>
 <p>The module returns a <code>SymmetryInfo</code> struct containing:</p>
 <ul>
@@ -270,7 +270,7 @@ where $r$ and $r’$ are atomic positions of the same species.</li>
 
         <script src="../clipboard-1626706a.min.js"></script>
         <script src="../highlight-abc7f01d.js"></script>
-        <script src="../book-c22b7243.js"></script>
+        <script src="../book-609e4cb8.js"></script>
 
         <!-- Custom JS scripts -->
         <script src="../src/custom-526988bf.js"></script>
