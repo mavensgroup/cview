@@ -3,6 +3,10 @@ name = "cview"
 version = "1.0.0"
 edition = "2021"
 rust-version = "1.75"
+# Two [[bin]] targets, so `cargo run` needs to be told which one is the app.
+# `required-features` gates whether corpus_audit is *built*, not whether cargo
+# counts it when picking a default target.
+default-run = "cview"
 license = "MIT"
 description = "Crystal structure visualization and analysis for DFT researchers"
 authors = ["MAVENs Research Group"]

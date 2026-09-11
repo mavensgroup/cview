@@ -18,6 +18,7 @@ CView automatically detects the file type based on extension and content. You ca
 | **Quantum Espresso** | `.in`, `.out`, `.pwi`, `.qe` | Reads atomic positions and cell parameters from input/output logs. |
 | **SPR-KKR** | `.pot`, `.sys` | Munich SPR-KKR potential and system files. |
 | **XYZ** | `.xyz` | Cartesian coordinates (Standard and Extended XYZ). |
+| **PDB** | `.pdb`, `.ent` | Protein Data Bank records. Reads the `CRYST1` cell, `ATOM`/`HETATM` sites, occupancies and formal charges; the first `MODEL` only. Files without a real cell load as non-periodic molecules. |
 
 ### Tab Management
 CView uses a tabbed interface to handle multiple structures simultaneously. The application employs a **smart loading strategy** to keep the workspace clean:
@@ -40,6 +41,7 @@ To convert a loaded structure into a different format, use `File → Save As (Sh
 - SPR-KKR Potential (*.pot)
 - Quantum Espresso Input (*.in)
 - XYZ (*.xyz)
+- PDB (*.pdb)
 
 
 ## Visualization Controls

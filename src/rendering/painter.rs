@@ -333,7 +333,6 @@ pub fn draw_structure(
     // ========================================================================
     // STEP 6: Draw Atoms (foreground — on top of everything)
     // ========================================================================
-    let sprite_size = 128.0;
     let mut cache_access = tab.style.atom_cache.borrow_mut();
 
     for atom in render_atoms {
@@ -411,9 +410,16 @@ pub fn draw_structure(
             );
         } else {
             use crate::rendering::sprite_cache::SpriteCache;
+
+            // Cache one sprite per on-screen size bucket, not one per element.
+            // A 128 px sprite blitted down to a 16 px atom pushes Cairo's
+            // Filter::Good onto its full resampling path (~58 us per atom);
+            // matching the sprite to the atom keeps every blit at a scale
+            // factor in (0.5, 1.0], which is ~50x cheaper.
+            let sprite_px = SpriteCache::size_bucket(target_atom_cov * 2.0);
             let cache_key = SpriteCache::make_key(
                 &atom.element,
-                tab.style.atom_scale,
+                sprite_px,
                 tab.style.metallic,
                 tab.style.roughness,
                 tab.style.transmission,
@@ -427,9 +433,11 @@ pub fn draw_structure(
                     tab.style.metallic,
                     tab.style.roughness,
                     tab.style.transmission,
+                    sprite_px,
                 )
             });
 
+            let sprite_size = sprite_px as f64;
             cr.save().ok();
             cr.translate(atom.screen_pos[0], atom.screen_pos[1]);
             let scale_factor = (target_atom_cov * 2.0) / sprite_size;
@@ -714,5 +722,102 @@ pub fn draw_selection_box(cr: &cairo::Context, tab: &TabState) {
 
         // Reset dash
         cr.set_dash(&[], 0.0);
+    }
+}
+
+// ============================================================================
+// INTERSTITIAL SITE OVERLAY
+// ============================================================================
+
+/// Draw the interstitial sites found for the tab's candidate ion.
+///
+/// Sites are drawn at their true fitted radius, not a fixed marker size — the
+/// whole point of the screen is how much room there is, so a site that barely
+/// admits the ion must look tighter than one with space to spare. They are
+/// laid over the atoms with alpha rather than depth-interleaved: an
+/// interstitial is by definition surrounded by framework atoms, so
+/// depth-sorting would bury most of them behind the very atoms that define
+/// them.
+///
+/// Sites are periodic, so each is drawn once per cell corner it is near,
+/// matching the ghost-atom convention for atoms on a boundary.
+pub fn draw_interstitial_sites(
+    cr: &cairo::Context,
+    tab: &TabState,
+    bounds: &crate::rendering::scene::SceneBounds,
+) {
+    let overlay = match &tab.interstitial {
+        Some(o) if tab.view.show_interstitial_sites => o,
+        _ => return,
+    };
+
+    let structure = match &tab.structure {
+        Some(s) => s,
+        None => return,
+    };
+
+    let lat = structure.lattice;
+    let show_ghosts = tab.view.show_full_unit_cell;
+    let tol = 0.05;
+
+    // Sites nearest the viewer last, so overlapping markers stack the way the
+    // atoms behind them do.
+    let mut drawn: Vec<([f64; 3], f64)> = Vec::new();
+
+    for site in &overlay.sites {
+        let shifts: &[f64] = if show_ghosts {
+            &[-1.0, 0.0, 1.0]
+        } else {
+            &[0.0]
+        };
+
+        for &sx in shifts {
+            for &sy in shifts {
+                for &sz in shifts {
+                    let f = [
+                        site.frac[0] + sx,
+                        site.frac[1] + sy,
+                        site.frac[2] + sz,
+                    ];
+
+                    if f.iter().any(|&v| v < -tol || v > 1.0 + tol) {
+                        continue;
+                    }
+
+                    let cart = [
+                        f[0] * lat[0][0] + f[1] * lat[1][0] + f[2] * lat[2][0],
+                        f[0] * lat[0][1] + f[1] * lat[1][1] + f[2] * lat[2][1],
+                        f[0] * lat[0][2] + f[1] * lat[1][2] + f[2] * lat[2][2],
+                    ];
+
+                    drawn.push((bounds.project(cart), site.radius));
+                }
+            }
+        }
+    }
+
+    drawn.sort_by(|a, b| {
+        a.0[2]
+            .partial_cmp(&b.0[2])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    for (screen, radius) in drawn {
+        let r_px = (radius * bounds.scale).max(2.0);
+
+        // Teal, distinct from both the element palette and the selection blue.
+        cr.arc(screen[0], screen[1], r_px, 0.0, std::f64::consts::PI * 2.0);
+        cr.set_source_rgba(0.0, 0.72, 0.66, 0.30);
+        cr.fill_preserve().expect("Failed to fill interstitial site");
+
+        cr.set_source_rgba(0.0, 0.55, 0.51, 0.85);
+        cr.set_line_width(1.5);
+        cr.stroke().expect("Failed to stroke interstitial site");
+
+        // A dot at the centre keeps a tightly-fitting site visible when its
+        // circle has shrunk to almost nothing.
+        cr.arc(screen[0], screen[1], 1.5, 0.0, std::f64::consts::PI * 2.0);
+        cr.set_source_rgba(0.0, 0.45, 0.42, 0.95);
+        cr.fill().expect("Failed to fill interstitial centre");
     }
 }

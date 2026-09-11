@@ -1,5 +1,6 @@
 pub mod bravais;
 pub mod charge_density;
+pub mod interstitial;
 pub mod kpath;
 pub mod symmetry;
 pub mod voids;

@@ -67,6 +67,7 @@ pub fn create_tab_content(state: Rc<RefCell<AppState>>, tab_id: usize) -> (Drawi
       w as f64,
       h as f64,
     );
+    rendering::painter::draw_interstitial_sites(cr, tab, &bounds);
     rendering::painter::draw_axes(cr, tab, w as f64, h as f64);
     rendering::painter::draw_selection_box(cr, tab);
   });

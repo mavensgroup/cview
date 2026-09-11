@@ -12,7 +12,11 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 /// Opens the main Analysis Tools window: Symmetry, XRD, Band Path, Voids, Slab.
-pub fn show_analysis_window(parent: &ApplicationWindow, state: Rc<RefCell<AppState>>) {
+pub fn show_analysis_window(
+    parent: &ApplicationWindow,
+    state: Rc<RefCell<AppState>>,
+    main_notebook: &Notebook,
+) {
     let window = Window::builder()
         .title("Analysis Tools")
         .transient_for(parent)
@@ -32,7 +36,7 @@ pub fn show_analysis_window(parent: &ApplicationWindow, state: Rc<RefCell<AppSta
     let kpath_page = kpath_tab::build(state.clone());
     notebook.append_page(&kpath_page, Some(&Label::new(Some("Band Path"))));
 
-    let voids_page = voids_tab::build(state.clone());
+    let voids_page = voids_tab::build(state.clone(), main_notebook);
     notebook.append_page(&voids_page, Some(&Label::new(Some("Void Analysis"))));
 
     let slab_page = slab_tab::build(state.clone());

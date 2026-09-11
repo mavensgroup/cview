@@ -4,7 +4,9 @@
 use crate::config::{Config, RenderStyle};
 use crate::model::miller::MillerPlane;
 use crate::model::structure::Structure;
-use crate::physics::analysis::{kpath::KPathResult, voids::VoidResult};
+use crate::physics::analysis::{
+    interstitial::InterstitialSite, kpath::KPathResult, voids::VoidResult,
+};
 use nalgebra::{Rotation3, UnitQuaternion, Vector3};
 use std::collections::HashMap;
 
@@ -23,6 +25,9 @@ pub struct ViewState {
     pub bond_cutoff: f64,
     pub scale: f64,
     pub show_full_unit_cell: bool,
+    /// Whether the interstitial site overlay is drawn. Defaults on, so a
+    /// freshly computed screen is visible without a second action.
+    pub show_interstitial_sites: bool,
 }
 
 impl ViewState {
@@ -37,6 +42,7 @@ impl ViewState {
             bond_cutoff: config.default_bond_tolerance,
             scale: 30.0,
             show_full_unit_cell: config.default_show_full_cell,
+            show_interstitial_sites: true,
         }
     }
 
@@ -90,6 +96,7 @@ impl Default for ViewState {
             bond_cutoff: 1.15,
             scale: 30.0,
             show_full_unit_cell: true,
+            show_interstitial_sites: true,
         }
     }
 }
@@ -139,6 +146,20 @@ pub struct InteractionState {
     pub drag_prev_offset: (f64, f64),
 }
 
+/// Interstitial sites found for one candidate ion, ready to draw.
+///
+/// Held per tab rather than globally: two tabs can be screening different
+/// ions in different structures at once, and the overlay has to follow the
+/// structure it was computed from.
+#[derive(Clone, Debug)]
+pub struct InterstitialOverlay {
+    /// Display label of the ion screened, e.g. "Li\u{207a}".
+    pub ion: String,
+    /// Shannon radius used as the fit threshold, in Å.
+    pub ion_radius: f64,
+    pub sites: Vec<InterstitialSite>,
+}
+
 pub struct TabState {
     pub structure: Option<Structure>,
     pub original_structure: Option<Structure>,
@@ -149,6 +170,8 @@ pub struct TabState {
     pub style: RenderStyle,
     pub kpath_result: Option<KPathResult>,
     pub void_result: Option<VoidResult>,
+    /// Interstitial site overlay, when one has been computed for this tab.
+    pub interstitial: Option<InterstitialOverlay>,
     pub bvs_cache: Vec<f64>,
     pub bvs_cache_valid: bool,
     /// Per-atom cosmetic overrides keyed by index into `structure.atoms`.
@@ -168,6 +191,7 @@ impl TabState {
             style: global_config.style.create_session_copy(),
             kpath_result: None,
             void_result: None,
+            interstitial: None,
             bvs_cache: Vec::new(),
             bvs_cache_valid: false,
             overrides: HashMap::new(),
@@ -197,6 +221,20 @@ impl TabState {
 
     pub fn invalidate_bvs_cache(&mut self) {
         self.bvs_cache_valid = false;
+    }
+
+    /// Drop everything derived from the current structure.
+    ///
+    /// Call after ANY mutation — delete, undo, supercell, cell conversion,
+    /// element substitution. Cached analysis outlives the structure it was
+    /// computed from otherwise, and a stale interstitial overlay is worse
+    /// than none: it draws sites that look authoritative on a framework that
+    /// no longer has them.
+    pub fn invalidate_derived(&mut self) {
+        self.invalidate_bvs_cache();
+        self.kpath_result = None;
+        self.void_result = None;
+        self.interstitial = None;
     }
 
     pub fn get_bvs_values(&mut self) -> &[f64] {
@@ -310,7 +348,7 @@ impl AppState {
                 }
             }
             tab.interaction.selected.clear();
-            tab.invalidate_bvs_cache();
+            tab.invalidate_derived();
             // Atom indices shifted — overrides keyed on those indices are no
             // longer meaningful. Drop them rather than try to remap.
             tab.overrides.clear();
@@ -325,7 +363,7 @@ impl AppState {
         if let Some(prev_structure) = tab.interaction.undo_stack.pop() {
             tab.structure = Some(prev_structure);
             tab.interaction.selected.clear();
-            tab.invalidate_bvs_cache();
+            tab.invalidate_derived();
             // Same reasoning as `delete_selected`: undo can shift atom counts
             // and indices, so any overrides that pointed to the post-delete
             // arrangement are stale.

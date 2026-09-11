@@ -1,6 +1,7 @@
 // src/io.rs
 pub mod chgcar;
 pub mod cif;
+pub mod pdb;
 pub mod poscar;
 pub mod qe;
 pub mod sprkkr;
@@ -23,6 +24,9 @@ pub fn load_structure(path: &str) -> io::Result<Structure> {
     }
     if p.ends_with(".vasp") {
         return poscar::parse(path);
+    }
+    if p.ends_with(".pdb") || p.ends_with(".ent") {
+        return pdb::parse(path);
     }
     if p.ends_with(".in")
         || p.ends_with(".pwi")
@@ -66,6 +70,8 @@ pub fn save_structure(path: &str, structure: &Structure) -> io::Result<()> {
         cif::write(path, structure)
     } else if p.ends_with(".xyz") {
         xyz::write(path, structure)
+    } else if p.ends_with(".pdb") || p.ends_with(".ent") {
+        pdb::write(path, structure)
     } else if p.ends_with(".in") || p.ends_with(".qe") {
         qe::write(path, structure)
     } else if p.ends_with(".inp") || p.ends_with(".pot") || p.ends_with(".sys") {
