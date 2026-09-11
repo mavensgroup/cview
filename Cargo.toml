@@ -3,18 +3,16 @@ name = "cview"
 version = "1.1.0"
 edition = "2021"
 rust-version = "1.75"
-# Two [[bin]] targets, so `cargo run` needs to be told which one is the app.
-# `required-features` gates whether corpus_audit is *built*, not whether cargo
-# counts it when picking a default target.
+# Two [[bin]] targets; required-features gates whether corpus_audit is built,
+# not which target `cargo run` defaults to, so default-run is needed too.
 default-run = "cview"
 license = "MIT"
 description = "Crystal structure visualization and analysis for DFT researchers"
 authors = ["MAVENs Research Group"]
 readme = "README.md"
-# TODO: replace with your actual URLs — cargo-deb and cargo-generate-rpm
-# both propagate these into the package metadata.
-repository = "https://github.com/USER/cview"
-homepage = "https://github.com/USER/cview"
+repository = "https://github.com/mavensgroup/cview"
+homepage = "https://mavensgroup.github.io/cview/"
+documentation = "https://mavensgroup.github.io/cview/"
 keywords = ["crystallography", "dft", "visualization", "materials", "xrd"]
 categories = ["science", "visualization"]
 exclude = ["assets/screenshots/*", ".github/*"]
@@ -59,6 +57,16 @@ opt-level = 3
 lto = true
 codegen-units = 1
 strip = true
+
+# Same codegen as release, but with symbols and line-table info kept so a
+# sampling profiler (perf/flamegraph, samply) can resolve frames to function
+# names instead of raw addresses. `cargo build --profile profiling` /
+# `cargo flamegraph --profile profiling`. Never used for shipped binaries —
+# strip stays true on [profile.release] so release artifacts are unaffected.
+[profile.profiling]
+inherits = "release"
+strip = false
+debug = true
 
 [lints.rust]
 unused_imports = "warn"
