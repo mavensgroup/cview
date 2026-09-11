@@ -52,6 +52,8 @@ pub fn setup(
         filter_struct.add_pattern("*.cif");
         filter_struct.add_pattern("*.CIF");
         filter_struct.add_pattern("*.xyz");
+        filter_struct.add_pattern("*.pdb");
+        filter_struct.add_pattern("*.ent");
         filter_struct.add_pattern("POSCAR");
         filter_struct.add_pattern("POSCAR*");
         filter_struct.add_pattern("poscar");
@@ -96,6 +98,12 @@ pub fn setup(
         f_xyz.set_name(Some("XYZ (*.xyz)"));
         f_xyz.add_pattern("*.xyz");
         dialog.add_filter(&f_xyz);
+
+        let f_pdb = FileFilter::new();
+        f_pdb.set_name(Some("PDB (*.pdb, *.ent)"));
+        f_pdb.add_pattern("*.pdb");
+        f_pdb.add_pattern("*.ent");
+        dialog.add_filter(&f_pdb);
 
         let f_spr = FileFilter::new();
         f_spr.set_name(Some("SPR-KKR (*.pot, *.sys, *.inp)"));
@@ -305,6 +313,11 @@ pub fn setup(
         f_xyz.set_name(Some("XYZ File (*.xyz)"));
         f_xyz.add_pattern("*.xyz");
         dialog.add_filter(&f_xyz);
+
+        let f_pdb = FileFilter::new();
+        f_pdb.set_name(Some("PDB File (*.pdb)"));
+        f_pdb.add_pattern("*.pdb");
+        dialog.add_filter(&f_pdb);
 
         dialog.set_current_name("structure.cif");
 

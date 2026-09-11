@@ -88,6 +88,7 @@ CView automatically detects file types based on extension and content.
 | **SPRKKR** | `.inp`, `.sys`, `.pot` | Support for Munich SPR-KKR input formats. |
 | **CIF** | `.cif` | Standard Crystallographic Information File. |
 | **XYZ** | `.xyz` | Supports standard XYZ and **Extended XYZ** (Lattice line in comment). |
+| **PDB** | `.pdb`, `.ent` | Reads `CRYST1` cells, `ATOM`/`HETATM` sites, occupancies and formal charges. Files with no cell (or the placeholder `1 1 1 90 90 90`) load as non-periodic molecules. |
 
 ---
 

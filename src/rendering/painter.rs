@@ -333,7 +333,6 @@ pub fn draw_structure(
     // ========================================================================
     // STEP 6: Draw Atoms (foreground — on top of everything)
     // ========================================================================
-    let sprite_size = 128.0;
     let mut cache_access = tab.style.atom_cache.borrow_mut();
 
     for atom in render_atoms {
@@ -411,9 +410,16 @@ pub fn draw_structure(
             );
         } else {
             use crate::rendering::sprite_cache::SpriteCache;
+
+            // Cache one sprite per on-screen size bucket, not one per element.
+            // A 128 px sprite blitted down to a 16 px atom pushes Cairo's
+            // Filter::Good onto its full resampling path (~58 us per atom);
+            // matching the sprite to the atom keeps every blit at a scale
+            // factor in (0.5, 1.0], which is ~50x cheaper.
+            let sprite_px = SpriteCache::size_bucket(target_atom_cov * 2.0);
             let cache_key = SpriteCache::make_key(
                 &atom.element,
-                tab.style.atom_scale,
+                sprite_px,
                 tab.style.metallic,
                 tab.style.roughness,
                 tab.style.transmission,
@@ -427,9 +433,11 @@ pub fn draw_structure(
                     tab.style.metallic,
                     tab.style.roughness,
                     tab.style.transmission,
+                    sprite_px,
                 )
             });
 
+            let sprite_size = sprite_px as f64;
             cr.save().ok();
             cr.translate(atom.screen_pos[0], atom.screen_pos[1]);
             let scale_factor = (target_atom_cov * 2.0) / sprite_size;

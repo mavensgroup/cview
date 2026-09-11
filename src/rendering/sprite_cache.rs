@@ -6,6 +6,18 @@
 use gtk4::cairo::ImageSurface;
 use std::collections::HashMap;
 
+/// Smallest cached sprite resolution (px). Atoms below this on screen are a
+/// couple of pixels wide, where the shading is invisible anyway.
+pub const MIN_SPRITE_PX: i32 = 8;
+
+/// Largest cached sprite resolution (px). One entry costs 1 MB at this size;
+/// beyond it the sprite is upscaled rather than cached at ever larger sizes.
+pub const MAX_SPRITE_PX: i32 = 512;
+
+/// Resolution used by `preload_common` — the bucket a typical atom falls in at
+/// default zoom.
+pub const PRELOAD_SPRITE_PX: i32 = 32;
+
 /// Cache entry with LRU tracking and metadata
 #[derive(Clone, Debug)]
 struct CacheEntry {
@@ -17,8 +29,10 @@ struct CacheEntry {
 
 impl CacheEntry {
     fn new(sprite: ImageSurface) -> Self {
-        // ImageSurface is 128x128 ARGB32 = 128*128*4 = 65,536 bytes
-        let size_bytes = 128 * 128 * 4;
+        // Sprites are size-matched to their on-screen diameter, so entries
+        // range from 8x8 to 512x512 ARGB32. Measure the surface instead of
+        // assuming one size, or eviction accounting drifts by up to 64x.
+        let size_bytes = (sprite.width() * sprite.height() * 4) as usize;
         Self {
             sprite,
             last_used: 0,
@@ -100,34 +114,58 @@ impl SpriteCache {
         }
     }
 
+    /// Smallest sprite resolution that covers an on-screen diameter of
+    /// `diameter_px`, as a power of two in [MIN_SPRITE_PX, MAX_SPRITE_PX].
+    ///
+    /// Power-of-two buckets keep the blit scale factor in (0.5, 1.0] — the
+    /// range where Cairo's `Filter::Good` stays on its cheap path — while
+    /// capping the cache at ~7 resolutions per element/material combination.
+    /// Atoms drawn larger than MAX_SPRITE_PX are upscaled, which is the cheap
+    /// direction and only happens on extreme zoom-in.
+    pub fn size_bucket(diameter_px: f64) -> i32 {
+        // NaN has no meaningful size; anything at or below the floor, and any
+        // negative, takes the smallest bucket. Infinity falls through to the
+        // loop and saturates at MAX_SPRITE_PX like any other huge value.
+        if diameter_px.is_nan() || diameter_px <= MIN_SPRITE_PX as f64 {
+            return MIN_SPRITE_PX;
+        }
+        let mut px = MIN_SPRITE_PX;
+        while (px as f64) < diameter_px && px < MAX_SPRITE_PX {
+            px *= 2;
+        }
+        px
+    }
+
     /// Generate intelligent cache key from rendering parameters
     ///
-    /// Key format: "element_sXXX_mXX_rXX_tXX"
+    /// Key format: "element_pXXX_mXX_rXX_tXX"
     /// - element: Chemical symbol
-    /// - sXXX: Size/scale (3 digits, 0-200)
+    /// - pXXX: Sprite resolution in pixels (see `size_bucket`)
     /// - mXX: Metallic (2 digits, 0-99)
     /// - rXX: Roughness (2 digits, 0-99)
     /// - tXX: Transmission (2 digits, 0-99)
     ///
     /// # Examples
-    /// - "Fe_s042_m30_r40_t00" = Iron at 0.42 scale, 0.3 metallic, 0.4 roughness
-    /// - "O_s038_m00_r30_t00"  = Oxygen at 0.38 scale, 0.0 metallic, 0.3 roughness
+    /// - "Fe_p032_m30_r40_t00" = Iron drawn at 17-32 px, 0.3 metallic, 0.4 roughness
+    /// - "O_p064_m00_r30_t00"  = Oxygen drawn at 33-64 px, 0.0 metallic, 0.3 roughness
     ///
     /// # Design
-    /// - Quantized to reduce cache fragmentation
-    /// - Size precision: 0.01 (adequate for visual quality)
+    /// - The pixel bucket, not the style's `atom_scale`, is what the sprite
+    ///   actually depends on: zoom, per-atom radius overrides and the element's
+    ///   covalent radius all feed the on-screen size. Keying on `atom_scale`
+    ///   alone returned one fixed-resolution sprite for every zoom level.
     /// - Material precision: 0.01 (human eye threshold)
     pub fn make_key(
         element: &str,
-        scale: f64,
+        sprite_px: i32,
         metallic: f64,
         roughness: f64,
         transmission: f64,
     ) -> String {
         format!(
-            "{}_s{:03}_m{:02}_r{:02}_t{:02}",
+            "{}_p{:03}_m{:02}_r{:02}_t{:02}",
             element,
-            (scale * 100.0).round() as u32,
+            sprite_px,
             (metallic * 100.0).round() as u32,
             (roughness * 100.0).round() as u32,
             (transmission * 100.0).round() as u32,
@@ -159,7 +197,7 @@ impl SpriteCache {
         let sprite = create_fn();
 
         // Memory management: Evict before inserting if needed
-        let entry_size = 128 * 128 * 4;
+        let entry_size = (sprite.width() * sprite.height() * 4) as usize;
         while self.should_evict(entry_size) {
             self.evict_one();
         }
@@ -284,11 +322,11 @@ impl SpriteCache {
     ///
     /// Preloads sprites for most common elements at standard settings
     /// - Elements: H, C, N, O, F, Si, P, S, Cl, Fe, Cu, Zn
-    /// - Scale: 0.4 (default)
+    /// - Resolution: `PRELOAD_SPRITE_PX`, the bucket a default-zoom atom lands in
     /// - Material: Default (metallic=0.0, roughness=0.3)
     pub fn preload_common<F>(&mut self, mut create_fn: F)
     where
-        F: FnMut(&str, f64, f64, f64, f64) -> ImageSurface,
+        F: FnMut(&str, i32, f64, f64, f64) -> ImageSurface,
     {
         if !self.preload_common {
             return;
@@ -297,15 +335,15 @@ impl SpriteCache {
         let common_elements = [
             "H", "C", "N", "O", "F", "Si", "P", "S", "Cl", "Fe", "Cu", "Zn",
         ];
-        let scale = 0.4;
+        let sprite_px = PRELOAD_SPRITE_PX;
         let metallic = 0.0;
         let roughness = 0.3;
         let transmission = 0.0;
 
         for element in &common_elements {
-            let key = Self::make_key(element, scale, metallic, roughness, transmission);
+            let key = Self::make_key(element, sprite_px, metallic, roughness, transmission);
             if !self.cache.contains_key(&key) {
-                let sprite = create_fn(element, scale, metallic, roughness, transmission);
+                let sprite = create_fn(element, sprite_px, metallic, roughness, transmission);
                 let entry = CacheEntry::new(sprite);
                 self.current_memory_bytes += entry.size_bytes;
                 self.cache.insert(key, entry);
@@ -424,8 +462,43 @@ mod tests {
 
     #[test]
     fn test_cache_key_generation() {
-        let key = SpriteCache::make_key("Fe", 0.42, 0.30, 0.45, 0.00);
-        assert_eq!(key, "Fe_s042_m30_r45_t00");
+        let key = SpriteCache::make_key("Fe", 32, 0.30, 0.45, 0.00);
+        assert_eq!(key, "Fe_p032_m30_r45_t00");
+    }
+
+    #[test]
+    fn size_bucket_covers_the_atom_at_a_cheap_scale_factor() {
+        // Every bucket must be >= the requested diameter (so the blit never
+        // upscales below MAX) and < 2x it (so the scale factor stays above
+        // 0.5, where Cairo's Filter::Good keeps its fast path).
+        for d in [1.0f64, 8.0, 8.1, 9.0, 16.0, 17.0, 31.9, 100.0, 511.0] {
+            let px = SpriteCache::size_bucket(d);
+            assert!(px >= MIN_SPRITE_PX && px <= MAX_SPRITE_PX, "{d} -> {px}");
+            assert!(px as f64 >= d, "bucket {px} too small for {d}");
+            if d > MIN_SPRITE_PX as f64 {
+                assert!(
+                    d / px as f64 > 0.5,
+                    "bucket {px} for {d} gives scale {}",
+                    d / px as f64
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn size_bucket_is_bounded_at_both_ends() {
+        assert_eq!(SpriteCache::size_bucket(0.0), MIN_SPRITE_PX);
+        assert_eq!(SpriteCache::size_bucket(-5.0), MIN_SPRITE_PX);
+        assert_eq!(SpriteCache::size_bucket(f64::NAN), MIN_SPRITE_PX);
+        assert_eq!(SpriteCache::size_bucket(1e9), MAX_SPRITE_PX);
+        assert_eq!(SpriteCache::size_bucket(f64::INFINITY), MAX_SPRITE_PX);
+    }
+
+    #[test]
+    fn distinct_sizes_get_distinct_cache_entries() {
+        let small = SpriteCache::make_key("C", SpriteCache::size_bucket(12.0), 0.0, 0.3, 0.0);
+        let large = SpriteCache::make_key("C", SpriteCache::size_bucket(90.0), 0.0, 0.3, 0.0);
+        assert_ne!(small, large);
     }
 
     #[test]

@@ -58,7 +58,13 @@ pub fn draw_atom_vector(cr: &cairo::Context, x: f64, y: f64, radius: f64, color:
   cr.stroke().unwrap();
 }
 
-/// Generates a high-quality 128x128 image of an atom.
+/// Render a shaded sphere impostor into a square ARGB sprite of `size` pixels.
+///
+/// `size` is chosen by the caller to match the atom's on-screen diameter (see
+/// `SpriteCache::size_bucket`). Cairo's default `Filter::Good` falls back to a
+/// full resampling pass whenever a source is scaled below 0.5, which costs
+/// ~58 us per blit for a 128 px sprite drawn at 16 px — two orders of
+/// magnitude more than the near-1:1 blit a size-matched sprite gets.
 pub fn create_atom_sprite(
   r: f64,
   g: f64,
@@ -66,8 +72,9 @@ pub fn create_atom_sprite(
   metallic: f64,
   roughness: f64,
   transmission: f64,
+  size: i32,
 ) -> ImageSurface {
-  let size = 128;
+  let size = size.max(2);
   let surface =
     ImageSurface::create(Format::ARgb32, size, size).expect("Failed to create sprite surface");
   let cr = Context::new(&surface).expect("Failed to create sprite context");
