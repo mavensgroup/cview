@@ -45,7 +45,9 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
 
     // Right Pane: Controls
     let right_pane = Box::new(Orientation::Vertical, 10);
-    right_pane.set_width_request(super::CONTROL_PANE_WIDTH);
+    // Wider than the shared analysis column: this is its own window now, and
+    // three compact h/k/l fields need ~390 px to fit without clipping.
+    right_pane.set_width_request(400);
 
     let spin_h = SpinButton::with_range(-10.0, 10.0, 1.0);
     spin_h.set_value(1.0);

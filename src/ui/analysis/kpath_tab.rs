@@ -260,6 +260,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
 
         let scroll = ScrolledWindow::builder().child(&tv).vexpand(true).build();
         scroll.add_css_class("cview-text");
+        scroll.set_overflow(gtk4::Overflow::Hidden); // clip to the rounded corners
         let txt_body = card_body(8);
         txt_body.set_vexpand(true);
         txt_body.append(&scroll);

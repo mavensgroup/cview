@@ -62,7 +62,7 @@ pub fn show_slab_window(parent: &ApplicationWindow, state: Rc<RefCell<AppState>>
     let window = Window::builder()
         .title("Slab Generator")
         .transient_for(parent)
-        .default_width(850)
+        .default_width(960)
         .default_height(520)
         .modal(false)
         .build();

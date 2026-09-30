@@ -60,28 +60,36 @@ pub fn card_body(spacing: i32) -> GtkBox {
     b
 }
 
-/// A compact spin button inside a tinted field box (no prefix), for grids of
-/// numbers such as a transformation matrix.
-pub fn plain_field(spin: &SpinButton) -> GtkBox {
-    let field = GtkBox::new(Orientation::Horizontal, 0);
-    field.add_css_class("cview-field");
-    field.set_hexpand(true);
+/// A compact spin button for grids of numbers such as a transformation
+/// matrix. Keeps the theme's native spin-button look.
+pub fn plain_field(spin: &SpinButton) -> SpinButton {
     spin.add_css_class("cview-compact");
     spin.set_width_chars(2);
     spin.set_hexpand(true);
-    field.append(spin);
-    field
+    spin.clone()
 }
 
-/// A compact spin button with a permanent dimmed prefix inside the field
-/// (`h`, `k`, `l`), for short symbols. The prefix is display only: the
-/// spin button still holds a plain number, so nobody types it.
-pub fn prefixed_field(prefix: &str, spin: &SpinButton) -> GtkBox {
-    let field = plain_field(spin);
+/// A compact spin button with a permanent dimmed prefix drawn inside it
+/// (`h`, `k`, `l`), for short symbols. The prefix is an overlay, so it does
+/// not depend on any theme styling the spin button; the number is inset with
+/// a widget margin (not CSS) to leave room for it. Display only: the spin
+/// button still holds a plain number, so nobody types the prefix.
+pub fn prefixed_field(prefix: &str, spin: &SpinButton) -> gtk4::Overlay {
+    plain_field(spin);
+    if let Some(text) = spin.first_child() {
+        text.set_margin_start(12 + 9 * prefix.chars().count() as i32);
+    }
     let lbl = Label::new(Some(prefix));
     lbl.add_css_class("cview-field-prefix");
-    field.prepend(&lbl);
-    field
+    lbl.set_halign(Align::Start);
+    lbl.set_valign(Align::Center);
+    lbl.set_margin_start(8);
+    lbl.set_can_target(false);
+    let overlay = gtk4::Overlay::new();
+    overlay.set_hexpand(true);
+    overlay.set_child(Some(spin));
+    overlay.add_overlay(&lbl);
+    overlay
 }
 
 /// A small dimmed caption above a widget, for labels that carry words or
