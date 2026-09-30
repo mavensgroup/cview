@@ -147,15 +147,9 @@ fn convert_and_update(state: &Rc<RefCell<AppState>>, da: &DrawingArea, cell_type
                     CellType::Primitive => "Primitive",
                     CellType::Conventional => "Conventional",
                 };
-                console::log_info(&format!(
-                    "Switched to {} cell — {} ({} atoms)",
-                    view_name,
-                    new_struct.formula,
-                    new_struct.atoms.len()
-                ));
-
                 let mut st = state.borrow_mut();
                 let tab = st.active_tab_mut();
+                console::structure_changed(&format!("Switched to {} cell", view_name), &new_struct);
                 tab.structure = Some(new_struct);
                 tab.invalidate_derived();
 

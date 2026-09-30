@@ -117,6 +117,9 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
                         tab.structure = Some(new_s);
                         tab.interaction.selected.clear();
                         tab.invalidate_derived();
+                        if let Some(s) = &tab.structure {
+                            crate::utils::console::structure_changed("Supercell", s);
+                        }
 
                         if let Some(nb) = notebook_weak.upgrade() {
                             if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
@@ -130,6 +133,9 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
                         tab.structure = Some(orig.clone());
                         tab.interaction.selected.clear();
                         tab.invalidate_derived();
+                        if let Some(s) = &tab.structure {
+                            crate::utils::console::structure_changed("Reset to as-loaded cell", s);
+                        }
 
                         for (i, spin) in spins_final.iter().enumerate() {
                             let r = i / 3;

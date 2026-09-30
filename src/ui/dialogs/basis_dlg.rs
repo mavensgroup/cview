@@ -133,6 +133,11 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
                     let new_s = basis::modify_selection(current_s, &original_indices, &new_el);
                     tab.structure = Some(new_s);
                     tab.invalidate_derived();
+                    crate::utils::console::log_info(&format!(
+                        "Changed {} atom(s) to {}",
+                        original_indices.len(),
+                        new_el
+                    ));
 
                     if let Some(nb) = notebook_weak.upgrade() {
                         if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
@@ -164,6 +169,12 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
                     let new_s = basis::substitute_element(current_s, &from, &to);
                     tab.structure = Some(new_s);
                     tab.invalidate_derived();
+                    if let Some(s) = &tab.structure {
+                        crate::utils::console::structure_changed(
+                            &format!("Element substitution {} → {}", from, to),
+                            s,
+                        );
+                    }
 
                     if let Some(nb) = nb_weak_sub.upgrade() {
                         if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
@@ -192,6 +203,9 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
                 let new_s = basis::standardize_positions(current_s);
                 tab.structure = Some(new_s);
                 tab.invalidate_derived();
+                if let Some(s) = &tab.structure {
+                    crate::utils::console::structure_changed("Standardize positions [0, 1)", s);
+                }
 
                 if let Some(nb) = nb_weak_std.upgrade() {
                     if let Some(da) = crate::ui::get_active_drawing_area(&nb) {

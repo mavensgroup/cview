@@ -8,7 +8,18 @@ use std::collections::HashMap;
 
 // ─── Structure summary ───────────────────────────────────────────────────────
 
+/// Summary shown when a file is loaded: `File: <name>`, formula, first atoms.
 pub fn structure_summary(structure: &Structure, filename: &str) -> String {
+  summary_with_header(structure, &format!("File: {}", filename))
+}
+
+/// Same summary after an operation replaced the structure (supercell, slab,
+/// cell conversion...): the header names the operation instead of a file.
+pub fn structure_summary_after(structure: &Structure, operation: &str) -> String {
+  summary_with_header(structure, &format!("After: {}", operation))
+}
+
+fn summary_with_header(structure: &Structure, header: &str) -> String {
   let mut counts: HashMap<String, usize> = HashMap::new();
   for atom in &structure.atoms {
     *counts.entry(atom.element.clone()).or_insert(0) += 1;
@@ -24,7 +35,7 @@ pub fn structure_summary(structure: &Structure, filename: &str) -> String {
     .join(" ");
 
   let mut out = String::new();
-  out.push_str(&format!("File: {}\n", filename));
+  out.push_str(&format!("{}\n", header));
   out.push_str(&format!("Formula: {}\n", formula_str));
   out.push_str("--------------------------------------------------\n");
   out.push_str(&format!(

@@ -312,10 +312,20 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
                     // that no longer exists.
                     tab.interaction.selected.clear();
                     tab.invalidate_derived();
+                    if let Some(s) = &tab.structure {
+                        crate::utils::console::structure_changed(
+                            &format!(
+                                "Slab ({} {} {}), {} layer(s), {} Å vacuum",
+                                h, k, l, thick, vac
+                            ),
+                            s,
+                        );
+                    }
                     lbl_gen.set_markup("<span color='green'>Slab generated.</span>");
                     btn_undo_gen.set_sensitive(true);
                 }
                 Err(e) => {
+                    crate::utils::console::log_error(&format!("Slab generation failed: {}", e));
                     lbl_gen.set_markup(&format!("<span color='red'>Error: {}</span>", e));
                 }
             }
@@ -335,6 +345,9 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
             // Restoring the bulk invalidates anything derived from the slab.
             tab.interaction.selected.clear();
             tab.invalidate_derived();
+            if let Some(s) = &tab.structure {
+                crate::utils::console::structure_changed("Slab undone — bulk restored", s);
+            }
             lbl_undo.set_text("Undone.");
             btn_undo_ref.set_sensitive(false);
         }

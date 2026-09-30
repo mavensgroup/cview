@@ -298,13 +298,16 @@ pub fn show_export_dialog(window: &ApplicationWindow, state: Rc<RefCell<AppState
                                     }
                                 };
 
-                                // Show result - print to console instead of dialog
+                                // Show result in the System Log instead of a dialog
                                 match result {
                                     Ok(msg) => {
-                                        println!("✓ {}", msg);
+                                        crate::utils::console::log_info(&msg);
                                     }
                                     Err(e) => {
-                                        eprintln!("✗ Export failed: {}", e);
+                                        crate::utils::console::log_error(&format!(
+                                            "Export failed: {}",
+                                            e
+                                        ));
                                     }
                                 }
                             }

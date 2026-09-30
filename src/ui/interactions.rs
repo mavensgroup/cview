@@ -42,7 +42,7 @@ pub fn setup_interactions(
         // B. Delete
         if keyval == gdk::Key::Delete {
             let msg = st.delete_selected();
-            console::info(&msg);
+            console::log_info(&msg);
             da.queue_draw();
             return glib::Propagation::Stop;
         }
@@ -171,7 +171,7 @@ pub fn setup_interactions(
                 }
 
                 if count > 0 {
-                    console::info(&format!("Box selected {} atoms.", count));
+                    console::log_debug(&format!("Box selected {} atoms", count));
                 }
             }
             st.active_tab_mut().interaction.selection_box = None;

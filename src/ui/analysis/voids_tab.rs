@@ -387,6 +387,15 @@ pub fn build(state: Rc<RefCell<AppState>>, main_notebook: &Notebook) -> Box {
                             site_list.set_text(&text);
                         }
 
+                        console::info_report(&format!(
+                            "Void analysis\nMax sphere radius: {:.3} Å (diameter {:.3} Å)\nVoid volume: {:.2} %\nInterstitial sites fitting {} ({:.2} Å): {}",
+                            r_max,
+                            r_max * 2.0,
+                            result.void_fraction,
+                            ion_name,
+                            ion_radius,
+                            sites.len()
+                        ));
                         console::log_info(&format!(
                             "Void analysis: {}×{}×{} grid ({} points), {} site(s) for {} in {:.0} ms",
                             result.grid_info.nx,

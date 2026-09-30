@@ -1,14 +1,29 @@
 // src/utils/console.rs
 //
-// Centralized console output for the two bottom-panel tabs:
-//   • "Structure Info" — scientific data, structure summaries, analysis results
-//   • "System Log"     — file I/O events, errors, warnings, export status
+// Centralized console output for the two bottom-panel tabs.
+//
+// WHAT GOES WHERE
+//   "Structure Info" — the scientific record. Content you would copy into your
+//     notes or a paper: the structure summary (on load, and after any
+//     operation that replaces the structure), BVS reports, atom measurements,
+//     analysis result summaries. Nothing about how the app behaved.
+//   "System Log" — what the app did and how it went: file open/save/export
+//     status, operation events (undo, delete, "applied"), parser warnings
+//     (data dropped or approximated), errors, timings. Levels:
+//       info  — a user-initiated action completed
+//       warn  — data was lost, approximated or ignored; the result is usable
+//       error — the action failed
+//       debug — internals; hidden unless a debug build or CVIEW_LOG_DEBUG=1
+//   An operation that changes the structure writes to both: one line in the
+//   log, and a fresh summary in Structure Info (see `structure_changed`).
+//   Never use println!/eprintln! for anything the user should see.
 //
 // After calling `init()` once in main.rs, any module can write to either tab
 // without needing a &TextView reference threaded through function signatures.
 
 use gtk4::prelude::*;
-use gtk4::{glib, TextTag, TextView};
+use crate::model::structure::Structure;
+use gtk4::{glib, TextBuffer, TextTag, TextView};
 use std::sync::OnceLock;
 
 // ---------------------------------------------------------------------------
@@ -68,6 +83,20 @@ pub fn info_report(message: &str) {
   do_append(&INFO_VIEW, &formatted);
 }
 
+/// Record that an operation replaced the structure: one System Log line, plus
+/// a fresh summary in Structure Info so the record shows what you have now.
+pub fn structure_changed(operation: &str, structure: &Structure) {
+  log_info(&format!(
+    "{} — {} ({} atoms)",
+    operation,
+    structure.formula,
+    structure.atoms.len()
+  ));
+  info_report(&crate::utils::report::structure_summary_after(
+    structure, operation,
+  ));
+}
+
 // ---------------------------------------------------------------------------
 // System Log tab — operational events, errors, file I/O
 // ---------------------------------------------------------------------------
@@ -112,6 +141,7 @@ fn do_append(cell: &'static OnceLock<glib::SendWeakRef<TextView>>, message: &str
         buffer.insert(&mut end, "\n");
       }
       buffer.insert(&mut end, &msg);
+      trim_lines(&buffer, MAX_LINES);
 
       // Auto-scroll to bottom
       let mark = buffer.create_mark(None, &buffer.end_iter(), false);
@@ -119,4 +149,18 @@ fn do_append(cell: &'static OnceLock<glib::SendWeakRef<TextView>>, message: &str
       buffer.delete_mark(&mark);
     }
   });
+}
+
+/// Keep the panels from growing without bound over a long session.
+pub const MAX_LINES: i32 = 2000;
+
+/// Drop the oldest lines once `buffer` exceeds `max` lines (in blocks of a
+/// quarter, so this does not run on every message).
+pub fn trim_lines(buffer: &TextBuffer, max: i32) {
+  if buffer.line_count() <= max {
+    return;
+  }
+  let mut start = buffer.start_iter();
+  let mut cut = buffer.iter_at_line(max / 4).unwrap_or_else(|| buffer.start_iter());
+  buffer.delete(&mut start, &mut cut);
 }

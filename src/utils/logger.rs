@@ -45,12 +45,18 @@ pub fn init(view: &TextView) -> Result<(), SetLoggerError> {
   }
 
   let _ = LOG_VIEW.set(view.downgrade().into());
-  log::set_logger(&LOGGER).map(|()| log::set_max_level(log::LevelFilter::Debug))
+  // Debug is for developers: shown in debug builds, or on request.
+  let level = if cfg!(debug_assertions) || std::env::var_os("CVIEW_LOG_DEBUG").is_some() {
+    log::LevelFilter::Debug
+  } else {
+    log::LevelFilter::Info
+  };
+  log::set_logger(&LOGGER).map(|()| log::set_max_level(level))
 }
 
 impl log::Log for GtkLogger {
   fn enabled(&self, metadata: &Metadata) -> bool {
-    metadata.level() <= Level::Debug
+    metadata.level() <= log::max_level()
   }
 
   fn log(&self, record: &Record) {
@@ -64,8 +70,13 @@ impl log::Log for GtkLogger {
         Level::Trace => ("▫️", "debug"), // Small dot
       };
 
-      // Format: "🔴  File not found"
-      let msg = format!("{}  {}\n", icon, record.args());
+      // Format: "12:03:41 🔴  File not found"
+      let time = glib::DateTime::now_local()
+        .ok()
+        .and_then(|d| d.format("%H:%M:%S").ok())
+        .map(|t| t.to_string())
+        .unwrap_or_default();
+      let msg = format!("{} {}  {}\n", time, icon, record.args());
 
       glib::MainContext::default().spawn_local(async move {
         if let Some(weak_ref) = LOG_VIEW.get() {
@@ -74,6 +85,7 @@ impl log::Log for GtkLogger {
             let mut end = buffer.end_iter();
 
             buffer.insert_with_tags_by_name(&mut end, &msg, &[tag_name]);
+            crate::utils::console::trim_lines(&buffer, crate::utils::console::MAX_LINES);
 
             // Auto-scroll
             let mark = buffer.create_mark(None, &buffer.end_iter(), false);

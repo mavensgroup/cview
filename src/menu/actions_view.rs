@@ -185,7 +185,7 @@ pub fn setup(
     act_undo.connect_activate(move |_, _| {
         if let Some(da) = get_da(&nb_undo) {
             let msg = s_undo.borrow_mut().undo();
-            crate::utils::console::info(&msg);
+            crate::utils::console::log_info(&msg);
             da.queue_draw();
         }
     });

@@ -1876,7 +1876,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                                     );
                                 }
                                 surf.finish();
-                                println!("Exported PDF: {}", path.display());
+                                crate::utils::console::log_info(&format!("Exported PDF: {}", path.display()));
                             }
                         } else if let Ok(surf) =
                             cairo::ImageSurface::create(cairo::Format::ARgb32, w as i32, h as i32)
@@ -1901,7 +1901,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
                             }
                             if let Ok(mut file) = std::fs::File::create(&path) {
                                 let _ = surf.write_to_png(&mut file);
-                                println!("Exported PNG: {}", path.display());
+                                crate::utils::console::log_info(&format!("Exported PNG: {}", path.display()));
                             }
                         }
                     }
