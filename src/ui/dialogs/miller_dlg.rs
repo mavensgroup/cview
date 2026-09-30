@@ -4,7 +4,8 @@ use crate::model::miller::MillerPlane;
 use crate::state::AppState;
 use gtk4::prelude::*;
 // Changed DrawingArea to Notebook
-use gtk4::{Align, Dialog, Grid, Label, Notebook, ResponseType, SpinButton, Window};
+use crate::ui::style::{card_body, prefixed_field, surface};
+use gtk4::{Dialog, Notebook, ResponseType, SpinButton, Window};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -23,11 +24,6 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
   content.set_margin_start(20);
   content.set_margin_end(20);
 
-  let grid = Grid::new();
-  grid.set_column_spacing(10);
-  grid.set_row_spacing(10);
-  grid.set_halign(Align::Center);
-
   let h = SpinButton::with_range(-10.0, 10.0, 1.0);
   h.set_value(1.0);
   let k = SpinButton::with_range(-10.0, 10.0, 1.0);
@@ -35,18 +31,21 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
   let l = SpinButton::with_range(-10.0, 10.0, 1.0);
   l.set_value(0.0);
 
-  grid.attach(&Label::new(Some("h:")), 0, 0, 1, 1);
-  grid.attach(&h, 1, 0, 1, 1);
-  grid.attach(&Label::new(Some("k:")), 0, 1, 1, 1);
-  grid.attach(&k, 1, 1, 1, 1);
-  grid.attach(&Label::new(Some("l:")), 0, 2, 1, 1);
-  grid.attach(&l, 1, 2, 1, 1);
-
-  content.append(&grid);
+  // h, k, l on one row with the letter inside each field (see ui::style).
+  let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+  row.set_homogeneous(true);
+  row.append(&prefixed_field("h", &h));
+  row.append(&prefixed_field("k", &k));
+  row.append(&prefixed_field("l", &l));
+  let body = card_body(8);
+  body.append(&row);
+  content.append(&surface(&body));
 
   dialog.add_button("Clear All", ResponseType::Reject);
   dialog.add_button("Cancel", ResponseType::Cancel);
-  dialog.add_button("Add", ResponseType::Ok);
+  dialog
+    .add_button("Add", ResponseType::Ok)
+    .add_css_class("suggested-action");
 
   let state_weak = Rc::downgrade(&state);
   let nb_weak = notebook.downgrade(); // Capture Notebook weakly

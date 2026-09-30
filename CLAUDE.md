@@ -68,7 +68,7 @@ The same scene/painter functions are reused for PDF/PNG export via `rendering::e
 
 ### Symmetry & cell conventions
 
-Space-group detection and cell standardization use `moyo`. The Setyawan-Curtarolo convention is used for k-path high-symmetry points. `load_conventional` config flag and the Tools menu's "Toggle Primitive/Conventional" switch between the moyo-standardized conventional cell and the input primitive cell.
+Space-group detection and cell standardization use `moyo`. The Setyawan-Curtarolo convention is used for k-path high-symmetry points. `load_conventional` config flag and the Structure menu's "Toggle Primitive/Conventional" switch between the moyo-standardized conventional cell and the input primitive cell.
 
 ## CI / Release
 

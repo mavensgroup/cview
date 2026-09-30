@@ -49,6 +49,10 @@ fn build_ui(app: &Application) {
         eprintln!("Failed to initialize libadwaita: {}", e);
     }
 
+    // App-wide stylesheet (tonal surfaces, radii, sliders). After adw::init so
+    // the theme's named colors exist; before any widget is built.
+    ui::style::load();
+
     // 1. Initialize State
     let (initial_state, _startup_log) = AppState::new_with_log();
     let state = Rc::new(RefCell::new(initial_state));
@@ -194,7 +198,7 @@ fn build_ui(app: &Application) {
         }
     });
     app.add_action(&close_tab_action);
-    app.set_accels_for_action("app.close_tab", &["<Control>w"]);
+    app.set_accels_for_action("app.close_tab", &["<Primary>w"]);
 
     // --- ASSEMBLE ---
     root_vbox.append(&menu_bar);

@@ -1,12 +1,12 @@
 # Building Structures
 
-CView provides several tools to manipulate and construct crystal structures. These operations are accessible via the **Tools** menu and enable you to prepare input geometries for *ab-initio* calculations.
+CView provides several tools to manipulate and construct crystal structures. These operations are accessible via the **Structure** menu and enable you to prepare input geometries for *ab-initio* calculations.
 
 ---
 
 ## Basis Operations
 
-The **Basis** dialog (`Tools → Basis`) allows you to perform chemical modifications to your structure.
+The **Basis** dialog (`Structure → Basis...`) allows you to perform chemical modifications to your structure.
 
 ### Element Substitution
 
@@ -18,7 +18,7 @@ The **Basis** dialog (`Tools → Basis`) allows you to perform chemical modifica
 - Creating hypothetical structures for screening
 
 **How to use**:
-1. Open `Tools → Basis`
+1. Open `Structure → Basis...`
 2. Select the **Global** tab
 3. Enter the source and replacement element symbols
 4. Click **Replace All**
@@ -59,7 +59,7 @@ Crystallographic structures can be represented in two standard forms:
 
 **Keyboard Shortcut**: Press `Ctrl + T` to toggle between primitive and conventional representations.
 
-**Menu Access**: `Tools → Toggle Primitive/Conventional`
+**Menu Access**: `Structure → Toggle Primitive/Conventional`
 
 **What happens**:
 - CView uses the `moyo` library (spglib wrapper) to detect space group symmetry
@@ -79,7 +79,7 @@ The **Tools** tab of the Basis dialog provides **Standardize Positions [0, 1)**,
 
 The **Atom Instances** dialog provides session-only cosmetic overrides for individual atoms. It lets you filter the atom list and apply or reset a display label and colour for selected sites.
 
-**Access**: `Tools → Atom Instances`
+**Access**: `Structure → Atom Instances...`
 
 >[!NOTE]
 >These overrides are not written to structure files. Use `View → Hide Symmetric Basis` or `Ctrl + B` to toggle visible periodic images.

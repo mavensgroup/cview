@@ -30,7 +30,7 @@ In cubic systems, $(100)$, $(010)$, and $(001)$ are equivalent by symmetry. In l
 
 ## Visualizing Miller Planes
 
-**Access**: `Tools → Miller Planes`
+**Access**: `View → Miller Indices...` (`Ctrl + M`)
 
 ### How to Use
 
@@ -84,7 +84,7 @@ The viewport dialog creates the conventional intercept plane $hx + ky + lz = 1$ 
 Miller planes are the primary input for creating surface structures:
 
 1. **Select a plane**: Use the Miller Planes tool to visualize candidates
-2. **Generate slab**: `Analysis → Slab` (uses the same $(hkl)$ indices)
+2. **Generate slab**: `Structure → Slab...` (uses the same $(hkl)$ indices)
 3. **Add vacuum**: Specified in Ångströms
 4. **Repeat layers**: Control slab thickness
 
@@ -100,7 +100,7 @@ The $(110)$ plane of rutile TiO₂ is the most stable surface.
 
 **Workflow**:
 1. Load rutile TiO₂ structure
-2. Open `Tools → Miller Planes`
+2. Open `View → Miller Indices...`
 3. Enter `1`, `1`, `0`
 4. Observe the plane cutting through rows of oxygen atoms
 
@@ -119,7 +119,7 @@ For hexagonal structures like graphite, the $(0001)$ plane (also called the "c-p
 
 ## Keyboard Shortcuts
 
-- **Add Plane**: No dedicated shortcut — use `Tools → Miller Indices`
+- **Add Plane**: `Ctrl + M`, or `View → Miller Indices...`
 - **Clear Plane**: Use **Clear All** in the dialog. Closing or cancelling the dialog leaves existing planes visible.
 
 ---

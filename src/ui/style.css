@@ -1,0 +1,105 @@
+/* CView app stylesheet.
+ *
+ * Colors come only from the theme's named colors (@window_bg_color etc.), so
+ * the look follows the system light/dark setting. Tonal steps are mixes toward
+ * the foreground color: slightly darker in light mode, lighter in dark mode.
+ *
+ * Spacing scale: 4 / 8 / 12 / 16 px. Radii: 8 px groups, 6 px controls.
+ * The 3D canvas is NOT themed here: its background is a user setting.
+ */
+
+@define-color cview_surface_1 mix(@window_bg_color, @window_fg_color, 0.03);
+@define-color cview_surface_2 mix(@window_bg_color, @window_fg_color, 0.07);
+
+/* Level 1: sidebar */
+scrolledwindow.cview-sidebar {
+    background-color: @cview_surface_1;
+}
+
+/* Level 2: grouped sections inside the sidebar */
+.cview-group,
+.cview-card {
+    background-color: @cview_surface_2;
+    border-radius: 8px;
+}
+/* Card = a plain box used as a group (no title row of its own) */
+.cview-card {
+    padding: 12px;
+}
+.cview-group-title {
+    font-weight: 700;
+    font-size: 0.85em;
+    opacity: 0.75;
+}
+
+/* Controls */
+button,
+entry,
+spinbutton {
+    border-radius: 6px;
+}
+
+/* Slim slider handles in the sidebar */
+scale.thin-slider slider {
+    min-width: 6px;
+    min-height: 18px;
+    margin-top: -7px;
+    margin-bottom: -7px;
+    border-radius: 2px;
+    background-color: mix(@window_bg_color, @window_fg_color, 0.55);
+    box-shadow: none;
+    outline: none;
+}
+scale.thin-slider slider:hover {
+    background-color: @accent_bg_color;
+}
+
+/* Track: neutral remainder, accent-filled active part (value at a glance) */
+scale.thin-slider trough {
+    min-height: 6px;
+    border-radius: 3px;
+    background-color: mix(@window_bg_color, @window_fg_color, 0.12);
+}
+scale.thin-slider trough highlight {
+    border-radius: 3px;
+    background-color: @accent_bg_color;
+}
+
+/* Field with a permanent dimmed prefix (h, k, l) */
+.cview-field {
+    background-color: alpha(@window_fg_color, 0.08);
+    border-radius: 6px;
+}
+.cview-field-prefix {
+    margin-left: 8px;
+    opacity: 0.55;
+}
+.cview-field spinbutton.cview-compact {
+    background: none;
+    box-shadow: none;
+    border: none;
+    outline: none;
+    min-width: 0;
+}
+.cview-field spinbutton.cview-compact text {
+    min-width: 0;
+    padding-left: 4px;
+    padding-right: 0;
+}
+.cview-field spinbutton.cview-compact button {
+    min-width: 22px;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* Small caption above a control */
+.cview-caption {
+    font-size: 0.85em;
+    opacity: 0.7;
+}
+
+/* Read-only text (e.g. KPOINTS) inside a card */
+scrolledwindow.cview-text {
+    border-radius: 6px;
+    overflow: hidden;
+}

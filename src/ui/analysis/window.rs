@@ -11,14 +11,26 @@ use gtk4::{ApplicationWindow, Label, Notebook, Window};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Opens the main Analysis Tools window: Symmetry, XRD, Band Path, Voids, Slab.
+/// Tabs of the Analysis window, in notebook order.
+#[derive(Clone, Copy)]
+pub enum AnalysisTab {
+    Symmetry = 0,
+    Xrd = 1,
+    BandPath = 2,
+    Voids = 3,
+}
+
+/// Opens the Analysis window (Symmetry, XRD, Band Path, Voids) on `start`.
+/// These are read-only computations; tools that change the structure live in
+/// the Structure menu as their own windows.
 pub fn show_analysis_window(
     parent: &ApplicationWindow,
     state: Rc<RefCell<AppState>>,
     main_notebook: &Notebook,
+    start: AnalysisTab,
 ) {
     let window = Window::builder()
-        .title("Analysis Tools")
+        .title("Analysis")
         .transient_for(parent)
         .default_width(950)
         .default_height(650)
@@ -39,10 +51,24 @@ pub fn show_analysis_window(
     let voids_page = voids_tab::build(state.clone(), main_notebook);
     notebook.append_page(&voids_page, Some(&Label::new(Some("Void Analysis"))));
 
-    let slab_page = slab_tab::build(state.clone());
-    notebook.append_page(&slab_page, Some(&Label::new(Some("Slab"))));
-
     window.set_child(Some(&notebook));
+    notebook.set_current_page(Some(start as u32));
+    window.present();
+}
+
+/// Opens the Slab generator in its own non-modal window: it has a live
+/// preview and edits the structure, so it stays beside the main view.
+pub fn show_slab_window(parent: &ApplicationWindow, state: Rc<RefCell<AppState>>) {
+    let window = Window::builder()
+        .title("Slab Generator")
+        .transient_for(parent)
+        .default_width(850)
+        .default_height(520)
+        .modal(false)
+        .build();
+
+    let slab_page = slab_tab::build(state);
+    window.set_child(Some(&slab_page));
     window.present();
 }
 

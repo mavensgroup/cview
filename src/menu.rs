@@ -49,10 +49,10 @@ pub fn build_menu_and_actions(
     app.set_accels_for_action("app.open", &["<Primary>o"]);
     app.set_accels_for_action("app.save_as", &["<Primary><Shift>s"]);
     app.set_accels_for_action("app.export", &["<Primary>e"]);
-    app.set_accels_for_action("app.preferences", &["<Primary>p"]);
+    app.set_accels_for_action("app.preferences", &["<Primary>comma"]);
+    app.set_accels_for_action("app.undo", &["<Primary>z"]);
     app.set_accels_for_action("app.quit", &["<Primary>q"]);
     app.set_accels_for_action("app.view_reset", &["<Primary>r"]);
-    app.set_accels_for_action("app.toggle_cell_view", &["<Primary>t"]);
     app.set_accels_for_action("app.toggle_bonds", &["<Primary>b"]);
     app.set_accels_for_action("app.toggle_boundaries", &["<Primary><Shift>b"]);
     app.set_accels_for_action("app.toggle_interstitial_sites", &["<Primary>i"]);
@@ -72,6 +72,11 @@ pub fn build_menu_and_actions(
     file_menu.append(Some("Quit"), Some("app.quit"));
     root_model.append_submenu(Some("File"), &file_menu);
 
+    // --- EDIT MENU ---
+    let edit_menu = gtk4::gio::Menu::new();
+    edit_menu.append(Some("Undo"), Some("app.undo"));
+    root_model.append_submenu(Some("Edit"), &edit_menu);
+
     // --- VIEW MENU ---
     let view_menu = gtk4::gio::Menu::new();
     view_menu.append(Some("Restore View"), Some("app.view_reset"));
@@ -88,24 +93,32 @@ pub fn build_menu_and_actions(
         Some("app.toggle_interstitial_sites"),
     );
     view_menu.append(Some("Hide Symmetric Basis"), Some("app.toggle_boundaries"));
+    view_menu.append(Some("Miller Indices..."), Some("app.miller_planes"));
     root_model.append_submenu(Some("View"), &view_menu);
 
-    // --- TOOLS MENU ---
-    let tools_menu = gtk4::gio::Menu::new();
-    tools_menu.append(Some("Supercell..."), Some("app.supercell"));
-    tools_menu.append(Some("Basis..."), Some("app.basis"));
-    tools_menu.append(Some("Atom Instances..."), Some("app.atom_instances"));
-    tools_menu.append(Some("Miller Indices..."), Some("app.miller_planes"));
-    tools_menu.append(
+    // --- STRUCTURE MENU (operations that change the structure) ---
+    let structure_menu = gtk4::gio::Menu::new();
+    structure_menu.append(Some("Supercell..."), Some("app.supercell"));
+    structure_menu.append(Some("Basis..."), Some("app.basis"));
+    structure_menu.append(Some("Atom Instances..."), Some("app.atom_instances"));
+    structure_menu.append(Some("Slab..."), Some("app.slab"));
+    let structure_cell = gtk4::gio::Menu::new();
+    structure_cell.append(
         Some("Toggle Primitive/Conventional"),
         Some("app.toggle_cell_view"),
     );
-    root_model.append_submenu(Some("Tools"), &tools_menu);
+    structure_menu.append_section(None, &structure_cell);
+    root_model.append_submenu(Some("Structure"), &structure_menu);
 
-    // --- ANALYSIS MENU ---
+    // --- ANALYSIS MENU (read-only; each entry opens its own tab) ---
     let analysis_menu = gtk4::gio::Menu::new();
-    analysis_menu.append(Some("Analysis Tools..."), Some("app.analysis"));
-    analysis_menu.append(Some("Charge Density..."), Some("app.open_chgcar"));
+    analysis_menu.append(Some("Symmetry..."), Some("app.analysis_symmetry"));
+    analysis_menu.append(Some("Diffraction (XRD)..."), Some("app.analysis_xrd"));
+    analysis_menu.append(Some("Band Path..."), Some("app.analysis_kpath"));
+    analysis_menu.append(Some("Void Analysis..."), Some("app.analysis_voids"));
+    let analysis_chg = gtk4::gio::Menu::new();
+    analysis_chg.append(Some("Charge Density..."), Some("app.open_chgcar"));
+    analysis_menu.append_section(None, &analysis_chg);
     root_model.append_submenu(Some("Analysis"), &analysis_menu);
 
     // --- HELP MENU ---

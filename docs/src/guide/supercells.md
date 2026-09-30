@@ -60,7 +60,7 @@ Phonon calculations (via DFPT or frozen phonons) often require supercells to sam
 
 ## Using the Supercell Tool
 
-**Access**: `Tools → Supercell` (or from the application menu)
+**Access**: `Structure → Supercell...` (`Ctrl + Shift + C`)
 
 ### Interface
 
@@ -73,7 +73,7 @@ The dialog is titled **Matrix Transformation** and presents a 3×3 integer matri
 ### Workflow
 
 1. Load your structure (e.g., a primitive cell)
-2. Open `Tools → Supercell`
+2. Open `Structure → Supercell...`
 3. Enter the desired diagonal values (for example, `2`, `2`, `3`)
 4. Click **Transform**
 5. The new structure replaces the current tab

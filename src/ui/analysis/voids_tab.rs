@@ -1,5 +1,6 @@
 use crate::model::structure::Structure;
 use crate::state::AppState;
+use crate::ui::style::{captioned, card_body, group};
 use gtk4::prelude::*;
 use gtk4::{
     Align, Box, Button, DrawingArea, DropDown, Frame, Grid, Label, Notebook, Orientation,
@@ -55,52 +56,39 @@ pub fn build(state: Rc<RefCell<AppState>>, main_notebook: &Notebook) -> Box {
     // --- RIGHT PANE (Controls) ---
     let right_pane = Box::new(Orientation::Vertical, 10);
 
-    let title = Label::new(Some("Void Analysis"));
-    title.add_css_class("title-2");
-    title.set_halign(Align::Start);
-    right_pane.append(&title);
-
     let ctrl_box = Box::new(Orientation::Vertical, 8);
 
-    // 1. Grid Resolution
-    let row_res = Box::new(Orientation::Horizontal, 10);
-    row_res.append(&Label::new(Some("Grid Res (pts/Å):")));
+    // --- Void fraction card: everything that defines "open space" ---
+    let void_body = card_body(8);
+
+    // Row 1: Grid resolution | Radius scale
     let spin_res = SpinButton::with_range(0.1, 2.0, 0.1);
     spin_res.set_value(0.3);
-    spin_res.set_hexpand(true);
-    row_res.append(&spin_res);
-    ctrl_box.append(&row_res);
+    spin_res.set_width_chars(3);
+    let spin_scale = SpinButton::with_range(0.1, 1.5, 0.05);
+    spin_scale.set_value(1.0);
+    spin_scale.set_width_chars(3);
+    let row_a = Box::new(Orientation::Horizontal, 8);
+    row_a.set_homogeneous(true);
+    row_a.append(&captioned("Grid (pts/Å)", &spin_res));
+    row_a.append(&captioned("Radius scale", &spin_scale));
+    void_body.append(&row_a);
 
-    // 2. Radius Type
-    let row_type = Box::new(Orientation::Horizontal, 10);
-    row_type.append(&Label::new(Some("Radius Type:")));
+    // Row 2: Radius type | Probe radius
     // Added "Ionic" as the first option
     let type_model = StringList::new(&["Ionic", "Van der Waals", "Covalent"]);
     let drop_type = DropDown::new(Some(type_model), None::<&gtk4::Expression>);
     drop_type.set_selected(0); // Default to Ionic
-    drop_type.set_hexpand(true);
-    row_type.append(&drop_type);
-    ctrl_box.append(&row_type);
-
-    // 3. Atom Scale
-    let row_scale = Box::new(Orientation::Horizontal, 10);
-    row_scale.append(&Label::new(Some("Radius Scale:")));
-    let spin_scale = SpinButton::with_range(0.1, 1.5, 0.05);
-    spin_scale.set_value(1.0);
-    spin_scale.set_hexpand(true);
-    row_scale.append(&spin_scale);
-    ctrl_box.append(&row_scale);
-
-    // 4. Probe Radius
-    let row_probe = Box::new(Orientation::Horizontal, 10);
-    row_probe.append(&Label::new(Some("Probe Radius (Å):")));
     let spin_probe = SpinButton::with_range(0.0, 5.0, 0.05);
     spin_probe.set_value(1.20);
-    spin_probe.set_hexpand(true);
-    row_probe.append(&spin_probe);
-    ctrl_box.append(&row_probe);
+    spin_probe.set_width_chars(3);
+    let row_b = Box::new(Orientation::Horizontal, 8);
+    row_b.set_homogeneous(true);
+    row_b.append(&captioned("Radius type", &drop_type));
+    row_b.append(&captioned("Probe radius (Å)", &spin_probe));
+    void_body.append(&row_b);
 
-    // 5. Dynamic Probe Buttons (Source: Physics)
+    // Dynamic Probe Buttons (Source: Physics)
     // Three columns, not four: at four the "Geometric" button lands in a
     // column of its own and drags the whole control panel out to 316 px,
     // wider than the other analysis tabs.
@@ -113,25 +101,24 @@ pub fn build(state: Rc<RefCell<AppState>>, main_notebook: &Notebook) -> Box {
         btn.connect_clicked(move |_| sp.set_value(r_val));
         grid_probes.attach(&btn, (i % PROBE_COLS) as i32, (i / PROBE_COLS) as i32, 1, 1);
     }
-    ctrl_box.append(&grid_probes);
+    void_body.append(&grid_probes);
+    ctrl_box.append(&group("Void fraction", &void_body));
 
-    // 6. Candidate ion for the interstitial site search.
+    // --- Interstitial search card ---
     //
     // Separate from the probe radius above: the probe decides what counts as
     // open space for the void fraction, while this decides which of the sites
     // found are big enough to report. Keeping them apart means changing the
     // ion does not silently redefine the porosity number next to it.
-    let row_ion = Box::new(Orientation::Horizontal, 10);
-    row_ion.append(&Label::new(Some("Insert ion:")));
     let ion_names: Vec<&str> = voids::CANDIDATE_IONS.iter().map(|(n, _)| *n).collect();
     let drop_ion = DropDown::new(
         Some(StringList::new(&ion_names)),
         None::<&gtk4::Expression>,
     );
     drop_ion.set_selected(0); // Li+
-    drop_ion.set_hexpand(true);
-    row_ion.append(&drop_ion);
-    ctrl_box.append(&row_ion);
+    let ion_body = card_body(8);
+    ion_body.append(&captioned("Insert ion", &drop_ion));
+    ctrl_box.append(&group("Interstitial search", &ion_body));
 
     let btn_calc = Button::with_label("Calculate");
     btn_calc.add_css_class("suggested-action");

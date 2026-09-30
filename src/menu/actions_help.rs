@@ -21,13 +21,16 @@ pub fn setup(app: &Application, window: &ApplicationWindow) {
 
 <b>Keyboard Shortcuts:</b>
 • <b>Ctrl + O:</b> Open File
+• <b>Ctrl + W:</b> Close Tab
+• <b>Ctrl + Z:</b> Undo (e.g. atom deletion)
+• <b>Delete:</b> Delete selected atoms
 • <b>Ctrl + Shift + S:</b> Save As
 • <b>Ctrl + E:</b> Export Image
-• <b>Ctrl + P:</b> Preferences
+• <b>Ctrl + ,:</b> Preferences
 • <b>Ctrl + R:</b> Reset View
 • <b>Ctrl + B:</b> Toggle Bonds
 • <b>Ctrl + Shift + B:</b> Toggle Symmetric Basis (full unit cell)
-• <b>Ctrl + T:</b> Toggle Primitive/Conventional Cell
+• <b>T:</b> Toggle Primitive/Conventional Cell (canvas)
 • <b>Ctrl + I:</b> Toggle Interstitial Sites
 • <b>Ctrl + Shift + C:</b> Supercell Tool
 • <b>Ctrl + M:</b> Miller Indices Tool

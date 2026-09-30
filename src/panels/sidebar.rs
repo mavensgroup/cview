@@ -5,14 +5,14 @@ use gtk4::gdk;
 use gtk4::glib::SignalHandlerId;
 use gtk4::prelude::*;
 use gtk4::{
-    Adjustment, Align, Box as GtkBox, Button, CheckButton, ColorButton, CssProvider, DropDown,
-    Expander, Frame, Label, Notebook, Orientation, PolicyType, Scale, ScrolledWindow, Separator,
-    STYLE_PROVIDER_PRIORITY_APPLICATION,
+    Adjustment, Align, Box as GtkBox, Button, CheckButton, ColorButton, DropDown,
+    Expander, Label, Notebook, Orientation, PolicyType, Scale, ScrolledWindow, Separator,
 };
 
 use crate::config::ColorMode;
 use crate::model::elements::get_element_color;
 use crate::state::{AppState, ViewState};
+use crate::ui::style::group;
 use crate::utils::console;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -92,34 +92,6 @@ pub fn build(
     state: Rc<RefCell<AppState>>,
     notebook: &Notebook,
 ) -> (ScrolledWindow, GtkBox, SidebarHandles) {
-    // --- 0. INJECT CUSTOM CSS FOR "BOLD LINE" SLIDERS ---
-    let provider = CssProvider::new();
-    provider.load_from_data(
-        "
-        scale.thin-slider slider {
-            min-width: 6px;
-            min-height: 18px;
-            margin-top: -7px;
-            margin-bottom: -7px;
-            border-radius: 2px;
-            background-color: #555555;
-            box-shadow: none;
-            outline: none;
-        }
-        scale.thin-slider slider:hover {
-            background-color: #3584e4;
-        }
-    ",
-    );
-
-    if let Some(display) = gdk::Display::default() {
-        gtk4::style_context_add_provider_for_display(
-            &display,
-            &provider,
-            STYLE_PROVIDER_PRIORITY_APPLICATION,
-        );
-    }
-
     // 1. Root Container (Scrollable) - FIXED WIDTH
     let scroll = ScrolledWindow::builder()
         .hscrollbar_policy(PolicyType::Never)
@@ -135,6 +107,7 @@ pub fn build(
     root_vbox.set_margin_bottom(10);
     root_vbox.set_width_request(300);
     root_vbox.set_hexpand(false);
+    scroll.add_css_class("cview-sidebar");
     scroll.set_child(Some(&root_vbox));
 
     // --- Helper for Sliders (Fixed Snapping & Styling) ---
@@ -160,9 +133,9 @@ pub fn build(
     controls_expander.set_expanded(false);
 
     let controls_box = GtkBox::new(Orientation::Vertical, 15);
-    controls_box.set_margin_top(10);
-    controls_box.set_margin_bottom(10);
-    controls_box.set_margin_start(5);
+    controls_box.add_css_class("cview-card");
+    controls_box.set_margin_top(8);
+    controls_box.set_margin_bottom(8);
 
     let nb_weak = notebook.downgrade();
 
@@ -282,12 +255,11 @@ pub fn build(
     style_box.set_margin_start(5);
 
     // --- MATERIAL ---
-    let frame_mat = Frame::new(Some("Material"));
     let vbox_mat = GtkBox::new(Orientation::Vertical, 10);
-    vbox_mat.set_margin_top(10);
-    vbox_mat.set_margin_bottom(10);
-    vbox_mat.set_margin_start(10);
-    vbox_mat.set_margin_end(10);
+    vbox_mat.set_margin_top(8);
+    vbox_mat.set_margin_bottom(12);
+    vbox_mat.set_margin_start(12);
+    vbox_mat.set_margin_end(12);
 
     // Metallic
     let s_met = state.clone();
@@ -346,16 +318,14 @@ pub fn build(
         }),
     ));
 
-    frame_mat.set_child(Some(&vbox_mat));
-    style_box.append(&frame_mat);
+    style_box.append(&group("Material", &vbox_mat));
 
     // --- ATOM SIZE ---
-    let frame_atom = Frame::new(Some("Atom Size"));
     let vbox_atom = GtkBox::new(Orientation::Vertical, 10);
-    vbox_atom.set_margin_top(10);
-    vbox_atom.set_margin_bottom(10);
-    vbox_atom.set_margin_start(10);
-    vbox_atom.set_margin_end(10);
+    vbox_atom.set_margin_top(8);
+    vbox_atom.set_margin_bottom(12);
+    vbox_atom.set_margin_start(12);
+    vbox_atom.set_margin_end(12);
 
     let s_as = state.clone();
     let nb_as = nb_weak.clone();
@@ -388,21 +358,17 @@ pub fn build(
         cb_lbl(&nb_lbl);
     });
     vbox_atom.append(&check_labels);
-    frame_atom.set_child(Some(&vbox_atom));
-    style_box.append(&frame_atom);
+    style_box.append(&group("Atom Size", &vbox_atom));
 
     // --- ELEMENT COLORS ---
-    let frame_elem = Frame::new(Some("Element Colors"));
-    frame_elem.set_child(Some(&atoms_list_container));
-    style_box.append(&frame_elem);
+    style_box.append(&group("Element Colors", &atoms_list_container));
 
     // --- BONDS ---
-    let frame_bonds = Frame::new(Some("Bonds"));
     let vbox_bonds = GtkBox::new(Orientation::Vertical, 10);
-    vbox_bonds.set_margin_top(10);
-    vbox_bonds.set_margin_bottom(10);
-    vbox_bonds.set_margin_start(10);
-    vbox_bonds.set_margin_end(10);
+    vbox_bonds.set_margin_top(8);
+    vbox_bonds.set_margin_bottom(12);
+    vbox_bonds.set_margin_start(12);
+    vbox_bonds.set_margin_end(12);
 
     // Bond Radius
     let s_br = state.clone();
@@ -460,8 +426,7 @@ pub fn build(
     box_bcol.append(&btn_bcol);
     vbox_bonds.append(&box_bcol);
 
-    frame_bonds.set_child(Some(&vbox_bonds));
-    style_box.append(&frame_bonds);
+    style_box.append(&group("Bonds", &vbox_bonds));
 
     style_expander.set_child(Some(&style_box));
     root_vbox.append(&style_expander);
@@ -474,10 +439,9 @@ pub fn build(
     bvs_expander.set_expanded(false);
 
     let bvs_box = GtkBox::new(Orientation::Vertical, 10);
-    bvs_box.set_margin_top(10);
-    bvs_box.set_margin_bottom(10);
-    bvs_box.set_margin_start(10);
-    bvs_box.set_margin_end(10);
+    bvs_box.add_css_class("cview-card");
+    bvs_box.set_margin_top(8);
+    bvs_box.set_margin_bottom(8);
 
     // Color Mode Selector
     let mode_row = GtkBox::new(Orientation::Horizontal, 10);

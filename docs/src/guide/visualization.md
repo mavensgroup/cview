@@ -192,10 +192,14 @@ This visualization immediately reveals the corner-sharing connectivity character
 | `Ctrl + O` | Open file |
 | `Shift + Ctrl + S` | Save structure as... |
 | `Ctrl + E` | Export image (PNG/PDF/SVG) |
-| `Ctrl + T` | Toggle Primitive ↔ Conventional cell |
+| `Ctrl + ,` | Preferences |
+| `Ctrl + W` | Close tab |
+| `Ctrl + Z` | Undo (e.g. atom deletion) |
+| `T` | Toggle Primitive ↔ Conventional cell (canvas focused) |
 | `Ctrl + Shift + C` | Matrix transformation tool |
 | `Ctrl + M` | Add Miller plane |
-| `Ctrl + B` | Toggle full-unit-cell/ghost display |
+| `Ctrl + B` | Toggle bonds |
+| `Ctrl + Shift + B` | Toggle full-unit-cell/ghost display |
 | **Mouse scroll** | Zoom in/out |
 | **Left-click drag** | Rotate structure |
 | **Shift + click** | Multi-select atoms |

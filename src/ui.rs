@@ -5,6 +5,7 @@ pub mod dialogs;
 pub mod export_dialog;
 pub mod interactions;
 pub mod preferences;
+pub mod style;
 
 // Re-exports
 pub use interactions::setup_interactions;

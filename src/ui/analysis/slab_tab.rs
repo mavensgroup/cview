@@ -5,7 +5,8 @@ use crate::physics::operations::miller_algo::MillerMath;
 use crate::physics::operations::slab;
 use crate::state::AppState;
 use gtk4::prelude::*;
-use gtk4::{Box, Button, DrawingArea, Frame, Grid, Label, Orientation, SpinButton};
+use crate::ui::style::{captioned, card_body, group, prefixed_field};
+use gtk4::{Box, Button, DrawingArea, Frame, Label, Orientation, SpinButton};
 use nalgebra::{Matrix3, Vector3};
 use std::cell::RefCell;
 use std::f64::consts::PI;
@@ -46,15 +47,6 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     let right_pane = Box::new(Orientation::Vertical, 10);
     right_pane.set_width_request(super::CONTROL_PANE_WIDTH);
 
-    let title = Label::new(Some("Slab Generator"));
-    title.add_css_class("title-2");
-    right_pane.append(&title);
-
-    let grid = Grid::new();
-    grid.set_column_spacing(10);
-    grid.set_row_spacing(10);
-
-    grid.attach(&Label::new(Some("Miller Indices:")), 0, 0, 2, 1);
     let spin_h = SpinButton::with_range(-10.0, 10.0, 1.0);
     spin_h.set_value(1.0);
     let spin_k = SpinButton::with_range(-10.0, 10.0, 1.0);
@@ -62,42 +54,35 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
     let spin_l = SpinButton::with_range(-10.0, 10.0, 1.0);
     spin_l.set_value(0.0);
 
-    // One index per row, matching the Thickness/Vacuum rows below. Side by
-    // side they cannot fit: a GtkSpinButton will not go below ~95 px however
-    // few characters it is asked for, so three of them plus their labels set
-    // a 349 px floor on this column -- far wider than the other tabs'.
-    for (row, (name, spin)) in [("h", &spin_h), ("k", &spin_k), ("l", &spin_l)]
-        .into_iter()
-        .enumerate()
-    {
-        let lbl = Label::new(Some(name));
-        lbl.set_halign(gtk4::Align::Start);
-        grid.attach(&lbl, 0, row as i32 + 1, 1, 1);
-        spin.set_hexpand(true);
-        grid.attach(spin, 1, row as i32 + 1, 1, 1);
+    // h, k, l share one row: the prefix sits inside each field, dimmed, so the
+    // letter stays visible after a value is entered and nothing is typed.
+    let row_hkl = Box::new(Orientation::Horizontal, 8);
+    row_hkl.set_homogeneous(true);
+    for (name, spin) in [("h", &spin_h), ("k", &spin_k), ("l", &spin_l)] {
+        row_hkl.append(&prefixed_field(name, spin));
     }
+    let hkl_body = card_body(8);
+    hkl_body.append(&row_hkl);
+    right_pane.append(&group("Miller indices", &hkl_body));
 
-    let lbl_thick = Label::new(Some("Thickness:"));
-    lbl_thick.set_halign(gtk4::Align::Start);
-    grid.attach(&lbl_thick, 0, 4, 1, 1);
     let spin_thick = SpinButton::with_range(1.0, 50.0, 1.0);
     spin_thick.set_value(1.0);
-    spin_thick.set_hexpand(true);
-    grid.attach(&spin_thick, 1, 4, 1, 1);
-
-    let lbl_vac = Label::new(Some("Vacuum (Å):"));
-    lbl_vac.set_halign(gtk4::Align::Start);
-    grid.attach(&lbl_vac, 0, 5, 1, 1);
     let spin_vac = SpinButton::with_range(0.0, 100.0, 1.0);
     spin_vac.set_value(10.0);
-    spin_vac.set_hexpand(true);
-    grid.attach(&spin_vac, 1, 5, 1, 1);
+    spin_thick.set_width_chars(3);
+    spin_vac.set_width_chars(3);
 
-    right_pane.append(&grid);
+    let row_size = Box::new(Orientation::Horizontal, 8);
+    row_size.set_homogeneous(true);
+    row_size.append(&captioned("Thickness (layers)", &spin_thick));
+    row_size.append(&captioned("Vacuum (Å)", &spin_vac));
+    let size_body = card_body(8);
+    size_body.append(&row_size);
+    right_pane.append(&group("Slab size", &size_body));
 
     // Buttons
     let btn_box = Box::new(Orientation::Vertical, 5);
-    btn_box.set_margin_top(20);
+    btn_box.set_margin_top(8);
     let btn_gen = Button::with_label("Generate Slab");
     btn_gen.add_css_class("suggested-action");
     let btn_undo = Button::with_label("Undo Last Cut");

@@ -172,7 +172,9 @@ pub fn show_export_dialog(window: &ApplicationWindow, state: Rc<RefCell<AppState
     // BUTTONS
     // ========================================================================
     dialog.add_button("Cancel", ResponseType::Cancel);
-    dialog.add_button("Export", ResponseType::Ok);
+    dialog
+        .add_button("Export", ResponseType::Ok)
+        .add_css_class("suggested-action");
 
     let state_dialog = state.clone();
     let window_weak = window.downgrade();

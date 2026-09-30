@@ -120,7 +120,7 @@ pub struct SelectedAtom {
 
 /// Per-atom render override. Purely cosmetic — never written to any IO format.
 /// Keyed by `Atom` index in `Structure.atoms`. Lives only in the session;
-/// reload from file resets it. Use the Tools → Atom Instances dialog to edit.
+/// reload from file resets it. Use the Structure → Atom Instances dialog to edit.
 #[derive(Debug, Clone, Default)]
 pub struct AtomOverride {
     /// Display label shown in tooltips/dialog (e.g. "Fe1", "Fe_oct"). Element

@@ -67,6 +67,18 @@ pub fn setup(
     });
     app.add_action(&inst_action);
 
+    // --- SLAB ---
+    let slab_action = gtk4::gio::SimpleAction::new("slab", None);
+    let win_weak_s = window.downgrade();
+    let state_weak_s = Rc::downgrade(&state);
+
+    slab_action.connect_activate(move |_, _| {
+        if let (Some(win), Some(st)) = (win_weak_s.upgrade(), state_weak_s.upgrade()) {
+            crate::ui::analysis::window::show_slab_window(&win, st);
+        }
+    });
+    app.add_action(&slab_action);
+
     // --- MILLER PLANES ---
     let mil_action = gtk4::gio::SimpleAction::new("miller_planes", None);
     let win_weak_m = window.downgrade();
@@ -84,7 +96,7 @@ pub fn setup(
     });
     app.add_action(&mil_action);
 
-    // --- TOGGLE CELL VIEW (Ctrl+T) ---
+    // --- TOGGLE CELL VIEW (T on canvas) ---
     let toggle_action = gtk4::gio::SimpleAction::new("toggle_cell_view", None);
     let st_weak_t = Rc::downgrade(&state);
     let nb_weak_t = notebook.downgrade();

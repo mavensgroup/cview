@@ -2,9 +2,10 @@
 
 use crate::physics::analysis::kpath;
 use crate::state::AppState;
+use crate::ui::style::{card_body, group, surface};
 use gtk4::prelude::*;
 use gtk4::{
-    Align, Box, DrawingArea, EventControllerScroll, EventControllerScrollFlags, Frame, GestureDrag,
+    Align, Box, DrawingArea, EventControllerScroll, EventControllerScrollFlags, Frame, Grid, GestureDrag,
     Label, Orientation, ScrolledWindow, TextView,
 };
 use std::cell::RefCell;
@@ -179,12 +180,6 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         let right_pane = Box::new(Orientation::Vertical, 10);
         right_pane.set_width_request(super::CONTROL_PANE_WIDTH);
 
-        let lbl_sg = Label::new(Some(&format!("Space Group: {}", res.spacegroup_str)));
-        lbl_sg.set_halign(Align::Start);
-
-        let lbl_bravais = Label::new(Some(&format!("Lattice: {}", res.lattice_type)));
-        lbl_bravais.set_halign(Align::Start);
-
         // Generate Path String manually for display
         let mut path_display = String::new();
         for (i, segment) in res.path_segments.iter().enumerate() {
@@ -194,12 +189,40 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
             let seg_str: Vec<String> = segment.iter().map(|p| p.label.clone()).collect();
             path_display.push_str(&seg_str.join("-"));
         }
-        let lbl_path = Label::new(Some(&format!("Path: {}", path_display)));
-        lbl_path.set_halign(Align::Start);
 
-        right_pane.append(&lbl_sg);
-        right_pane.append(&lbl_bravais);
-        right_pane.append(&lbl_path);
+        // Read-only facts as key/value rows in one card: dim key, plain value.
+        let info = Grid::new();
+        info.set_column_spacing(12);
+        info.set_row_spacing(6);
+        for (row, (key, value)) in [
+            ("Space group", res.spacegroup_str.as_str()),
+            ("Lattice", res.lattice_type.as_str()),
+            ("Path", path_display.as_str()),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let k = Label::builder()
+                .label(key)
+                .halign(Align::Start)
+                .valign(Align::Start)
+                .build();
+            k.add_css_class("cview-caption");
+            // max_width_chars: a long path must wrap, not widen the column.
+            let v = Label::builder()
+                .label(value)
+                .halign(Align::Start)
+                .wrap(true)
+                .max_width_chars(24)
+                .selectable(true)
+                .build();
+            info.attach(&k, 0, row as i32, 1, 1);
+            info.attach(&v, 1, row as i32, 1, 1);
+        }
+        let info_body = card_body(8);
+        info_body.set_margin_top(12);
+        info_body.append(&info);
+        right_pane.append(&surface(&info_body));
 
         let tv = TextView::builder()
             .monospace(true)
@@ -213,7 +236,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         // original input cell gives silently wrong band structures.
         let mut vasp_str = String::new();
         vasp_str.push_str(
-            "k-path (Setyawan-Curtarolo) — valid ONLY for the standardized primitive cell (Tools > Convert to Primitive)\n",
+            "k-path (Setyawan-Curtarolo) — valid ONLY for the standardized primitive cell (Structure > Toggle Primitive/Conventional)\n",
         );
         vasp_str.push_str(&format!("{KPOINTS_INTERSECTIONS} ! intersections\n"));
         vasp_str.push_str("Line_mode\n");
@@ -235,12 +258,15 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         }
         tv.buffer().set_text(&vasp_str);
 
-        let scroll = ScrolledWindow::builder().child(&tv).build();
-        let frame_txt = Frame::new(Some("VASP KPOINTS"));
-        frame_txt.set_child(Some(&scroll));
-        frame_txt.set_vexpand(true);
+        let scroll = ScrolledWindow::builder().child(&tv).vexpand(true).build();
+        scroll.add_css_class("cview-text");
+        let txt_body = card_body(8);
+        txt_body.set_vexpand(true);
+        txt_body.append(&scroll);
+        let card_txt = group("VASP KPOINTS", &txt_body);
+        card_txt.set_vexpand(true);
 
-        right_pane.append(&frame_txt);
+        right_pane.append(&card_txt);
         root.append(&right_pane);
     } else {
         root.append(&Label::new(Some(

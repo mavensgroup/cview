@@ -4,15 +4,16 @@ The Analysis module in CView aggregates tools designed to characterize the geome
 
 ## Accessing Analysis Tools
 
-The analysis suite is accessible via the **Analysis** menu in the main application window. This triggers the centralized Analysis Window (`actions_analysis.rs`), which provides tabbed access to the following modules:
+The analysis suite is accessible via the **Analysis** menu in the main application window. Each menu entry opens the Analysis window (`actions_analysis.rs`) directly on its own tab, and you can switch between tabs from within the window:
 
-1.  **Symmetry**: Space group determination and symmetry operation analysis.
-2.  **XRD**: X-Ray Diffraction pattern simulation.
-3.  **Voids**: Porosity and intercalation site analysis.
-4.  **K-Path**: Reciprocal space path generation for band structures.
-5.  **Slab**: Surface-slab generation from Miller indices, thickness, and vacuum.
+1.  **Symmetry** (`Analysis → Symmetry...`): Space group determination and symmetry operation analysis.
+2.  **XRD** (`Analysis → Diffraction (XRD)...`): X-Ray Diffraction pattern simulation.
+3.  **Band Path** (`Analysis → Band Path...`): Reciprocal space path generation for band structures.
+4.  **Void Analysis** (`Analysis → Void Analysis...`): Porosity and intercalation site analysis.
 
-**Charge Density** is opened separately from **Analysis → Charge Density**; it is not a tab in the Analysis Tools window.
+**Charge Density** is opened separately from **Analysis → Charge Density**; it is not a tab in the Analysis window.
+
+**Slab generation** changes the structure, so it is not part of the read-only Analysis window. It has its own window under **Structure → Slab...**; see [Surface Slabs](slabs.md).
 
 ## Documentation Modules
 

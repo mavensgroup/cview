@@ -1,10 +1,11 @@
 // src/ui/analysis/xrd_tab.rs
 
 use crate::state::AppState;
+use crate::ui::style::{captioned, card_body, group, prefixed_field};
 use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4::{
-    Align, Button, FileChooserAction, FileChooserNative, FileFilter, Frame, Grid, Label,
+    Button, FileChooserAction, FileChooserNative, FileFilter, Frame,
     Orientation, ResponseType, SpinButton,
 };
 use std::cell::RefCell;
@@ -166,20 +167,6 @@ pub fn build(state: Rc<RefCell<AppState>>) -> gtk4::Box {
     let right_pane = gtk4::Box::new(Orientation::Vertical, 10);
     right_pane.set_width_request(super::CONTROL_PANE_WIDTH);
 
-    let title = Label::new(Some("Settings"));
-    title.add_css_class("title-3");
-    title.set_halign(Align::Start);
-    right_pane.append(&title);
-
-    let frame_settings = Frame::new(None);
-    let grid = Grid::new();
-    grid.set_row_spacing(10);
-    grid.set_column_spacing(10);
-    grid.set_margin_top(10);
-    grid.set_margin_bottom(10);
-    grid.set_margin_start(10);
-    grid.set_margin_end(10);
-
     let adj_min = gtk4::Adjustment::new(10.0, 0.0, 180.0, 1.0, 5.0, 0.0);
     let spin_min = SpinButton::new(Some(&adj_min), 1.0, 1);
 
@@ -192,17 +179,23 @@ pub fn build(state: Rc<RefCell<AppState>>) -> gtk4::Box {
     let adj_wave = gtk4::Adjustment::new(1.5406, 0.1, 5.0, 0.0001, 0.01, 0.0);
     let spin_wave = SpinButton::new(Some(&adj_wave), 0.0001, 4);
 
-    grid.attach(&Label::new(Some("Min 2θ:")), 0, 0, 1, 1);
-    grid.attach(&spin_min, 1, 0, 1, 1);
-    grid.attach(&Label::new(Some("Max 2θ:")), 0, 1, 1, 1);
-    grid.attach(&spin_max, 1, 1, 1, 1);
-    grid.attach(&Label::new(Some("FWHM:")), 0, 2, 1, 1);
-    grid.attach(&spin_smooth, 1, 2, 1, 1);
-    grid.attach(&Label::new(Some("λ (Å):")), 0, 3, 1, 1);
-    grid.attach(&spin_wave, 1, 3, 1, 1);
+    // 2θ range as one row (min | max); FWHM and wavelength as a second.
+    let row_range = gtk4::Box::new(Orientation::Horizontal, 8);
+    row_range.set_homogeneous(true);
+    row_range.append(&prefixed_field("min", &spin_min));
+    row_range.append(&prefixed_field("max", &spin_max));
 
-    frame_settings.set_child(Some(&grid));
-    right_pane.append(&frame_settings);
+    spin_smooth.set_width_chars(4);
+    spin_wave.set_width_chars(6);
+    let row_peak = gtk4::Box::new(Orientation::Horizontal, 8);
+    row_peak.set_homogeneous(true);
+    row_peak.append(&captioned("FWHM (°)", &spin_smooth));
+    row_peak.append(&captioned("Wavelength (Å)", &spin_wave));
+
+    let body = card_body(8);
+    body.append(&captioned("2θ range (°)", &row_range));
+    body.append(&row_peak);
+    right_pane.append(&group("Settings", &body));
 
     let btn_calc = Button::with_label("Recalculate");
     btn_calc.add_css_class("suggested-action");

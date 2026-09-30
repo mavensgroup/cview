@@ -47,11 +47,15 @@ pub fn setup_interactions(
             return glib::Propagation::Stop;
         }
 
-        // C. Undo (Ctrl+Z)
-        if state_flags.contains(gdk::ModifierType::CONTROL_MASK) && keyval == gdk::Key::z {
-            let msg = st.undo();
-            console::info(&msg);
-            da.queue_draw();
+        // C. Toggle Primitive/Conventional cell (plain T, no modifiers)
+        let mods = gdk::ModifierType::CONTROL_MASK
+            | gdk::ModifierType::ALT_MASK
+            | gdk::ModifierType::SUPER_MASK
+            | gdk::ModifierType::SHIFT_MASK;
+        if (keyval == gdk::Key::t || keyval == gdk::Key::T) && !state_flags.intersects(mods) {
+            // Release our borrow first: the action borrows state itself.
+            drop(st);
+            let _ = da.activate_action("app.toggle_cell_view", None);
             return glib::Propagation::Stop;
         }
 

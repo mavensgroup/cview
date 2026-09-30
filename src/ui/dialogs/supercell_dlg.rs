@@ -2,6 +2,7 @@
 
 use crate::physics::operations::supercell;
 use crate::state::AppState;
+use crate::ui::style::{card_body, plain_field, surface};
 use gtk4::prelude::*;
 use gtk4::{Align, CheckButton, Dialog, Grid, Notebook, ResponseType, SpinButton, Window};
 use std::cell::RefCell;
@@ -22,21 +23,16 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
     content.set_margin_end(20);
 
     // --- Mode Toggle (Diagonal vs General) ---
-    let box_mode = gtk4::Box::new(gtk4::Orientation::Horizontal, 10);
-    box_mode.set_halign(Align::Center);
-    box_mode.set_margin_bottom(15);
-
-    let check_general = CheckButton::with_label("General Matrix (Shear/Swap)");
+    // Lives inside the matrix card, below the grid: it is a mode of the matrix.
+    let check_general = CheckButton::with_label("General matrix (shear/swap)");
     check_general.set_active(false);
-
-    box_mode.append(&check_general);
-    content.append(&box_mode);
+    check_general.set_halign(Align::Start);
 
     // --- 3x3 Integer Matrix Grid ---
     let grid = Grid::new();
     grid.set_row_spacing(5);
     grid.set_column_spacing(10);
-    grid.set_halign(Align::Center);
+    grid.set_halign(Align::Fill);
 
     let mut spins_vec = Vec::new();
 
@@ -48,7 +44,6 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
             let spin = SpinButton::with_range(-20.0, 20.0, 1.0);
             spin.set_digits(0);
             spin.set_value(default_val);
-            spin.set_width_chars(4);
             spin.set_snap_to_ticks(true);
 
             // Off-diagonals disabled until general mode is enabled
@@ -56,13 +51,18 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
                 spin.set_sensitive(false);
             }
 
-            grid.attach(&spin, c, r, 1, 1);
+            grid.attach(&plain_field(&spin), c, r, 1, 1);
             spins_vec.push(spin);
         }
     }
 
     let spins = Rc::new(spins_vec);
-    content.append(&grid);
+    grid.set_column_homogeneous(true);
+    grid.set_column_spacing(8);
+    let matrix_body = card_body(12);
+    matrix_body.append(&grid);
+    matrix_body.append(&check_general);
+    content.append(&surface(&matrix_body));
 
     // --- Toggle Logic ---
     let spins_clone = spins.clone();
@@ -82,7 +82,9 @@ pub fn show(parent: &impl IsA<Window>, state: Rc<RefCell<AppState>>, notebook: &
 
     // --- Buttons ---
     dialog.add_button("Reset", ResponseType::Reject);
-    dialog.add_button("Transform", ResponseType::Ok);
+    dialog
+        .add_button("Transform", ResponseType::Ok)
+        .add_css_class("suggested-action");
 
     // --- Response ---
     let state_weak = Rc::downgrade(&state);

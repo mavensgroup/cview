@@ -177,6 +177,20 @@ pub fn setup(
     });
     app.add_action(&act_boundary);
 
+    // 6b. Undo (Ctrl+Z) — registered as an action so it shows up in the Edit menu
+    let act_undo = gtk4::gio::SimpleAction::new("undo", None);
+    let s_undo = state.clone();
+    let nb_undo = notebook.downgrade();
+
+    act_undo.connect_activate(move |_, _| {
+        if let Some(da) = get_da(&nb_undo) {
+            let msg = s_undo.borrow_mut().undo();
+            crate::utils::console::info(&msg);
+            da.queue_draw();
+        }
+    });
+    app.add_action(&act_undo);
+
     // 7. Toggle Interstitial Site Overlay
     let act_sites = gtk4::gio::SimpleAction::new("toggle_interstitial_sites", None);
     let s_sites = state.clone();
