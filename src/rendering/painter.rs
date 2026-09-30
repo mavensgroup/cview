@@ -9,6 +9,7 @@ use crate::config::ColorMode;
 use crate::model::elements::{ColorScheme, get_atom_cov, get_covalent_radius, get_element_color};
 use crate::physics::bond_valence::get_ideal_oxidation_state;
 use crate::physics::operations::miller_algo::MillerMath;
+use crate::rendering::occupancy::PartialSites;
 use crate::rendering::polyhedra;
 use crate::rendering::polyhedra_lighting;
 use crate::state::TabState;
@@ -188,6 +189,15 @@ pub fn draw_structure(
     // but we skip rendering them when the user has "Show Full Unit Cell" off.
     let show_ghosts = tab.view.show_full_unit_cell;
 
+    // Species sharing a partially occupied site are drawn once, as a pie on
+    // the majority species' sphere; the other members are skipped for atoms
+    // and bonds alike.
+    let sites = tab
+        .structure
+        .as_ref()
+        .map(PartialSites::build)
+        .unwrap_or_default();
+
     // Separate lists for depth-sorted rendering
     let mut render_atoms: Vec<&RenderAtom> = Vec::with_capacity(atoms.len());
     let mut render_bonds: Vec<RenderBond> = Vec::with_capacity(atoms.len() * 2);
@@ -200,6 +210,9 @@ pub fn draw_structure(
             continue;
         }
         if atom.is_ghost && !show_ghosts {
+            continue;
+        }
+        if sites.is_hidden(atom.original_index) {
             continue;
         }
         render_atoms.push(atom);
@@ -217,12 +230,15 @@ pub fn draw_structure(
         const MAX_BOND_DIST: f64 = 4.0;
 
         let grid = SpatialGrid::build(atoms, MAX_BOND_DIST, |a| {
-            !a.is_coord_only && !(a.is_ghost && !show_ghosts)
+            !a.is_coord_only && !(a.is_ghost && !show_ghosts) && !sites.is_hidden(a.original_index)
         });
         let mut neighbors: Vec<usize> = Vec::with_capacity(64);
 
         for (i, r1) in atoms.iter().enumerate() {
-            if r1.is_coord_only || (r1.is_ghost && !show_ghosts) {
+            if r1.is_coord_only
+                || (r1.is_ghost && !show_ghosts)
+                || sites.is_hidden(r1.original_index)
+            {
                 continue;
             }
             let rad1 = get_atom_cov(&r1.element);
@@ -335,40 +351,53 @@ pub fn draw_structure(
     // ========================================================================
     let mut cache_access = tab.style.atom_cache.borrow_mut();
 
+    // Per-atom override beats every color mode — this is exactly what the
+    // user just set in the Atom Instances dialog, so respect it everywhere
+    // including BVS view.
+    let atom_rgb = |index: usize, element: &str| -> (f64, f64, f64) {
+        if let Some(c) = tab.override_color(index) {
+            return c;
+        }
+        let default_rgb = get_element_color(element, color_scheme);
+        match tab.style.color_mode {
+            ColorMode::Element => tab
+                .style
+                .element_colors
+                .get(element)
+                .copied()
+                .unwrap_or(default_rgb),
+            ColorMode::BondValence => {
+                if let Some(bvs_value) = tab.bvs_cache.get(index) {
+                    let ideal = get_ideal_oxidation_state(element);
+                    get_bvs_color(
+                        *bvs_value,
+                        ideal,
+                        tab.style.bvs_threshold_good,
+                        tab.style.bvs_threshold_warn,
+                    )
+                } else {
+                    (0.7, 0.7, 0.7)
+                }
+            }
+            _ => default_rgb,
+        }
+    };
+
     for atom in render_atoms {
         let raw_r = get_covalent_radius(&atom.element);
-        let default_rgb = get_element_color(&atom.element, color_scheme);
-
-        // Per-atom override beats every color mode — this is exactly what the
-        // user just set in the Atom Instances dialog, so respect it everywhere
-        // including BVS view.
         let override_rgb = tab.override_color(atom.original_index);
+        let rgb = atom_rgb(atom.original_index, &atom.element);
 
-        let rgb = if let Some(c) = override_rgb {
-            c
-        } else {
-            match tab.style.color_mode {
-                ColorMode::Element => tab
-                    .style
-                    .element_colors
-                    .get(&atom.element)
-                    .copied()
-                    .unwrap_or(default_rgb),
-                ColorMode::BondValence => {
-                    if let Some(bvs_value) = tab.bvs_cache.get(atom.original_index) {
-                        let ideal = get_ideal_oxidation_state(&atom.element);
-                        get_bvs_color(
-                            *bvs_value,
-                            ideal,
-                            tab.style.bvs_threshold_good,
-                            tab.style.bvs_threshold_warn,
-                        )
-                    } else {
-                        (0.7, 0.7, 0.7)
-                    }
-                }
-                _ => default_rgb,
-            }
+        // Species sharing this site with their occupancies, when it is
+        // partially occupied. `atom` is the majority species.
+        let site: Option<Vec<(usize, &str, f64)>> = match (&tab.structure, sites.members(atom.original_index)) {
+            (Some(s), Some(members)) => Some(
+                members
+                    .iter()
+                    .map(|&m| (m, s.atoms[m].element.as_str(), s.atoms[m].occupancy))
+                    .collect(),
+            ),
+            _ => None,
         };
 
         let radius_mult = tab.override_radius_scale(atom.original_index);
@@ -397,7 +426,19 @@ pub fn draw_structure(
         // change wouldn't get a fresh sprite without a more invasive cache-key
         // rework. Vector draw is fast enough for the override case (typically
         // a few atoms, not all of them).
-        if is_export
+        if let Some(members) = &site {
+            let slices: Vec<((f64, f64, f64), f64)> = members
+                .iter()
+                .map(|&(m, element, occ)| (atom_rgb(m, element), occ))
+                .collect();
+            draw_atom_pie(
+                cr,
+                atom.screen_pos[0],
+                atom.screen_pos[1],
+                target_atom_cov,
+                &slices,
+            );
+        } else if is_export
             || matches!(tab.style.color_mode, ColorMode::BondValence)
             || override_rgb.is_some()
         {
@@ -464,11 +505,16 @@ pub fn draw_structure(
 
             // 2. Font Settings (Smaller to avoid curvature distortion issues)
             // Reduced from 0.9 to 0.6 to keep text in the "flat" center zone
-            let font_size = target_atom_cov * 0.6;
+            // A shared site names every species on it, majority first.
+            let label = match &site {
+                Some(members) => members.iter().map(|m| m.1).collect::<Vec<_>>().join("/"),
+                None => atom.element.clone(),
+            };
+            let font_size = target_atom_cov * 0.6 / (label.chars().count() as f64 / 2.0).max(1.0);
             cr.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Bold);
             cr.set_font_size(font_size);
 
-            if let Ok(extents) = cr.text_extents(&atom.element) {
+            if let Ok(extents) = cr.text_extents(&label) {
                 let x_off = extents.width() / 2.0 + extents.x_bearing();
                 let y_off = extents.height() / 2.0 + extents.y_bearing();
 
@@ -478,12 +524,12 @@ pub fn draw_structure(
                 // 3. Draw "Engraving" Shadow (Offset slightly down-right)
                 cr.set_source_rgba(shadow_col.0, shadow_col.1, shadow_col.2, shadow_col.3);
                 cr.move_to(base_x + 1.0, base_y + 1.0);
-                cr.show_text(&atom.element).ok();
+                cr.show_text(&label).ok();
 
                 // 4. Draw Main Text
                 cr.set_source_rgba(text_col.0, text_col.1, text_col.2, text_col.3);
                 cr.move_to(base_x, base_y);
-                cr.show_text(&atom.element).ok();
+                cr.show_text(&label).ok();
             }
 
             // 5. Heavy Gloss Overlay (Bakes the text under the shine)
@@ -723,6 +769,196 @@ pub fn draw_selection_box(cr: &cairo::Context, tab: &TabState) {
         // Reset dash
         cr.set_dash(&[], 0.0);
     }
+}
+
+// ============================================================================
+// MEASUREMENT OVERLAY
+// ============================================================================
+
+const MEASURE_RGB: (f64, f64, f64) = (0.95, 0.45, 0.05);
+const MIN_IMAGE_RGB: (f64, f64, f64) = (0.55, 0.30, 0.85);
+
+/// Lines and values for the 2–4 atoms picked for measurement, in pick
+/// order: distances on each segment, the angle at every interior vertex,
+/// and the dihedral beside the central bond. For a pair in a periodic cell
+/// whose nearest periodic separation is to a different image, a dashed line
+/// runs to that image as well.
+///
+/// Drawn over the atoms rather than depth-sorted among them: a measurement
+/// hidden behind the spheres it measures would be useless.
+pub fn draw_measurements(
+    cr: &cairo::Context,
+    tab: &TabState,
+    bounds: &crate::rendering::scene::SceneBounds,
+) {
+    use crate::utils::geometry;
+
+    let picked = tab.interaction.selected_in_order();
+    if !(2..=4).contains(&picked.len()) {
+        return;
+    }
+    let cart: Vec<[f64; 3]> = picked.iter().map(|a| a.cart_pos).collect();
+    let scr: Vec<[f64; 3]> = cart.iter().map(|&p| bounds.project(p)).collect();
+
+    cr.save().ok();
+    cr.set_line_cap(cairo::LineCap::Round);
+    // Tags already placed, so later ones can step clear of them.
+    let mut placed: Vec<[f64; 4]> = Vec::new();
+
+    // Chain A–B(–C(–D)).
+    cr.set_source_rgba(MEASURE_RGB.0, MEASURE_RGB.1, MEASURE_RGB.2, 0.95);
+    cr.set_line_width(2.0);
+    cr.move_to(scr[0][0], scr[0][1]);
+    for p in &scr[1..] {
+        cr.line_to(p[0], p[1]);
+    }
+    cr.stroke().ok();
+
+    // Nearest periodic image of B, when a different one is closer to A.
+    if cart.len() == 2 {
+        let lattice = tab
+            .structure
+            .as_ref()
+            .filter(|s| s.is_periodic)
+            .map(|s| s.lattice);
+        if let Some((image, _)) =
+            lattice.and_then(|lat| geometry::closer_periodic_image(cart[0], cart[1], &lat))
+        {
+            let img = bounds.project(image);
+            cr.set_source_rgba(MIN_IMAGE_RGB.0, MIN_IMAGE_RGB.1, MIN_IMAGE_RGB.2, 0.95);
+            cr.set_line_width(2.0);
+            cr.set_dash(&[6.0, 4.0], 0.0);
+            cr.move_to(scr[0][0], scr[0][1]);
+            cr.line_to(img[0], img[1]);
+            cr.stroke().ok();
+            cr.set_dash(&[], 0.0);
+            // Hollow marker: the image may not be drawn as an atom.
+            cr.arc(img[0], img[1], 6.0, 0.0, 2.0 * PI);
+            cr.stroke().ok();
+
+            let d = geometry::calculate_distance(cart[0], image);
+            draw_measure_tag(
+                cr,
+                (scr[0][0] + img[0]) / 2.0,
+                (scr[0][1] + img[1]) / 2.0,
+                &format!("{d:.3} Å (periodic)"),
+                MIN_IMAGE_RGB,
+                &mut placed,
+            );
+        }
+    }
+
+    // Angle arcs at each interior vertex.
+    for v in 1..scr.len() - 1 {
+        let (a, b, c) = (scr[v - 1], scr[v], scr[v + 1]);
+        let a1 = (a[1] - b[1]).atan2(a[0] - b[0]);
+        let a2 = (c[1] - b[1]).atan2(c[0] - b[0]);
+        // Shorter way round from BA to BC on screen.
+        let mut sweep = a2 - a1;
+        if sweep > PI {
+            sweep -= 2.0 * PI;
+        } else if sweep < -PI {
+            sweep += 2.0 * PI;
+        }
+        let r = 18.0;
+        cr.set_source_rgba(MEASURE_RGB.0, MEASURE_RGB.1, MEASURE_RGB.2, 0.95);
+        cr.set_line_width(1.5);
+        cr.new_sub_path();
+        if sweep >= 0.0 {
+            cr.arc(b[0], b[1], r, a1, a1 + sweep);
+        } else {
+            cr.arc_negative(b[0], b[1], r, a1, a1 + sweep);
+        }
+        cr.stroke().ok();
+
+        let mid = a1 + sweep / 2.0;
+        let angle = geometry::calculate_angle(cart[v - 1], cart[v], cart[v + 1]);
+        draw_measure_tag(
+            cr,
+            b[0] + (r + 16.0) * mid.cos(),
+            b[1] + (r + 16.0) * mid.sin(),
+            &format!("{angle:.1}°"),
+            MEASURE_RGB,
+            &mut placed,
+        );
+    }
+
+    // Segment lengths; the central bond of a dihedral also carries φ.
+    for s in 0..scr.len() - 1 {
+        let d = geometry::calculate_distance(cart[s], cart[s + 1]);
+        let mut text = format!("{d:.3} Å");
+        if scr.len() == 4 && s == 1 {
+            let phi = geometry::calculate_dihedral(cart[0], cart[1], cart[2], cart[3]);
+            text.push_str(&format!("  φ {phi:.1}°"));
+        }
+        draw_measure_tag(
+            cr,
+            (scr[s][0] + scr[s + 1][0]) / 2.0,
+            (scr[s][1] + scr[s + 1][1]) / 2.0,
+            &text,
+            MEASURE_RGB,
+            &mut placed,
+        );
+    }
+
+    cr.restore().ok();
+}
+
+/// A value label centred on (x, y): dark text on a pale rounded box with an
+/// accent border, legible on both light and dark backgrounds.
+///
+/// A segment that is short on screen (seen nearly end-on) puts its length
+/// right on top of the angle beside it, so a tag that would overlap one in
+/// `placed` is stepped down, then up, until it is clear.
+fn draw_measure_tag(
+    cr: &cairo::Context,
+    x: f64,
+    y: f64,
+    text: &str,
+    accent: (f64, f64, f64),
+    placed: &mut Vec<[f64; 4]>,
+) {
+    cr.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Bold);
+    cr.set_font_size(12.0);
+    let Ok(ext) = cr.text_extents(text) else {
+        return;
+    };
+    let (pad_x, pad_y) = (5.0, 3.0);
+    let w = ext.width() + 2.0 * pad_x;
+    let h = ext.height() + 2.0 * pad_y;
+    let left = x - w / 2.0;
+    let overlaps = |top: f64| {
+        placed
+            .iter()
+            .any(|p| left < p[0] + p[2] && p[0] < left + w && top < p[1] + p[3] && p[1] < top + h)
+    };
+    let step = h + 2.0;
+    let top = (0..8)
+        .map(|i| {
+            // 0, +1, -1, +2, -2, ... steps from the requested position.
+            let k = ((i + 1) / 2) as f64 * if i % 2 == 1 { 1.0 } else { -1.0 };
+            y - h / 2.0 + k * step
+        })
+        .find(|&t| !overlaps(t))
+        .unwrap_or(y - h / 2.0);
+    placed.push([left, top, w, h]);
+    let r = 4.0;
+
+    cr.new_sub_path();
+    cr.arc(left + w - r, top + r, r, -PI / 2.0, 0.0);
+    cr.arc(left + w - r, top + h - r, r, 0.0, PI / 2.0);
+    cr.arc(left + r, top + h - r, r, PI / 2.0, PI);
+    cr.arc(left + r, top + r, r, PI, 1.5 * PI);
+    cr.close_path();
+    cr.set_source_rgba(1.0, 1.0, 1.0, 0.88);
+    cr.fill_preserve().ok();
+    cr.set_source_rgba(accent.0, accent.1, accent.2, 0.95);
+    cr.set_line_width(1.0);
+    cr.stroke().ok();
+
+    cr.set_source_rgb(0.1, 0.1, 0.1);
+    cr.move_to(left + pad_x - ext.x_bearing(), top + pad_y - ext.y_bearing());
+    cr.show_text(text).ok();
 }
 
 // ============================================================================

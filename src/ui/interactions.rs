@@ -1,6 +1,7 @@
 // src/ui/interactions.rs
 
 use crate::panels::sidebar::SidebarHandles;
+use crate::rendering::occupancy::PartialSites;
 use crate::rendering::scene;
 use crate::state::{AppState, SelectedAtom};
 use crate::utils::{console, report};
@@ -132,6 +133,7 @@ pub fn setup_interactions(
                 let show_ghosts = st.active_tab().view.show_full_unit_cell;
                 let (atoms, _, _) =
                     scene::calculate_scene(st.active_tab(), &st.config, w, h, false, None, None);
+                let sites = partial_sites(&st);
 
                 let tab_mut = st.active_tab_mut();
                 let mut count = 0;
@@ -144,20 +146,21 @@ pub fn setup_interactions(
                     if atom.is_ghost && !show_ghosts {
                         continue;
                     }
+                    // Drawn as part of another atom's partial-occupancy pie.
+                    if sites.is_hidden(atom.original_index) {
+                        continue;
+                    }
                     let ax = atom.screen_pos[0];
                     let ay = atom.screen_pos[1];
 
                     if ax >= min_x && ax <= max_x && ay >= min_y && ay <= max_y {
-                        use std::collections::hash_map::Entry;
-                        if let Entry::Vacant(v) =
-                            tab_mut.interaction.selected.entry(atom.unique_id)
-                        {
-                            v.insert(SelectedAtom {
-                                unique_id: atom.unique_id,
-                                original_index: atom.original_index,
-                                cart_pos: atom.cart_pos,
-                                element: atom.element.clone(),
-                            });
+                        if tab_mut.interaction.select(SelectedAtom {
+                            unique_id: atom.unique_id,
+                            original_index: atom.original_index,
+                            cart_pos: atom.cart_pos,
+                            element: atom.element.clone(),
+                            seq: 0,
+                        }) {
                             count += 1;
                         }
                     }
@@ -216,6 +219,7 @@ pub fn setup_interactions(
 
         let (atoms, _, _) =
             scene::calculate_scene(st.active_tab(), &st.config, w, h, false, None, None);
+        let sites = partial_sites(&st);
 
         let mut sorted_atoms: Vec<_> = atoms.iter().collect();
         sorted_atoms.sort_by(|a, b| {
@@ -235,6 +239,9 @@ pub fn setup_interactions(
             if atom.is_ghost && !show_ghosts {
                 continue;
             }
+            if sites.is_hidden(atom.original_index) {
+                continue;
+            }
             let dx = atom.screen_pos[0] - x;
             let dy = atom.screen_pos[1] - y;
             let dist = (dx * dx + dy * dy).sqrt();
@@ -244,6 +251,7 @@ pub fn setup_interactions(
                     original_index: atom.original_index,
                     cart_pos: atom.cart_pos,
                     element: atom.element.clone(),
+                    seq: 0,
                 });
                 break;
             }
@@ -253,16 +261,10 @@ pub fn setup_interactions(
             st.toggle_selection(sel);
 
             let tab = st.active_tab();
-            // Use the cart_pos captured at selection time — ghost copies have
-            // positions distinct from structure.atoms[original_index].
-            let mut selected_atoms: Vec<(usize, String, [f64; 3])> = tab
-                .interaction
-                .selected
-                .values()
-                .map(|s| (s.unique_id, s.element.clone(), s.cart_pos))
-                .collect();
-            selected_atoms.sort_by_key(|a| a.0);
-            let text = report::geometry_analysis_from_positions(&selected_atoms);
+            // Measured in pick order, from the cart_pos captured at selection
+            // time — ghost copies sit away from structure.atoms[original_index].
+            let picked = tab.interaction.selected_in_order();
+            let text = report::measurement_report(&picked, tab.structure.as_ref());
             console::info(&text);
 
             da.queue_draw();
@@ -270,4 +272,14 @@ pub fn setup_interactions(
     });
 
     drawing_area.add_controller(click);
+}
+
+/// Partial-occupancy grouping for the active tab, so picking skips the
+/// atoms the painter folds into another atom's pie.
+fn partial_sites(st: &AppState) -> PartialSites {
+    st.active_tab()
+        .structure
+        .as_ref()
+        .map(PartialSites::build)
+        .unwrap_or_default()
 }

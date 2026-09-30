@@ -58,6 +58,75 @@ pub fn draw_atom_vector(cr: &cairo::Context, x: f64, y: f64, radius: f64, color:
   cr.stroke().unwrap();
 }
 
+/// Colour of the unoccupied share of a partially occupied site.
+const VACANCY_RGB: (f64, f64, f64) = (0.93, 0.93, 0.93);
+
+/// A partially occupied site: one sphere split into pie sectors, each sized
+/// by a species' occupancy, with any unoccupied remainder drawn as a pale
+/// vacancy sector (the VESTA convention). Sectors start at 12 o'clock and
+/// run clockwise in the order given. Each sector carries the same lighting
+/// gradient as `draw_atom_vector`, so the pie still reads as a sphere.
+pub fn draw_atom_pie(
+  cr: &cairo::Context,
+  x: f64,
+  y: f64,
+  radius: f64,
+  slices: &[((f64, f64, f64), f64)],
+) {
+  use std::f64::consts::FRAC_PI_2;
+
+  let occupied: f64 = slices.iter().map(|(_, occ)| occ.max(0.0)).sum();
+  // Over-full sites (bad input) are scaled down to a whole sphere.
+  let total = occupied.max(1.0);
+  let mut sectors: Vec<((f64, f64, f64), f64)> = slices
+    .iter()
+    .map(|&(rgb, occ)| (rgb, occ.max(0.0) / total))
+    .collect();
+  if occupied < 0.999 {
+    sectors.push((VACANCY_RGB, 1.0 - occupied));
+  }
+
+  let mut start = -FRAC_PI_2;
+  for &((r, g, b), share) in &sectors {
+    if share <= 0.0 {
+      continue;
+    }
+    let end = start + share * 2.0 * PI;
+    let gradient = RadialGradient::new(x - radius * 0.3, y - radius * 0.3, radius * 0.1, x, y, radius);
+    gradient.add_color_stop_rgb(0.0, 1.0, 1.0, 1.0);
+    gradient.add_color_stop_rgb(0.2, r + 0.2, g + 0.2, b + 0.2);
+    gradient.add_color_stop_rgb(1.0, r * 0.6, g * 0.6, b * 0.6);
+
+    cr.move_to(x, y);
+    cr.arc(x, y, radius, start, end);
+    cr.close_path();
+    cr.set_source(&gradient).ok();
+    cr.fill().ok();
+    start = end;
+  }
+
+  // Sector boundaries, so two similar colours still read as separate species.
+  if sectors.iter().filter(|(_, s)| *s > 0.0).count() > 1 {
+    cr.set_source_rgba(0.0, 0.0, 0.0, 0.45);
+    cr.set_line_width((radius * 0.04).max(0.5));
+    let mut angle = -FRAC_PI_2;
+    for &(_, share) in &sectors {
+      if share <= 0.0 {
+        continue;
+      }
+      cr.move_to(x, y);
+      cr.line_to(x + radius * angle.cos(), y + radius * angle.sin());
+      angle += share * 2.0 * PI;
+    }
+    cr.stroke().ok();
+  }
+
+  cr.set_source_rgba(0.0, 0.0, 0.0, 0.3);
+  cr.set_line_width(radius * 0.05);
+  cr.arc(x, y, radius, 0.0, 2.0 * PI);
+  cr.stroke().ok();
+}
+
 /// Render a shaded sphere impostor into a square ARGB sprite of `size` pixels.
 ///
 /// `size` is chosen by the caller to match the atom's on-screen diameter (see

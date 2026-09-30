@@ -17,3 +17,5 @@ docs/book
 /linalg.md
 /color_scheme_tables.rs
 /plot_chgcar_npy.py
+.claude/
+

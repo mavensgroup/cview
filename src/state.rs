@@ -112,6 +112,10 @@ pub struct SelectedAtom {
     pub original_index: usize,
     pub cart_pos: [f64; 3],
     pub element: String,
+    /// Pick order, stamped by `InteractionState::select`. Measurements read
+    /// atoms in this order, so the second atom clicked is the angle vertex
+    /// whatever its index happens to be.
+    pub seq: u64,
 }
 
 /// Per-atom render override. Purely cosmetic — never written to any IO format.
@@ -144,6 +148,31 @@ pub struct InteractionState {
     /// Reset to (0, 0) on drag-begin. Used to derive per-frame deltas for
     /// trackball rotation, since GTK's GestureDrag reports cumulative offset.
     pub drag_prev_offset: (f64, f64),
+    /// Counter behind `SelectedAtom::seq`. Only ever increases, so the order
+    /// survives deselecting an atom in the middle of a pick sequence.
+    pub selection_seq: u64,
+}
+
+impl InteractionState {
+    /// Add `atom` to the selection, stamped with the next pick number.
+    /// Returns false (and leaves the existing entry alone) if that instance
+    /// is already selected.
+    pub fn select(&mut self, mut atom: SelectedAtom) -> bool {
+        if self.selected.contains_key(&atom.unique_id) {
+            return false;
+        }
+        self.selection_seq += 1;
+        atom.seq = self.selection_seq;
+        self.selected.insert(atom.unique_id, atom);
+        true
+    }
+
+    /// Selected atoms in the order they were picked.
+    pub fn selected_in_order(&self) -> Vec<&SelectedAtom> {
+        let mut v: Vec<&SelectedAtom> = self.selected.values().collect();
+        v.sort_by_key(|a| a.seq);
+        v
+    }
 }
 
 /// Interstitial sites found for one candidate ion, ready to draw.
@@ -317,7 +346,7 @@ impl AppState {
     pub fn toggle_selection(&mut self, atom: SelectedAtom) {
         let tab = self.active_tab_mut();
         if tab.interaction.selected.remove(&atom.unique_id).is_none() {
-            tab.interaction.selected.insert(atom.unique_id, atom);
+            tab.interaction.select(atom);
         }
     }
 

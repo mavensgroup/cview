@@ -165,6 +165,7 @@ pub fn setup_drawing(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) {
                     original_index: atom.original_index,
                     cart_pos: atom.cart_pos,
                     element: atom.element.clone(),
+                    seq: 0,
                 });
             }
         }

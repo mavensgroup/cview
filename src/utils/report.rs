@@ -2,8 +2,9 @@
 
 use crate::model::structure::Structure;
 use crate::physics::bond_valence::{analyze_structure, BVSQuality};
+use crate::state::SelectedAtom;
 use crate::utils::geometry;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 // ─── Structure summary ───────────────────────────────────────────────────────
 
@@ -207,133 +208,82 @@ pub fn bvs_analysis(structure: &Structure) -> String {
   out
 }
 
-// ─── Geometry analysis ───────────────────────────────────────────────────────
 
-pub fn geometry_analysis(structure: &Structure, selected_indices: &HashSet<usize>) -> String {
-  let mut sel: Vec<usize> = selected_indices.iter().cloned().collect();
-  sel.sort();
+// ─── Measurements ────────────────────────────────────────────────────────────
 
-  if sel.is_empty() {
-    return "Select atoms to measure.".to_string();
+const PICK_LABELS: [&str; 4] = ["A", "B", "C", "D"];
+
+/// Report for atoms picked on the canvas, read in pick order.
+///
+/// - 2 atoms: the distance, plus the shortest periodic distance when another
+///   image of B is closer to A than the copy that was clicked.
+/// - 3 atoms: the angle at B and all three distances.
+/// - 4 atoms: the dihedral A-B-C-D, the angles at B and C, and the three
+///   distances along the chain.
+pub fn measurement_report(picked: &[&SelectedAtom], structure: Option<&Structure>) -> String {
+  if picked.is_empty() {
+    return "Selection cleared.".to_string();
   }
 
   let mut out = String::new();
-  out.push_str("Selection:\n");
-  for (i, &idx) in sel.iter().enumerate() {
-    if let Some(atom) = structure.atoms.get(idx) {
-      if i > 0 {
-        out.push_str(" - ");
+  out.push_str("Selection (in pick order):\n");
+  for (i, atom) in picked.iter().enumerate() {
+    let label = PICK_LABELS.get(i).copied().unwrap_or("·");
+    // A ghost copy sits one lattice vector away from the stored atom.
+    let is_image = structure
+      .and_then(|s| s.atoms.get(atom.original_index))
+      .map(|a| geometry::calculate_distance(a.position, atom.cart_pos) > 1e-6)
+      .unwrap_or(false);
+    out.push_str(&format!(
+      "  {label}  {:<3} #{}{}\n",
+      atom.element,
+      atom.original_index,
+      if is_image { "  (periodic image)" } else { "" }
+    ));
+  }
+  out.push('\n');
+
+  let p: Vec<[f64; 3]> = picked.iter().map(|a| a.cart_pos).collect();
+  let dist = |i: usize, j: usize| geometry::calculate_distance(p[i], p[j]);
+  let angle = |i: usize, j: usize, k: usize| geometry::calculate_angle(p[i], p[j], p[k]);
+
+  match p.len() {
+    1 => out.push_str("Pick more atoms: 2 for a distance, 3 for an angle, 4 for a dihedral."),
+    2 => {
+      out.push_str(&format!("Distance A–B:     {:.4} Å", dist(0, 1)));
+      let lattice = structure.filter(|s| s.is_periodic).map(|s| &s.lattice);
+      if let Some((image, shift)) =
+        lattice.and_then(|lat| geometry::closer_periodic_image(p[0], p[1], lat))
+      {
+        out.push_str(&format!(
+          "\nShortest periodic: {:.4} Å  (B translated by [{} {} {}] cells)",
+          geometry::calculate_distance(p[0], image),
+          shift[0],
+          shift[1],
+          shift[2]
+        ));
       }
-      out.push_str(&format!("Atom (#{}, {})", idx, atom.element));
-    }
-  }
-  out.push_str("\n\n");
-
-  match sel.len() {
-    2 => {
-      let p1 = structure.atoms[sel[0]].position;
-      let p2 = structure.atoms[sel[1]].position;
-      out.push_str(&format!(
-        "Distance: {:.5} Å",
-        geometry::calculate_distance(p1, p2)
-      ));
     }
     3 => {
-      let p1 = structure.atoms[sel[0]].position;
-      let p2 = structure.atoms[sel[1]].position;
-      let p3 = structure.atoms[sel[2]].position;
-      out.push_str(&format!(
-        "Angle (A-B-C): {:.2}°\n",
-        geometry::calculate_angle(p1, p2, p3)
-      ));
-      out.push_str(&format!(
-        "Dist (A-B):    {:.4} Å\n",
-        geometry::calculate_distance(p1, p2)
-      ));
-      out.push_str(&format!(
-        "Dist (B-C):    {:.4} Å",
-        geometry::calculate_distance(p2, p3)
-      ));
+      out.push_str(&format!("Angle A-B-C:  {:.2}°\n", angle(0, 1, 2)));
+      out.push_str(&format!("Dist  A–B:    {:.4} Å\n", dist(0, 1)));
+      out.push_str(&format!("Dist  B–C:    {:.4} Å\n", dist(1, 2)));
+      out.push_str(&format!("Dist  A–C:    {:.4} Å", dist(0, 2)));
     }
     4 => {
-      let p1 = structure.atoms[sel[0]].position;
-      let p2 = structure.atoms[sel[1]].position;
-      let p3 = structure.atoms[sel[2]].position;
-      let p4 = structure.atoms[sel[3]].position;
       out.push_str(&format!(
-        "Dihedral:      {:.2}°\n",
-        geometry::calculate_dihedral(p1, p2, p3, p4)
+        "Dihedral A-B-C-D: {:.2}°\n",
+        geometry::calculate_dihedral(p[0], p[1], p[2], p[3])
       ));
-      out.push_str(&format!(
-        "Angle (A-B-C): {:.2}°",
-        geometry::calculate_angle(p1, p2, p3)
-      ));
+      out.push_str(&format!("Angle A-B-C:      {:.2}°\n", angle(0, 1, 2)));
+      out.push_str(&format!("Angle B-C-D:      {:.2}°\n", angle(1, 2, 3)));
+      out.push_str(&format!("Dist  A–B:        {:.4} Å\n", dist(0, 1)));
+      out.push_str(&format!("Dist  B–C:        {:.4} Å\n", dist(1, 2)));
+      out.push_str(&format!("Dist  C–D:        {:.4} Å", dist(2, 3)));
     }
-    _ => {
-      out.push_str("Select 2-4 atoms for geometric calculations.");
-    }
-  }
-  out
-}
-
-pub fn geometry_analysis_from_positions(selected_atoms: &[(usize, String, [f64; 3])]) -> String {
-  if selected_atoms.is_empty() {
-    return "Select atoms to measure.".to_string();
-  }
-
-  let mut out = String::new();
-  out.push_str("Selection:\n");
-  for (i, (uid, element, _)) in selected_atoms.iter().enumerate() {
-    if i > 0 {
-      out.push_str(" - ");
-    }
-    out.push_str(&format!("Atom (UID#{}, {})", uid, element));
-  }
-  out.push_str("\n\n");
-
-  match selected_atoms.len() {
-    2 => {
-      let p1 = selected_atoms[0].2;
-      let p2 = selected_atoms[1].2;
-      out.push_str(&format!(
-        "Distance: {:.5} Å",
-        geometry::calculate_distance(p1, p2)
-      ));
-    }
-    3 => {
-      let p1 = selected_atoms[0].2;
-      let p2 = selected_atoms[1].2;
-      let p3 = selected_atoms[2].2;
-      out.push_str(&format!(
-        "Angle (A-B-C): {:.2}°\n",
-        geometry::calculate_angle(p1, p2, p3)
-      ));
-      out.push_str(&format!(
-        "Dist (A-B):    {:.4} Å\n",
-        geometry::calculate_distance(p1, p2)
-      ));
-      out.push_str(&format!(
-        "Dist (B-C):    {:.4} Å",
-        geometry::calculate_distance(p2, p3)
-      ));
-    }
-    4 => {
-      let p1 = selected_atoms[0].2;
-      let p2 = selected_atoms[1].2;
-      let p3 = selected_atoms[2].2;
-      let p4 = selected_atoms[3].2;
-      out.push_str(&format!(
-        "Dihedral:      {:.2}°\n",
-        geometry::calculate_dihedral(p1, p2, p3, p4)
-      ));
-      out.push_str(&format!(
-        "Angle (A-B-C): {:.2}°",
-        geometry::calculate_angle(p1, p2, p3)
-      ));
-    }
-    _ => {
-      out.push_str("Select 2-4 atoms for geometric calculations.");
-    }
+    n => out.push_str(&format!(
+      "{n} atoms selected — measurements use 2 to 4 atoms."
+    )),
   }
   out
 }

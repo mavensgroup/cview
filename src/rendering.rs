@@ -1,4 +1,5 @@
 pub mod export;
+pub mod occupancy;
 pub mod painter;
 pub mod polyhedra;
 pub mod polyhedra_lighting;
