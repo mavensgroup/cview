@@ -126,8 +126,8 @@ pub fn build(state: Rc<RefCell<AppState>>) -> (Box, std::boxed::Box<dyn Fn()>) {
         let (nh, nk, nl) = (st.h, st.k, st.l);
 
         // Standard Isometric Projection
-        let yaw = PI / 4.0 + 0.5;
-        let pitch = PI / 6.0;
+        let yaw = super::preview::ISO_YAW;
+        let pitch = super::preview::ISO_PITCH;
         let project = |x: f64, y: f64, z: f64| -> (f64, f64) {
             let x1 = x * yaw.cos() - z * yaw.sin();
             let z1 = x * yaw.sin() + z * yaw.cos();

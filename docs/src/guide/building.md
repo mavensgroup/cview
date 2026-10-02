@@ -2,7 +2,7 @@
 
 CView provides several tools to manipulate and construct crystal structures. These operations are accessible via the **Structure** menu and enable you to prepare input geometries for *ab-initio* calculations.
 
-Supercell, Basis, Atom Instances and Slab are the four tabs of one **Structure** window. Each menu entry opens the window on its own tab. The first three share a **Preview** pane that shows the structure as a ball-and-stick view, using the same orientation and colours as the main viewport (rotate in the main view and the preview follows):
+Supercell, Basis, Atom Instances and Slab are the four tabs of one **Structure** window. Each menu entry opens the window on its own tab. The first three share a **Preview** pane: a flat schematic of the cell in the same style as the Slab cutting-plane view (white canvas, element-coloured dots, wireframe cell, the same fixed isometric orientation). It is a preview, not the 3D viewport, so it has no shading or bonds. Highlighted atoms get a dark ring:
 
 - **Supercell** previews the structure the current matrix would produce, before you press Transform.
 - **Basis** highlights the atoms an action would touch: the atoms selected in the main view, and every atom of the element typed into *Find*.

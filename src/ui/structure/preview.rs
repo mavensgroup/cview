@@ -1,24 +1,30 @@
 // src/ui/structure/preview.rs
 //
-// The shared preview pane of the Structure window: a ball-and-stick view of
-// the active tab's structure, drawn with the same scene/painter code as the
-// main view. It can show a *candidate* structure (what a supercell would
-// produce) and highlight atoms (the selection, a find-element, list rows).
+// The shared preview pane of the Structure window: a flat, schematic view of
+// the active tab's structure in the same style as the Slab cutting-plane
+// canvas (white background, flat dots, wireframe cell, the same isometric
+// projection), so the two look alike when you switch tabs. It is a preview,
+// not the 3D viewport: no shading, no bonds.
 //
-// It reads the live state at draw time and polls a cheap fingerprint, so it
-// follows edits made elsewhere (main view, other tabs) instead of showing the
-// structure it was opened with. Orientation and zoom mirror the main view:
-// rotate there and the preview follows.
+// It can show a *candidate* structure (what a supercell would produce) and
+// highlight atoms (the selection, a find-element, list rows). It reads the
+// live state at draw time and polls a cheap fingerprint, so it follows edits
+// made elsewhere instead of showing the structure it was opened with.
 
-use crate::config::ColorMode;
-use crate::rendering;
-use crate::state::{AppState, SelectedAtom, TabState};
+use crate::model::elements::get_element_color;
 use crate::model::structure::Structure;
+use crate::state::AppState;
 use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4::{DrawingArea, Frame};
+
+/// Isometric view shared with the Slab canvas, so both previews orient the
+/// cell the same way.
+pub const ISO_YAW: f64 = PI / 4.0 + 0.5;
+pub const ISO_PITCH: f64 = PI / 6.0;
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
+use std::f64::consts::PI;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::time::Duration;
@@ -141,90 +147,186 @@ fn fingerprint(st: &AppState) -> u64 {
             .fold(0usize, |acc, k| acc ^ k.wrapping_mul(0x9E37_79B9))
             .hash(&mut h);
         tab.overrides.len().hash(&mut h);
-        format!("{:?}", tab.view).hash(&mut h);
+        tab.style.element_colors.len().hash(&mut h);
     }
     h.finish()
 }
 
+/// Rotate a Cartesian point into the shared isometric view: (screen x, screen
+/// y, depth).
+fn iso(p: [f64; 3]) -> (f64, f64, f64) {
+    let (x, y, z) = (p[0], p[1], p[2]);
+    let x1 = x * ISO_YAW.cos() - z * ISO_YAW.sin();
+    let z1 = x * ISO_YAW.sin() + z * ISO_YAW.cos();
+    let y2 = y * ISO_PITCH.cos() - z1 * ISO_PITCH.sin();
+    let depth = y * ISO_PITCH.sin() + z1 * ISO_PITCH.cos();
+    (x1, y2, depth)
+}
+
 fn draw(st: &AppState, d: &PreviewData, cr: &gtk4::cairo::Context, w: i32, h: i32) {
+    // Same white canvas as the Slab tab.
+    cr.set_source_rgb(1.0, 1.0, 1.0);
+    let _ = cr.paint();
+
     let Some(active) = st.tabs.get(st.active_tab_index) else {
         return;
     };
-
-    let (bg_r, bg_g, bg_b) = active.style.background_color;
-    cr.set_source_rgb(bg_r, bg_g, bg_b);
-    let _ = cr.paint();
-
-    let Some(structure) = d.candidate.clone().or_else(|| active.structure.clone()) else {
+    let Some(structure) = d.candidate.as_ref().or(active.structure.as_ref()) else {
         return;
     };
-
-    // A scratch tab: same painter, own copy of the data. Orientation, zoom and
-    // style come from the main view; the candidate has no per-atom overrides
-    // (its indices no longer match).
-    let mut scratch = TabState::new(&st.config);
-    scratch.structure = Some(structure);
-    scratch.view = active.view.clone();
-    // A little smaller than the main view so atoms at the cell edge are not
-    // clipped in this smaller pane.
-    scratch.view.zoom *= 0.88;
-    scratch.style = active.style.clone();
-    if d.candidate.is_none() {
-        scratch.overrides = active.overrides.clone();
-    }
-    if matches!(scratch.style.color_mode, ColorMode::BondValence) {
-        let _ = scratch.get_bvs_values();
-    }
-
-    let (atoms, corners, bounds) = rendering::scene::calculate_scene(
-        &scratch,
-        &st.config,
-        w as f64,
-        h as f64,
-        false,
-        None,
-        None,
-    );
+    let lat = structure.lattice;
+    let cart = |f: [f64; 3]| -> [f64; 3] {
+        [
+            f[0] * lat[0][0] + f[1] * lat[1][0] + f[2] * lat[2][0],
+            f[0] * lat[0][1] + f[1] * lat[1][1] + f[2] * lat[2][1],
+            f[0] * lat[0][2] + f[1] * lat[1][2] + f[2] * lat[2][2],
+        ]
+    };
+    let to_frac = |p: [f64; 3]| -> Option<[f64; 3]> {
+        crate::utils::linalg::cart_to_frac(p, lat)
+    };
+    let periodic = structure.is_periodic;
 
     // Highlight set, as indices into the structure being drawn.
     let mut hl: HashSet<usize> = d.indices.clone();
     if d.main_selection && d.candidate.is_none() {
         hl.extend(active.interaction.selected.values().map(|s| s.original_index));
     }
-    if let (Some(el), Some(s)) = (&d.element, &scratch.structure) {
+    if let Some(el) = &d.element {
         hl.extend(
-            s.atoms
+            structure
+                .atoms
                 .iter()
                 .enumerate()
                 .filter(|(_, a)| &a.element == el)
                 .map(|(i, _)| i),
         );
     }
-    let mut selected = HashMap::new();
-    for a in atoms.iter().filter(|a| !a.is_coord_only) {
-        if hl.contains(&a.original_index) {
-            selected.insert(
-                a.unique_id,
-                SelectedAtom {
-                    unique_id: a.unique_id,
-                    original_index: a.original_index,
-                    cart_pos: a.cart_pos,
-                    element: a.element.clone(),
-                    seq: 0,
-                },
-            );
+
+    // Points to draw: (cartesian, atom index). A periodic cell also draws the
+    // images that sit on its faces and edges, as the Slab canvas does.
+    let mut pts: Vec<([f64; 3], usize)> = Vec::new();
+    for (i, a) in structure.atoms.iter().enumerate() {
+        if periodic {
+            if let Some(f) = to_frac(a.position) {
+                for dx in -1..=1 {
+                    for dy in -1..=1 {
+                        for dz in -1..=1 {
+                            let g = [f[0] + dx as f64, f[1] + dy as f64, f[2] + dz as f64];
+                            if g.iter().all(|v| (-0.05..=1.05).contains(v)) {
+                                pts.push((cart(g), i));
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            pts.push((a.position, i));
         }
     }
-    scratch.interaction.selected = selected;
 
-    rendering::painter::draw_unit_cell(cr, &corners, false);
-    rendering::painter::draw_structure(
-        cr,
-        &atoms,
-        &scratch,
-        bounds.scale,
-        false,
-        st.config.color_scheme,
+    // Cell corners (periodic only) and the centre everything is drawn around.
+    let corners: Vec<[f64; 3]> = if periodic {
+        (0..8)
+            .map(|k| {
+                cart([
+                    (k & 1) as f64,
+                    ((k >> 1) & 1) as f64,
+                    ((k >> 2) & 1) as f64,
+                ])
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let basis: Vec<[f64; 3]> = if periodic {
+        corners.clone()
+    } else {
+        pts.iter().map(|(p, _)| *p).collect()
+    };
+    if basis.is_empty() {
+        return;
+    }
+    let n = basis.len() as f64;
+    let centre = [
+        basis.iter().map(|p| p[0]).sum::<f64>() / n,
+        basis.iter().map(|p| p[1]).sum::<f64>() / n,
+        basis.iter().map(|p| p[2]).sum::<f64>() / n,
+    ];
+    let rel = |p: [f64; 3]| [p[0] - centre[0], p[1] - centre[1], p[2] - centre[2]];
+
+    // Fit the whole cell (or molecule) into the canvas.
+    let (mut min_x, mut max_x, mut min_y, mut max_y) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
+    for p in &basis {
+        let (x, y, _) = iso(rel(*p));
+        min_x = min_x.min(x);
+        max_x = max_x.max(x);
+        min_y = min_y.min(y);
+        max_y = max_y.max(y);
+    }
+    let margin = 28.0;
+    let span_x = (max_x - min_x).max(1e-6);
+    let span_y = (max_y - min_y).max(1e-6);
+    let scale = ((w as f64 - 2.0 * margin) / span_x).min((h as f64 - 2.0 * margin) / span_y);
+    let (cx, cy) = (
+        w as f64 / 2.0 - (min_x + max_x) / 2.0 * scale,
+        h as f64 / 2.0 - (min_y + max_y) / 2.0 * scale,
     );
-    rendering::painter::draw_axes(cr, &scratch, w as f64, h as f64);
+    let screen = |p: [f64; 3]| -> (f64, f64, f64) {
+        let (x, y, z) = iso(rel(p));
+        (cx + x * scale, cy + y * scale, z)
+    };
+
+    // Atoms first, far to near, so nearer ones overlap farther ones.
+    let mut drawn: Vec<(f64, f64, f64, usize)> = pts
+        .iter()
+        .map(|(p, i)| {
+            let (x, y, z) = screen(*p);
+            (x, y, z, *i)
+        })
+        .collect();
+    drawn.sort_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Cell wireframe, same weight and colour as the Slab canvas.
+    if periodic {
+        cr.set_line_width(1.5);
+        cr.set_source_rgb(0.2, 0.2, 0.2);
+        for k in 0..8usize {
+            for bit in 0..3 {
+                let m = 1 << bit;
+                if k & m == 0 {
+                    let (x0, y0, _) = screen(corners[k]);
+                    let (x1, y1, _) = screen(corners[k | m]);
+                    cr.move_to(x0, y0);
+                    cr.line_to(x1, y1);
+                }
+            }
+        }
+        let _ = cr.stroke();
+    }
+
+    let radius = if drawn.len() > 600 { 3.5 } else { 6.0 };
+    for (x, y, _, i) in drawn {
+        let el = &structure.atoms[i].element;
+        let (r, g, b) = active
+            .style
+            .element_colors
+            .get(el)
+            .copied()
+            .unwrap_or_else(|| get_element_color(el, st.config.color_scheme));
+        cr.new_path();
+        cr.arc(x, y, radius, 0.0, 2.0 * PI);
+        cr.set_source_rgba(r, g, b, 0.85);
+        let _ = cr.fill();
+
+        if hl.contains(&i) {
+            // Dark ring (as the Slab canvas marks a selected atom): the atoms
+            // an action would touch. Dark so it reads on any element colour.
+            cr.new_path();
+            cr.arc(x, y, radius + 2.5, 0.0, 2.0 * PI);
+            cr.set_source_rgb(0.1, 0.1, 0.1);
+            cr.set_line_width(2.0);
+            let _ = cr.stroke();
+        }
+    }
 }
