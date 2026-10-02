@@ -58,7 +58,29 @@ To mix specific sites by hand, select them in the main view and use **Mix in** u
 >[!WARNING]
 >**Slab generation and primitive/conventional conversion do not support mixed sites** and will refuse with a message rather than return a wrong structure. Build the slab or convert the cell first, then set the mixed occupancies.
 >
->**Saving**: POSCAR, QE, XYZ and SPR-KKR have no occupancy field here, so a mixed site is written as two atoms at the same position and a warning is logged. There is no CIF writer yet, so the occupancies cannot currently be saved to a file.
+>**Saving mixed sites**:
+>- **SPR-KKR (`.pot`)** is the format built for this: a mixed site is written as a CPA site with several occupants and concentrations (see below).
+>- **CIF (`.cif`)** writes the occupancy of every atom, with a mixed site as one row per species at the same position (the standard split-site form).
+>- **POSCAR, Quantum Espresso, XYZ and PDB** have no way to hold a mixture here, so a mixed site is written as overlapping atoms and a warning is logged.
+
+### Exporting a Disordered Alloy to SPR-KKR
+
+SPR-KKR treats a disordered alloy with the coherent-potential approximation (CPA). Its files describe it as:
+
+- a **site** (`IQ`) is a crystallographic position, listed once;
+- the **OCCUPATION** section gives each site `NOQ` occupants, each a **type** (`ITOQ`) with a concentration (`CONC`); the concentrations on a site add up to 1;
+- every (site, element) pair is its **own type**, with its own potential, so Fe on site 1 and Fe on site 2 are different types.
+
+`Save As → .pot` writes exactly this from a structure with mixed sites: atoms that share a position and are partly occupied become one site with `NOQ` occupants, and each gets its own type. The file is a start potential for a new SPR-KKR calculation (FORMAT 7, without the `POTENTIAL` block; SPR-KKR creates that). Fe₀.₄Cr₀.₃Al₀.₃ on four sites writes `NQ 4`, `NT 12` and `NOQ 3` on every site.
+
+What to know about the file:
+- **Units and orientation**: `ALAT` is in bohr, the vectors and site positions are in units of `ALAT`, and the cell is rotated to the standard setting (first vector along x, second in the xy plane). This changes no distance or angle.
+- **`BRAVAIS`** is detected from the cell as written (one of SPR-KKR's 14 lattices).
+- **Core and valence electrons** (`NCORT`, `NVALT`) follow the noble-gas core below each element (Cr 18/6, Fe 18/8, Al 10/3). Check them for elements with shallow semicore states (for example Ga 3d, Sn 4d, rare-earth 4f).
+- **Concentrations that do not add to 1** on a site are normalised and a warning is logged; vacancies are not written.
+- **Everything else is the SPR-KKR default** (reference potentials, mesh, a non-magnetic direction). Set SCF options in your SPR-KKR input file, not here.
+
+CView also reads these files, including potentials written by an SCF run (`ALAT 9.85E+00` style numbers), and shows each CPA site as a pie.
 
 ### Selection-Based Editing
 

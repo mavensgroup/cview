@@ -116,6 +116,29 @@ enum CrystalSystem {
     Cubic,
 }
 
+/// Crystal system and centering letter of a space-group number, e.g.
+/// `("cubic", 'F')` for 225. Lets other modules name the lattice type without
+/// reaching into the private enums.
+pub fn lattice_family(sg: i32) -> (&'static str, char) {
+    let system = match crystal_system(sg) {
+        CrystalSystem::Triclinic => "triclinic",
+        CrystalSystem::Monoclinic => "monoclinic",
+        CrystalSystem::Orthorhombic => "orthorhombic",
+        CrystalSystem::Tetragonal => "tetragonal",
+        CrystalSystem::Trigonal => "trigonal",
+        CrystalSystem::Hexagonal => "hexagonal",
+        CrystalSystem::Cubic => "cubic",
+    };
+    let centre = match centering(sg) {
+        Centering::P => 'P',
+        Centering::F => 'F',
+        Centering::I => 'I',
+        Centering::A => 'C',
+        Centering::R => 'R',
+    };
+    (system, centre)
+}
+
 fn crystal_system(sg: i32) -> CrystalSystem {
     match sg {
         1..=2 => CrystalSystem::Triclinic,
