@@ -18,6 +18,8 @@ struct VisState {
     l: f64,
     thickness: f64,
     structure: Option<Structure>,
+    /// Display colour per element, as in the Structure preview.
+    colors: std::collections::HashMap<String, (f64, f64, f64)>,
 }
 
 /// Returns the whole tab page (its own cutting-plane canvas on the left, the
@@ -107,6 +109,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> (Box, std::boxed::Box<dyn Fn()>) {
         l: 0.0,
         thickness: 1.0,
         structure: current_struct,
+        colors: super::preview::element_colors(&state.borrow()),
     }));
 
     let draw_state = vis_state.clone();
@@ -166,7 +169,12 @@ pub fn build(state: Rc<RefCell<AppState>>) -> (Box, std::boxed::Box<dyn Fn()>) {
 
                                     cr.new_path();
                                     cr.arc(px, py, 6.0, 0.0, 2.0 * PI);
-                                    cr.set_source_rgba(0.0, 0.5, 0.5, 0.8);
+                                    let (cr_, cg_, cb_) = st
+                                        .colors
+                                        .get(&atom.element)
+                                        .copied()
+                                        .unwrap_or((0.0, 0.5, 0.5));
+                                    cr.set_source_rgba(cr_, cg_, cb_, 0.85);
                                     cr.fill_preserve().unwrap();
                                 }
                             }
@@ -361,7 +369,10 @@ pub fn build(state: Rc<RefCell<AppState>>) -> (Box, std::boxed::Box<dyn Fn()>) {
         let state = state.clone();
         let da = drawing_area.clone();
         std::boxed::Box::new(move || {
-            vis.borrow_mut().structure = state.borrow().active_tab().structure.clone();
+            let mut v = vis.borrow_mut();
+            v.structure = state.borrow().active_tab().structure.clone();
+            v.colors = super::preview::element_colors(&state.borrow());
+            drop(v);
             da.queue_draw();
         })
     };

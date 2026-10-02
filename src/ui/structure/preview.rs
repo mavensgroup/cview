@@ -152,6 +152,27 @@ fn fingerprint(st: &AppState) -> u64 {
     h.finish()
 }
 
+/// Display colour for each element of the active tab's structure: the tab's
+/// colour setting where there is one, else the colour-scheme default. Shared
+/// with the Slab canvas so both previews colour atoms the same way.
+pub fn element_colors(st: &AppState) -> std::collections::HashMap<String, (f64, f64, f64)> {
+    let mut out = std::collections::HashMap::new();
+    if let Some(tab) = st.tabs.get(st.active_tab_index) {
+        if let Some(s) = &tab.structure {
+            for a in &s.atoms {
+                out.entry(a.element.clone()).or_insert_with(|| {
+                    tab.style
+                        .element_colors
+                        .get(&a.element)
+                        .copied()
+                        .unwrap_or_else(|| get_element_color(&a.element, st.config.color_scheme))
+                });
+            }
+        }
+    }
+    out
+}
+
 /// Rotate a Cartesian point into the shared isometric view: (screen x, screen
 /// y, depth).
 fn iso(p: [f64; 3]) -> (f64, f64, f64) {
@@ -305,15 +326,11 @@ fn draw(st: &AppState, d: &PreviewData, cr: &gtk4::cairo::Context, w: i32, h: i3
         let _ = cr.stroke();
     }
 
+    let colors = element_colors(st);
     let radius = if drawn.len() > 600 { 3.5 } else { 6.0 };
     for (x, y, _, i) in drawn {
         let el = &structure.atoms[i].element;
-        let (r, g, b) = active
-            .style
-            .element_colors
-            .get(el)
-            .copied()
-            .unwrap_or_else(|| get_element_color(el, st.config.color_scheme));
+        let (r, g, b) = colors.get(el).copied().unwrap_or((0.0, 0.5, 0.5));
         cr.new_path();
         cr.arc(x, y, radius, 0.0, 2.0 * PI);
         cr.set_source_rgba(r, g, b, 0.85);
