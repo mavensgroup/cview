@@ -16,7 +16,7 @@ CView automatically detects the file type based on extension and content. You ca
 | **CIF** | `.cif` | Standard Crystallographic Information Files. |
 | **VASP** | `POSCAR`, `CONTCAR`, `.vasp` | Standard VASP structure inputs and outputs. |
 | **Quantum Espresso** | `.in`, `.out`, `.pwi`, `.qe` | Reads atomic positions and cell parameters from input/output logs. |
-| **SPR-KKR** | `.pot`, `.sys` | Munich SPR-KKR potential and system files. Chemical disorder (CPA sites with several occupants) is read as mixed sites and written back as CPA sites. |
+| **SPR-KKR** | `.pot`, `.pot_new`, `.sys` | Munich SPR-KKR potential and system files. Chemical disorder (CPA sites with several occupants) is read as mixed sites and written back as CPA sites. |
 | **XYZ** | `.xyz` | Cartesian coordinates (Standard and Extended XYZ). |
 | **PDB** | `.pdb`, `.ent` | Protein Data Bank records. Reads the `CRYST1` cell, `ATOM`/`HETATM` sites, occupancies and formal charges; the first `MODEL` only. Files without a real cell load as non-periodic molecules. |
 

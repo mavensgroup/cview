@@ -65,6 +65,7 @@ pub fn setup(
         filter_struct.add_pattern("*.vasp");
         filter_struct.add_pattern("*.VASP");
         filter_struct.add_pattern("*.pot");
+        filter_struct.add_pattern("*.pot_*");
         filter_struct.add_pattern("*.sys");
         filter_struct.add_pattern("*.inp");
         filter_struct.add_pattern("*.in");
