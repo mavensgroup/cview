@@ -71,14 +71,21 @@ SPR-KKR treats a disordered alloy with the coherent-potential approximation (CPA
 - the **OCCUPATION** section gives each site `NOQ` occupants, each a **type** (`ITOQ`) with a concentration (`CONC`); the concentrations on a site add up to 1;
 - every (site, element) pair is its **own type**, with its own potential, so Fe on site 1 and Fe on site 2 are different types.
 
-`Save As → .pot` writes exactly this from a structure with mixed sites: atoms that share a position and are partly occupied become one site with `NOQ` occupants, and each gets its own type. The file is a start potential for a new SPR-KKR calculation (FORMAT 7, without the `POTENTIAL` block; SPR-KKR creates that). Fe₀.₄Cr₀.₃Al₀.₃ on four sites writes `NQ 4`, `NT 12` and `NOQ 3` on every site.
+**Reading** SPR-KKR potentials needs nothing extra: CView opens `.pot`, and the files an SCF run writes (`.pot_new`, `.pot_out`, any `.pot_*`), including their CPA sites. Positions and concentrations are read; the potential itself and the SCF results are not.
 
-What to know about the file:
-- **Units and orientation**: `ALAT` is in bohr, the vectors and site positions are in units of `ALAT`, and the cell is rotated to the standard setting (first vector along x, second in the xy plane). This changes no distance or angle.
-- **`BRAVAIS`** is detected from the cell as written (one of SPR-KKR's 14 lattices).
-- **Core and valence electrons** (`NCORT`, `NVALT`) follow the noble-gas core below each element (Cr 18/6, Fe 18/8, Al 10/3). Check them for elements with shallow semicore states (for example Ga 3d, Sn 4d, rare-earth 4f).
-- **Concentrations that do not add to 1** on a site are normalised and a warning is logged; vacancies are not written.
-- **Everything else is the SPR-KKR default** (reference potentials, mesh, a non-magnetic direction). Set SCF options in your SPR-KKR input file, not here.
+**Writing** (`Save As → .pot`) uses **ase2sprkkr** when it is available, so the file comes from the reference writer and follows whatever SPR-KKR file format your ase2sprkkr produces:
+
+1. Install it with `pip install ase2sprkkr`. CView looks for it in `python3` (then `python`); to use a virtualenv or conda environment, set the `CVIEW_PYTHON` environment variable to that interpreter before starting CView.
+2. CView hands over the cell and the sites with their occupants; atoms that share a position and are partly occupied become one site with several occupants. Each site stays its own site (ase2sprkkr's symmetry merging is switched off), so Fe₀.₄Cr₀.₃Al₀.₃ on four sites gives `NQ 4`, `NT 12`, `NOQ 3` on every site, as in a file ase2sprkkr writes for the same alloy.
+3. The log says which writer produced the file ("written by ase2sprkkr 3.5.1").
+
+**Without ase2sprkkr**, CView writes the file itself and logs a warning saying so. That built-in writer produces a FORMAT 7 start potential. It was checked against an ase2sprkkr file for a four-site Cr/Fe/Al alloy (the global parameters, SCF-INFO, occupation, reference system, magnetisation, mesh and types match) and its Bravais table against xband's, but it has not been run in SPR-KKR itself. Prefer the ase2sprkkr route for real calculations. In the built-in file:
+- `ALAT` is in bohr, the vectors and site positions are in units of `ALAT`, and the cell is rotated to the standard setting (first vector along x, second in the xy plane). This changes no distance or angle.
+- `BRAVAIS` is detected from the cell (one of SPR-KKR's 14 lattices).
+- **Core and valence electrons** (`NCORT`, `NVALT`) follow the noble-gas core below each element (Cr 18/6, Fe 18/8, Al 10/3, Cu 18/11). Check them for elements with shallow semicore states (for example Ga 3d, Sn 4d, rare-earth 4f).
+- Everything else is the SPR-KKR default (reference potentials, mesh, a non-magnetic direction). Set SCF options in your SPR-KKR input file.
+
+**Both writers**: concentrations that do not add to 1 on a site are normalised and a warning is logged; vacancies are not written.
 
 CView also reads these files, including potentials written by an SCF run (`ALAT 9.85E+00` style numbers), and shows each CPA site as a pie.
 

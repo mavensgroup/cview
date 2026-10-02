@@ -493,7 +493,8 @@ fn build_structure(data: SprkkrData) -> io::Result<Structure> {
 // WRITER
 // ============================================================================
 //
-// Writes an SPR-KKR potential file for a fresh calculation (FORMAT 7, the
+// Built-in writer, used when ase2sprkkr is not available (see `write`). Writes an
+// SPR-KKR potential file for a fresh calculation (FORMAT 7, the
 // layout ase2sprkkr produces and `kkrscf` starts from), without the POTENTIAL
 // block, which SPR-KKR generates itself.
 //
@@ -597,24 +598,41 @@ fn bravais_entry(lattice: [[f64; 3]; 3]) -> String {
         .map(|s| s.number)
         .unwrap_or(1);
     let (system, centre) = lattice_family(sg);
-    // SPR-KKR's list of 14: index, system, centering, point group.
-    let (idx, name, group) = match (system, centre) {
-        ("triclinic", _) => (1, "triclinic   primitive", "-1    C_i"),
-        ("monoclinic", 'P') => (2, "monoclinic  primitive", "2/m   C_2h"),
-        ("monoclinic", _) => (3, "monoclinic  base-centered", "2/m   C_2h"),
-        ("orthorhombic", 'P') => (4, "orthorhombic primitive", "mmm   D_2h"),
-        ("orthorhombic", 'C') => (5, "orthorhombic base-centered", "mmm   D_2h"),
-        ("orthorhombic", 'I') => (6, "orthorhombic body-centered", "mmm   D_2h"),
-        ("orthorhombic", _) => (7, "orthorhombic face-centered", "mmm   D_2h"),
-        ("tetragonal", 'P') => (8, "tetragonal  primitive", "4/mmm D_4h"),
-        ("tetragonal", _) => (9, "tetragonal  body-centered", "4/mmm D_4h"),
-        ("trigonal", 'R') => (10, "trigonal    primitive", "-3m   D_3d"),
-        ("trigonal", _) | ("hexagonal", _) => (11, "hexagonal   primitive", "6/mmm D_6h"),
-        ("cubic", 'F') => (13, "cubic       face-centered", "m3m   O_h"),
-        ("cubic", 'I') => (14, "cubic       body-centered", "m3m   O_h"),
-        _ => (12, "cubic       primitive", "m3m   O_h"),
+    // SPR-KKR's list of 14, spelled as in xband's geometry.f (the code that
+    // writes these files), including "orthorombic" and "base centered".
+    const TABLE: [&str; 14] = [
+        "triclinic   primitive      -1     C_i",
+        "monoclinic  primitive      2/m    C_2h",
+        "monoclinic  base centered  2/m    C_2h",
+        "orthorombic primitive      mmm    D_2h",
+        "orthorombic base-centered  mmm    D_2h",
+        "orthorombic body-centered  mmm    D_2h",
+        "orthorombic face-centered  mmm    D_2h",
+        "tetragonal  primitive      4/mmm  D_4h",
+        "tetragonal  body-centered  4/mmm  D_4h",
+        "trigonal    primitive      -3m    D_3d",
+        "hexagonal   primitive      6/mmm  D_6h",
+        "cubic       primitive      m3m    O_h",
+        "cubic       face-centered  m3m    O_h",
+        "cubic       body-centered  m3m    O_h",
+    ];
+    let idx = match (system, centre) {
+        ("triclinic", _) => 1,
+        ("monoclinic", 'P') => 2,
+        ("monoclinic", _) => 3,
+        ("orthorhombic", 'P') => 4,
+        ("orthorhombic", 'C') => 5,
+        ("orthorhombic", 'I') => 6,
+        ("orthorhombic", _) => 7,
+        ("tetragonal", 'P') => 8,
+        ("tetragonal", _) => 9,
+        ("trigonal", 'R') => 10,
+        ("trigonal", _) | ("hexagonal", _) => 11,
+        ("cubic", 'F') => 13,
+        ("cubic", 'I') => 14,
+        _ => 12,
     };
-    format!("{:>3} {} {}", idx, name, group)
+    format!("{:>3} {}", idx, TABLE[idx - 1])
 }
 
 /// Core and valence electron counts for a type, from the noble-gas core below
@@ -639,42 +657,51 @@ fn conc(c: f64) -> String {
 const RULE: &str =
     "*******************************************************************************";
 
-/// The potential file as text, and any warnings about what could not be
-/// represented. Separate from `write` so it can be tested without a file.
-fn render(structure: &Structure) -> (String, Vec<String>) {
+/// One occupant of a site, with its concentration normalised to the site.
+struct Occupant {
+    element: String,
+    z: i32,
+    conc: f64,
+}
+
+/// One site: where it is (Cartesian, Å, in the standard setting) and who is on it.
+struct SiteData {
+    position: [f64; 3],
+    occupants: Vec<Occupant>,
+}
+
+/// The structure as SPR-KKR sees it: the cell in the standard setting, and the
+/// sites with normalised occupants. Shared by the built-in writer and the
+/// ase2sprkkr hand-off, so both write the same sites.
+struct SiteModel {
+    lattice: [[f64; 3]; 3],
+    sites: Vec<SiteData>,
+    warnings: Vec<String>,
+}
+
+fn build_model(structure: &Structure) -> SiteModel {
     let mut warnings: Vec<String> = Vec::new();
-    let sites = group_sites(structure);
-    let n_sites = sites.len();
+    let groups = group_sites(structure);
+    let lattice = standard_lattice(structure.lattice);
 
-    // --- lattice in the standard setting, in units of ALAT ---
-    let lat = standard_lattice(structure.lattice);
-    let alat_ang = (lat[0][0] * lat[0][0] + lat[0][1] * lat[0][1] + lat[0][2] * lat[0][2]).sqrt();
-    let alat_bohr = alat_ang / BOHR_TO_ANG;
-    let scaled = |v: [f64; 3]| [v[0] / alat_ang, v[1] / alat_ang, v[2] / alat_ang];
-
-    // Atom positions rotated into that setting: fractional, then back through
-    // the standard cell.
+    // Positions rotated into the standard setting: fractional, then back
+    // through the standard cell.
     let position = |i: usize| -> [f64; 3] {
         let frac = crate::utils::linalg::cart_to_frac(structure.atoms[i].position, structure.lattice)
             .unwrap_or([0.0; 3]);
         [
-            frac[0] * lat[0][0] + frac[1] * lat[1][0] + frac[2] * lat[2][0],
-            frac[0] * lat[0][1] + frac[1] * lat[1][1] + frac[2] * lat[2][1],
-            frac[0] * lat[0][2] + frac[1] * lat[1][2] + frac[2] * lat[2][2],
+            frac[0] * lattice[0][0] + frac[1] * lattice[1][0] + frac[2] * lattice[2][0],
+            frac[0] * lattice[0][1] + frac[1] * lattice[1][1] + frac[2] * lattice[2][1],
+            frac[0] * lattice[0][2] + frac[1] * lattice[1][2] + frac[2] * lattice[2][2],
         ]
     };
 
-    // --- types: one per (site, species), numbered in site order ---
-    struct Occupant {
-        type_id: usize,
-        element: String,
-        z: i32,
-        conc: f64,
-    }
-    let mut occupants: Vec<Vec<Occupant>> = Vec::new();
-    let mut next_type = 1usize;
-    for (q, members) in sites.iter().enumerate() {
-        let total: f64 = members.iter().map(|&i| structure.atoms[i].occupancy.clamp(0.0, 1.0)).sum();
+    let mut sites = Vec::new();
+    for (q, members) in groups.iter().enumerate() {
+        let total: f64 = members
+            .iter()
+            .map(|&i| structure.atoms[i].occupancy.clamp(0.0, 1.0))
+            .sum();
         if (total - 1.0).abs() > 1e-3 {
             warnings.push(format!(
                 "site {} has total occupancy {:.3}; SPR-KKR concentrations must sum to 1, so they were \
@@ -684,18 +711,44 @@ fn render(structure: &Structure) -> (String, Vec<String>) {
             ));
         }
         let denom = if total > 1e-9 { total } else { 1.0 };
-        let mut here = Vec::new();
-        for &i in members {
-            let a = &structure.atoms[i];
-            here.push(Occupant {
-                type_id: next_type,
-                element: a.element.clone(),
-                z: get_atomic_number(&a.element),
-                conc: a.occupancy.clamp(0.0, 1.0) / denom,
-            });
-            next_type += 1;
-        }
-        occupants.push(here);
+        let occupants = members
+            .iter()
+            .map(|&i| {
+                let a = &structure.atoms[i];
+                Occupant {
+                    element: a.element.clone(),
+                    z: get_atomic_number(&a.element),
+                    conc: a.occupancy.clamp(0.0, 1.0) / denom,
+                }
+            })
+            .collect();
+        sites.push(SiteData {
+            position: position(members[0]),
+            occupants,
+        });
+    }
+    SiteModel { lattice, sites, warnings }
+}
+
+/// The potential file as text, and any warnings about what could not be
+/// represented. Separate from `write` so it can be tested without a file.
+fn render(structure: &Structure) -> (String, Vec<String>) {
+    let model = build_model(structure);
+    let warnings = model.warnings.clone();
+    let n_sites = model.sites.len();
+
+    // --- lattice in the standard setting, in units of ALAT ---
+    let lat = model.lattice;
+    let alat_ang = (lat[0][0] * lat[0][0] + lat[0][1] * lat[0][1] + lat[0][2] * lat[0][2]).sqrt();
+    let alat_bohr = alat_ang / BOHR_TO_ANG;
+    let scaled = |v: [f64; 3]| [v[0] / alat_ang, v[1] / alat_ang, v[2] / alat_ang];
+
+    // --- types: one per (site, species), numbered in site order ---
+    let mut type_ids: Vec<Vec<usize>> = Vec::new();
+    let mut next_type = 1usize;
+    for site in &model.sites {
+        let ids: Vec<usize> = site.occupants.iter().map(|_| { let t = next_type; next_type += 1; t }).collect();
+        type_ids.push(ids);
     }
     let n_types = next_type - 1;
 
@@ -760,24 +813,26 @@ fn render(structure: &Structure) -> (String, Vec<String>) {
     line(kv("CARTESIAN", "T".into()));
     line(kv("BASSCALE", "1.0 1.0 1.0".into()));
     line("   IQ                QBAS(X)                QBAS(Y)                QBAS(Z)".into());
-    for (q, members) in sites.iter().enumerate() {
-        let u = scaled(position(members[0]));
+    for (q, site) in model.sites.iter().enumerate() {
+        let u = scaled(site.position);
         line(format!("{:>5}{:>23.14}{:>23.14}{:>23.14}", q + 1, u[0], u[1], u[2]));
     }
     line(RULE.into());
     line("OCCUPATION".into());
     line("IQ              IREFQ              IMQ              NOQ        ITOQ CONC".into());
-    for (q, here) in occupants.iter().enumerate() {
-        let list: String = here
+    for (q, site) in model.sites.iter().enumerate() {
+        let list: String = site
+            .occupants
             .iter()
-            .map(|oc| format!("  {} {}", oc.type_id, conc(oc.conc)))
+            .zip(&type_ids[q])
+            .map(|(oc, id)| format!("  {} {}", id, conc(oc.conc)))
             .collect();
         line(format!(
             "{:<4}{:>16}{:>17}{:>17}{}",
             q + 1,
             q + 1,
             q + 1,
-            here.len(),
+            site.occupants.len(),
             list
         ));
     }
@@ -809,12 +864,12 @@ fn render(structure: &Structure) -> (String, Vec<String>) {
     line(RULE.into());
     line("TYPES".into());
     line("IT                TXT               ZT            NCORT            NVALT      NSEMCORSHLT".into());
-    for here in &occupants {
-        for oc in here {
+    for (site, ids) in model.sites.iter().zip(&type_ids) {
+        for (oc, id) in site.occupants.iter().zip(ids) {
             let (core, val) = core_valence(oc.z);
             line(format!(
                 "{:<4}{:>20}{:>17}{:>17}{:>17}{:>17}",
-                oc.type_id, oc.element, oc.z, core, val, 0
+                id, oc.element, oc.z, core, val, 0
             ));
         }
     }
@@ -822,18 +877,132 @@ fn render(structure: &Structure) -> (String, Vec<String>) {
     (o, warnings)
 }
 
-pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
-    let (text, warnings) = render(structure);
-    for w in warnings {
+/// The helper that asks ase2sprkkr to write the file (see the script for the
+/// request format).
+const ASE2SPRKKR_HELPER: &str = include_str!("sprkkr_ase2sprkkr.py");
+
+/// Which writer produced a file.
+#[derive(Debug, PartialEq)]
+enum Writer {
+    /// ase2sprkkr, with its version.
+    Ase2Sprkkr(String),
+    /// CView's own writer; `why` says why ase2sprkkr was not used.
+    BuiltIn { why: String },
+}
+
+/// Pythons to try, best first. `CVIEW_PYTHON` names the interpreter that has
+/// ase2sprkkr (a virtualenv or conda environment); without it, `python3`.
+fn python_candidates() -> Vec<String> {
+    match std::env::var("CVIEW_PYTHON") {
+        Ok(p) if !p.trim().is_empty() => vec![p],
+        _ => vec!["python3".to_string(), "python".to_string()],
+    }
+}
+
+/// The request the helper reads: the model's cell and sites.
+fn helper_request(path: &str, model: &SiteModel) -> serde_json::Value {
+    serde_json::json!({
+        "path": path,
+        "lattice": model.lattice,
+        "sites": model.sites.iter().map(|s| serde_json::json!({
+            "position": s.position,
+            "occupants": s.occupants.iter().map(|o| serde_json::json!({
+                "element": o.element,
+                "conc": o.conc,
+            })).collect::<Vec<_>>(),
+        })).collect::<Vec<_>>(),
+    })
+}
+
+/// Try ase2sprkkr through each interpreter. `Ok(Some(version))` when it wrote
+/// the file; `Ok(None)` when it is not installed for any of them; `Err` when it
+/// is installed but failed (its message).
+fn try_ase2sprkkr(
+    path: &str,
+    model: &SiteModel,
+    pythons: &[String],
+) -> Result<Option<String>, String> {
+    use std::io::Write as _;
+    use std::process::{Command, Stdio};
+
+    // An absolute output path: the helper's working directory is not CView's.
+    let abs = std::path::absolute(path)
+        .map(|p| p.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| path.to_string());
+    let request = helper_request(&abs, model).to_string();
+
+    for py in pythons {
+        let child = Command::new(py)
+            .args(["-c", ASE2SPRKKR_HELPER])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn();
+        let mut child = match child {
+            Ok(c) => c,
+            Err(_) => continue, // no such interpreter
+        };
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(request.as_bytes());
+        }
+        let out = match child.wait_with_output() {
+            Ok(o) => o,
+            Err(e) => return Err(format!("could not run {py}: {e}")),
+        };
+        match out.status.code() {
+            Some(0) => {
+                let v = serde_json::from_slice::<serde_json::Value>(&out.stdout)
+                    .ok()
+                    .and_then(|j| j["version"].as_str().map(str::to_string))
+                    .unwrap_or_else(|| "unknown".to_string());
+                return Ok(Some(v));
+            }
+            Some(3) => continue, // not importable with this interpreter
+            _ => {
+                let err = String::from_utf8_lossy(&out.stderr);
+                let tail: Vec<&str> = err.lines().rev().take(3).collect();
+                return Err(tail.into_iter().rev().collect::<Vec<_>>().join(" | "));
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Write the potential: with ase2sprkkr when an interpreter that has it can be
+/// found (it is the reference writer, and tracks the SPR-KKR file format), else
+/// with CView's own. Returns which one was used. `pythons` is explicit so tests
+/// do not depend on the environment.
+fn write_with(path: &str, structure: &Structure, pythons: &[String]) -> io::Result<Writer> {
+    let model = build_model(structure);
+    for w in &model.warnings {
         crate::utils::console::log_warn(&format!("SPR-KKR export: {w}"));
     }
+
+    let why = match try_ase2sprkkr(path, &model, pythons) {
+        Ok(Some(version)) => return Ok(Writer::Ase2Sprkkr(version)),
+        Ok(None) => "ase2sprkkr was not found".to_string(),
+        Err(e) => format!("ase2sprkkr failed: {e}"),
+    };
+
+    let (text, _) = render(structure);
+    std::fs::write(path, text)?;
+    Ok(Writer::BuiltIn { why })
+}
+
+pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
     let mixed = group_sites(structure).iter().filter(|s| s.len() > 1).count();
-    if mixed > 0 {
-        crate::utils::console::log_info(&format!(
-            "SPR-KKR export: {mixed} mixed site(s) written as CPA occupations (NOQ > 1)"
-        ));
+    match write_with(path, structure, &python_candidates())? {
+        Writer::Ase2Sprkkr(v) => crate::utils::console::log_info(&format!(
+            "SPR-KKR export: written by ase2sprkkr {v}{}",
+            if mixed > 0 { format!(", {mixed} mixed site(s) as CPA occupations") } else { String::new() }
+        )),
+        Writer::BuiltIn { why } => crate::utils::console::log_warn(&format!(
+            "SPR-KKR export: {why}; wrote CView's built-in potential (FORMAT 7, checked against an \
+             ase2sprkkr file but not run in SPR-KKR). Install ase2sprkkr (pip install ase2sprkkr), or \
+             set CVIEW_PYTHON to the Python that has it, to use the reference writer."
+        )),
     }
-    std::fs::write(path, text)
+    Ok(())
 }
 
 // ============================================================================
@@ -1287,5 +1456,70 @@ POTENTIAL
             assert!((a - b).abs() < 1e-9);
         }
     }
-}
 
+    // ---- delegation to ase2sprkkr ----
+
+    fn alloy_from_reference() -> Structure {
+        parse(&tmp("deleg_ref.pot", FEALFE2_POT)).unwrap()
+    }
+
+    #[test]
+    fn the_helper_request_carries_sites_and_occupants_in_order() {
+        let s = alloy_from_reference();
+        let model = build_model(&s);
+        let req = helper_request("/x/out.pot", &model);
+        assert_eq!(req["path"], "/x/out.pot");
+        let sites = req["sites"].as_array().unwrap();
+        assert_eq!(sites.len(), 4);
+        let occ = sites[0]["occupants"].as_array().unwrap();
+        assert_eq!(occ.len(), 3);
+        // Occupants keep the file's order (Cr, Fe, Al), concentrations sum to 1.
+        let el: Vec<&str> = occ.iter().map(|o| o["element"].as_str().unwrap()).collect();
+        assert_eq!(el, ["Cr", "Fe", "Al"]);
+        let sum: f64 = occ.iter().map(|o| o["conc"].as_f64().unwrap()).sum();
+        assert!((sum - 1.0).abs() < 1e-9);
+        assert_eq!(req["lattice"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn without_ase2sprkkr_the_built_in_writer_is_used_and_says_why() {
+        let s = alloy_from_reference();
+        let out = tmp("fallback.pot", "");
+        let w = write_with(&out, &s, &["/nonexistent/python-for-cview-test".to_string()]).unwrap();
+        assert!(matches!(&w, Writer::BuiltIn { why } if why.contains("not found")), "{w:?}");
+        let text = std::fs::read_to_string(&out).unwrap();
+        assert!(text.contains("FORMAT") && text.contains(" 7 (21.05.2007)"), "built-in is FORMAT 7");
+        let back = parse(&out).unwrap();
+        assert_eq!(sites_of(&back), sites_of(&s));
+    }
+
+    /// Needs a Python with ase2sprkkr (`python3` here, or CVIEW_PYTHON); skipped
+    /// where there is none, so the suite does not depend on it.
+    #[test]
+    fn ase2sprkkr_writes_the_alloy_when_it_is_installed() {
+        let s = alloy_from_reference();
+        let out = tmp("ase2sprkkr.pot", "");
+        let pythons = python_candidates();
+        let w = write_with(&out, &s, &pythons).unwrap();
+        let version = match w {
+            Writer::Ase2Sprkkr(v) => v,
+            Writer::BuiltIn { why } => {
+                eprintln!("skipped: {why}");
+                return;
+            }
+        };
+        let text = std::fs::read_to_string(&out).unwrap();
+        let flat: Vec<String> =
+            text.lines().map(|l| l.split_whitespace().collect::<Vec<_>>().join(" ")).collect();
+        // Its own layout, not ours: the version it reports wrote this file.
+        assert!(flat.iter().any(|l| l.starts_with("PACKAGE SPR-KKR")), "version {version}");
+        // One site per CView site, every (site, element) its own type, CPA rows.
+        for key in ["NQ 4", "NT 12", "NM 4"] {
+            assert!(flat.contains(&key.to_string()), "missing {key} in\n{text}");
+        }
+        assert!(flat.iter().any(|l| l.starts_with("1 1 1 3 1 0.3 2 0.4 3 0.3")), "{text}");
+        // And CView reads it back as the same alloy.
+        let back = parse(&out).unwrap();
+        assert_eq!(sites_of(&back), sites_of(&s));
+    }
+}
