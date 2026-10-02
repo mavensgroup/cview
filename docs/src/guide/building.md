@@ -18,20 +18,26 @@ The **Basis** tab (`Structure → Basis...`) allows you to perform chemical modi
 
 ### Element Substitution
 
-**Global Replacement**: Replace all instances of one element with another throughout the entire structure.
+**Replace an element**: replace all instances of one element with another, or only some of them.
 
 **Use Cases**:
 - Alloying studies (e.g., replacing Ni with Co in Ni₂MnGa)
 - Doping simulations (e.g., substituting Ca with Sr in perovskites)
+- **Partial substitution and disordered models** (e.g., one O of the three in BaTiO₃ replaced by N, or a random 25% of the O sites in a supercell)
 - Creating hypothetical structures for screening
 
 **How to use**:
 1. Open `Structure → Basis...`
-2. In **Replace element everywhere**, enter the source element in *Find* (its atoms are highlighted in the preview) and the new element in *Replace with*
-3. Click **Replace all**
+2. In **Replace an element**, enter the source element in *Find* and the new element in *Replace with*. The *Atoms to replace* count starts at all of them ("of 3" in BaTiO₃).
+3. To replace only some, lower the count. The atoms that will change are ringed in the preview.
+   - By default these are the first atoms of that element, in the order of the atom list.
+   - Tick **Choose at random** to draw them at random instead, and **Pick again** for another draw. A random draw is reproducible within a session (it is not drawn from the system clock), so repeating a step gives the same atoms.
+4. Click **Replace**. Replacing fewer than all is logged as a partial substitution (for example "1 of 3 O → N").
+
+For a disordered model you usually want a supercell first (`Structure → Supercell...`), so that the replaced fraction can be something other than 1/3 or 2/3. To choose specific atoms by hand, select them in the main view and use **Selected atoms** below.
 
 >[!NOTE]
->This operation preserves all atomic positions and lattice parameters — only the element identity changes.
+>This operation preserves all atomic positions and lattice parameters — only the element identity changes. The structure's formula is updated to match.
 
 ### Selection-Based Editing
 

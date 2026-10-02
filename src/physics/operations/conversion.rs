@@ -117,7 +117,7 @@ pub fn convert_structure(structure: &Structure, cell_type: CellType) -> Result<S
 }
 
 /// Build a chemical formula string sorted alphabetically (e.g. "Cl6Cs2Mo").
-fn build_formula(atoms: &[Atom]) -> String {
+pub(crate) fn build_formula(atoms: &[Atom]) -> String {
     let mut counts: HashMap<&str, usize> = HashMap::new();
     for atom in atoms {
         *counts.entry(&atom.element).or_insert(0) += 1;
