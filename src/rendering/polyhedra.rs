@@ -14,6 +14,7 @@
 // Vertex positions are stored as atom-slice indices (O(1) screen lookup).
 // All vector math via nalgebra::Vector3.
 
+use std::cmp::Ordering;
 use crate::model::elements::{get_atom_cov, get_electronegativity};
 use crate::rendering::scene::RenderAtom;
 use crate::utils::spatial_grid::SpatialGrid;
@@ -446,12 +447,6 @@ fn convex_hull_3d(center: [f64; 3], pts: &[[f64; 3]], atom_indices: &[usize]) ->
     match n {
         0..=2 => vec![],
         3 => vec![make_face(center, pts, atom_indices, 0, 1, 2)],
-        4 => vec![
-            make_face(center, pts, atom_indices, 0, 1, 2),
-            make_face(center, pts, atom_indices, 0, 1, 3),
-            make_face(center, pts, atom_indices, 0, 2, 3),
-            make_face(center, pts, atom_indices, 1, 2, 3),
-        ],
         _ => match find_initial_tetrahedron(pts) {
             None => fan_triangulation(center, pts, atom_indices),
             Some(_) => brute_force_hull(center, pts, atom_indices),
@@ -461,38 +456,41 @@ fn convex_hull_3d(center: [f64; 3], pts: &[[f64; 3]], atom_indices: &[usize]) ->
 
 /// Brute-force O(n⁴) 3D convex hull. Correct by construction: enumerates
 /// every vertex triple and keeps the ones whose supporting plane has all
-/// other points strictly on one side (or coplanar within `tol`). Faces
-/// are then oriented so normals point outward from `center`.
+/// other points on one side (or coplanar). Triples on the same plane are then
+/// merged, so a flat face with four or more vertices becomes ONE polygon,
+/// triangulated once, rather than every triple of its corners (which overlap:
+/// that double-counted the face, so volumes depended on the origin and
+/// translucent faces were drawn twice).
 ///
-/// Rationale over a Qhull-style incremental algorithm:
-/// - Coplanar vertices (common in regular octahedra, cubes, icosahedra)
-///   are handled without the degenerate-face patching that incremental
-///   algorithms require.
-/// - Numerical robustness: a single relative tolerance check, no
-///   cascading topology updates that can accumulate error.
-/// - n is bounded by coordination number (typically 2–12), so O(n⁴) is
-///   at most a few thousand operations per polyhedron.
-fn brute_force_hull(center: [f64; 3], pts: &[[f64; 3]], atom_indices: &[usize]) -> Vec<Face> {
+/// Faces are oriented outward from the vertex centroid, which always lies
+/// inside a convex hull. The cation itself need not: an off-centre Ti in a
+/// ferroelectric can sit outside its own pyramid.
+///
+/// n is bounded by coordination number (typically 2–12), so O(n⁴) is at most
+/// a few thousand operations per polyhedron.
+fn brute_force_hull(_center: [f64; 3], pts: &[[f64; 3]], atom_indices: &[usize]) -> Vec<Face> {
     let n = pts.len();
     let tol = 1e-9;
-    let mut raw_faces: Vec<[usize; 3]> = Vec::new();
+    let inside = pts.iter().fold(Vector3::zeros(), |acc, p| acc + v(*p)) / n as f64;
+    let inside_arr = arr(inside);
 
-    // Enumerate all triples; keep those whose plane has every other point
-    // on one side (or coplanar within tol). That is the definition of a
-    // convex-hull face.
+    struct Plane {
+        normal: Vector3<f64>,
+        offset: f64,
+        members: Vec<usize>,
+    }
+    let mut planes: Vec<Plane> = Vec::new();
+
     for i in 0..n {
         for j in (i + 1)..n {
             for k in (j + 1)..n {
                 let a = v(pts[i]);
-                let b = v(pts[j]);
-                let c = v(pts[k]);
-                let nrm = (b - a).cross(&(c - a));
+                let nrm = (v(pts[j]) - a).cross(&(v(pts[k]) - a));
                 let len = nrm.norm();
                 if len < 1e-12 {
                     continue; // collinear triple
                 }
-                let mut pos = 0usize;
-                let mut neg = 0usize;
+                let (mut pos, mut neg) = (0usize, 0usize);
                 for m in 0..n {
                     if m == i || m == j || m == k {
                         continue;
@@ -504,40 +502,100 @@ fn brute_force_hull(center: [f64; 3], pts: &[[f64; 3]], atom_indices: &[usize]) 
                         neg += 1;
                     }
                 }
-                // A hull face has all other points strictly on one side
-                // (coplanar points are allowed — they'll form adjacent faces).
-                if pos == 0 || neg == 0 {
-                    raw_faces.push(oriented_face(center, pts, [i, j, k]));
+                // A hull face has every other point on one side (coplanar
+                // points allowed: they belong to the same face).
+                if pos != 0 && neg != 0 {
+                    continue;
+                }
+                let mut unit = nrm / len;
+                if unit.dot(&(inside - a)) > 0.0 {
+                    unit = -unit; // outward
+                }
+                let offset = unit.dot(&a);
+                match planes.iter_mut().find(|p| {
+                    (p.normal.dot(&unit) - 1.0).abs() < 1e-7 && (p.offset - offset).abs() < 1e-7
+                }) {
+                    Some(p) => p.members.extend([i, j, k]),
+                    None => planes.push(Plane {
+                        normal: unit,
+                        offset,
+                        members: vec![i, j, k],
+                    }),
                 }
             }
         }
     }
 
-    // Deduplicate faces that share the same vertex set (can happen when
-    // many points are coplanar and multiple triples describe the same
-    // planar region from different triangulations — keep them all; they
-    // are distinct triangles, not duplicates). Only drop exact index-set
-    // duplicates.
-    raw_faces.sort_by_key(|f| {
-        let mut s = *f;
-        s.sort_unstable();
-        s
-    });
-    raw_faces.dedup_by_key(|f| {
-        let mut s = *f;
-        s.sort_unstable();
-        s
-    });
+    let mut faces = Vec::new();
+    for mut plane in planes {
+        plane.members.sort_unstable();
+        plane.members.dedup();
+        let m = &plane.members;
+        if m.len() == 3 {
+            faces.push(make_face(inside_arr, pts, atom_indices, m[0], m[1], m[2]));
+            continue;
+        }
+        // A flat polygon: order its corners around the face and fan-triangulate.
+        let order = convex_polygon_order(pts, m, plane.normal);
+        for w in 1..order.len().saturating_sub(1) {
+            faces.push(make_face(
+                inside_arr,
+                pts,
+                atom_indices,
+                order[0],
+                order[w],
+                order[w + 1],
+            ));
+        }
+    }
+    faces
+}
 
-    raw_faces
-        .into_iter()
-        .filter(|f| {
-            let a = v(pts[f[0]]);
-            let cross = (v(pts[f[1]]) - a).cross(&(v(pts[f[2]]) - a));
-            cross.norm_squared() > 1e-16
+/// Convex-position order of coplanar points `idx` (Andrew's monotone chain in
+/// the plane with unit `normal`). Points that are collinear on an edge, or
+/// interior to the polygon, are dropped.
+fn convex_polygon_order(pts: &[[f64; 3]], idx: &[usize], normal: Vector3<f64>) -> Vec<usize> {
+    let o = v(pts[idx[0]]);
+    let mut u = v(pts[idx[1]]) - o;
+    if u.norm() < 1e-12 {
+        u = v(pts[idx[idx.len() - 1]]) - o;
+    }
+    let u = u.normalize();
+    let w = normal.cross(&u);
+    let mut p2: Vec<(f64, f64, usize)> = idx
+        .iter()
+        .map(|&i| {
+            let d = v(pts[i]) - o;
+            (d.dot(&u), d.dot(&w), i)
         })
-        .map(|f| make_face(center, pts, atom_indices, f[0], f[1], f[2]))
-        .collect()
+        .collect();
+    p2.sort_by(|a, b| {
+        a.0.partial_cmp(&b.0)
+            .unwrap_or(Ordering::Equal)
+            .then(a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal))
+    });
+    let cross = |o: &(f64, f64, usize), a: &(f64, f64, usize), b: &(f64, f64, usize)| {
+        (a.0 - o.0) * (b.1 - o.1) - (a.1 - o.1) * (b.0 - o.0)
+    };
+    let mut hull: Vec<(f64, f64, usize)> = Vec::new();
+    for pass in 0..2 {
+        let start = hull.len();
+        let iter: Box<dyn Iterator<Item = &(f64, f64, usize)>> = if pass == 0 {
+            Box::new(p2.iter())
+        } else {
+            Box::new(p2.iter().rev())
+        };
+        for p in iter {
+            while hull.len() >= start + 2
+                && cross(&hull[hull.len() - 2], &hull[hull.len() - 1], p) <= 1e-12
+            {
+                hull.pop();
+            }
+            hull.push(*p);
+        }
+        hull.pop(); // last point repeats the first of the other pass
+    }
+    hull.into_iter().map(|h| h.2).collect()
 }
 
 /// Wind face so normal points away from `center`.
@@ -852,6 +910,151 @@ fn bond_angle_variance(
 }
 
 // ============================================================================
+// PER-TAB BUILD AND CONNECTIVITY
+// ============================================================================
+
+/// Build the polyhedra the tab's settings ask for (None when they are off).
+/// One place for the arguments, shared by the painter and by inspection.
+pub fn build_for_tab(
+    atoms: &[RenderAtom],
+    tab: &crate::state::TabState,
+) -> Option<Vec<Polyhedron>> {
+    let s = match &tab.style.polyhedra_settings {
+        Some(s) if s.show_polyhedra => s,
+        _ => return None,
+    };
+    Some(build_polyhedra_for_draw(
+        atoms,
+        &s.enabled_elements,
+        tab.view.bond_cutoff,
+        s.min_coordination,
+        s.max_coordination,
+        s.max_bond_dist,
+        tab.view.show_full_unit_cell,
+    ))
+}
+
+/// How a polyhedron links to its neighbours: the number of other polyhedra it
+/// shares one vertex (corner), two (edge) or three or more (face) with.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Connectivity {
+    pub corner: usize,
+    pub edge: usize,
+    pub face: usize,
+}
+
+/// Atoms to ask "who else is bonded to this vertex?": every atom of the
+/// structure plus its periodic images out to ±2 cells. Independent of the
+/// viewport, whose scene only holds the images near the cell and so misses
+/// the cations on the far side of a polyhedron that sits on a cell face.
+pub fn periodic_atoms(structure: &crate::model::structure::Structure) -> Vec<RenderAtom> {
+    let range = if structure.is_periodic { -2..=2 } else { 0..=0 };
+    let l = structure.lattice;
+    let mut out = Vec::new();
+    for i in range.clone() {
+        for j in range.clone() {
+            for k in range.clone() {
+                let t = [
+                    i as f64 * l[0][0] + j as f64 * l[1][0] + k as f64 * l[2][0],
+                    i as f64 * l[0][1] + j as f64 * l[1][1] + k as f64 * l[2][1],
+                    i as f64 * l[0][2] + j as f64 * l[1][2] + k as f64 * l[2][2],
+                ];
+                for (n, a) in structure.atoms.iter().enumerate() {
+                    let p = [
+                        a.position[0] + t[0],
+                        a.position[1] + t[1],
+                        a.position[2] + t[2],
+                    ];
+                    out.push(RenderAtom {
+                        screen_pos: p,
+                        cart_pos: p,
+                        element: a.element.clone(),
+                        original_index: n,
+                        unique_id: out.len(),
+                        is_ghost: false,
+                        is_coord_only: false,
+                        screen_radius: 0.0,
+                    });
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Answers linkage questions over a fixed atom list (build once, ask per
+/// polyhedron: the anion classification and spatial grid are shared).
+pub struct ConnectivityContext<'a> {
+    atoms: &'a [RenderAtom],
+    anions: HashSet<String>,
+    grid: SpatialGrid,
+    tolerance: f64,
+    min_cn: usize,
+    max_bond_dist: f64,
+}
+
+impl<'a> ConnectivityContext<'a> {
+    pub fn new(atoms: &'a [RenderAtom], tolerance: f64, min_cn: usize, max_bond_dist: f64) -> Self {
+        let anions = classify_anions(atoms);
+        let grid = SpatialGrid::build(atoms, max_bond_dist.max(1e-3), |a| {
+            anions.contains(&a.element)
+        });
+        Self { atoms, anions, grid, tolerance, min_cn, max_bond_dist }
+    }
+
+    /// How a polyhedron with `centre` and `vertices` (Cartesian positions) links
+    /// to the other polyhedra of `enabled_elements`: found by asking every other
+    /// cation which of the vertices it is also bonded to.
+    pub fn of(
+        &self,
+        centre: [f64; 3],
+        vertices: &[[f64; 3]],
+        enabled_elements: &[String],
+    ) -> Connectivity {
+        const SAME: f64 = 1e-4; // Å: positions closer than this are one atom
+        let close = |a: [f64; 3], b: [f64; 3]| (0..3).all(|k| (a[k] - b[k]).abs() < SAME);
+
+        let mut out = Connectivity::default();
+        for (j, atom) in self.atoms.iter().enumerate() {
+            if !enabled_elements.contains(&atom.element) || close(atom.cart_pos, centre) {
+                continue;
+            }
+            // Two polyhedra can only share a vertex if their centres are within
+            // two bond lengths of each other.
+            let d = (0..3)
+                .map(|k| (atom.cart_pos[k] - centre[k]).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            if d > 2.0 * self.max_bond_dist {
+                continue;
+            }
+            let nbrs = find_coordination_neighbors_with_grid(
+                j,
+                self.atoms,
+                &self.grid,
+                &self.anions,
+                self.tolerance,
+                self.max_bond_dist,
+            );
+            if nbrs.len() < self.min_cn {
+                continue;
+            }
+            let shared = nbrs
+                .iter()
+                .filter(|&&n| vertices.iter().any(|v| close(self.atoms[n].cart_pos, *v)))
+                .count();
+            match shared {
+                0 => {}
+                1 => out.corner += 1,
+                2 => out.edge += 1,
+                _ => out.face += 1,
+            }
+        }
+        out
+    }
+}
+
+// ============================================================================
 // EDGES
 // ============================================================================
 
@@ -936,6 +1139,136 @@ mod tests {
         (pts, (0..n).collect())
     }
 
+    fn ra_at(el: &str, p: [f64; 3], i: usize) -> RenderAtom {
+        RenderAtom {
+            screen_pos: p,
+            cart_pos: p,
+            element: el.into(),
+            original_index: i,
+            unique_id: i,
+            is_ghost: false,
+            is_coord_only: false,
+            screen_radius: 1.0,
+        }
+    }
+
+    #[test]
+    fn connectivity_counts_corner_and_edge_sharing() {
+        // Ti1 at the origin. Ti2 shares one O with it (corner); Ti3 shares
+        // two (edge). All Ti–O distances are 1.95 Å.
+        let d = 1.95;
+        let mut atoms = vec![ra_at("Ti", [0.0, 0.0, 0.0], 0)];
+        fn add(atoms: &mut Vec<RenderAtom>, el: &str, p: [f64; 3]) {
+            let i = atoms.len();
+            atoms.push(ra_at(el, p, i));
+        }
+        for s in [-1.0, 1.0] {
+            add(&mut atoms, "O", [s * d, 0.0, 0.0]);
+            add(&mut atoms, "O", [0.0, s * d, 0.0]);
+            add(&mut atoms, "O", [0.0, 0.0, s * d]);
+        }
+        // Ti2 at (2d,0,0): shares the O at (d,0,0); its other five O are new.
+        add(&mut atoms, "Ti", [2.0 * d, 0.0, 0.0]);
+        for p in [
+            [3.0 * d, 0.0, 0.0],
+            [2.0 * d, d, 0.0],
+            [2.0 * d, -d, 0.0],
+            [2.0 * d, 0.0, d],
+            [2.0 * d, 0.0, -d],
+        ] {
+            add(&mut atoms, "O", p);
+        }
+        // Ti3 at (d,d,0): shares the O at (d,0,0) and (0,d,0) with Ti1.
+        add(&mut atoms, "Ti", [d, d, 0.0]);
+        for p in [[d, 2.0 * d, 0.0], [2.0 * d, d, 0.0], [d, d, d], [d, d, -d]] {
+            // (2d, d, 0) already exists as a Ti2 vertex; reuse it, don't duplicate.
+            if !atoms.iter().any(|a| {
+                (0..3).all(|k| (a.cart_pos[k] - p[k]).abs() < 1e-9)
+            }) {
+                add(&mut atoms, "O", p);
+            }
+        }
+
+        let enabled = vec!["Ti".to_string()];
+        let polys = build_polyhedra_for_draw(&atoms, &enabled, 1.15, 4, 12, 3.0, true);
+        let ti1 = polys
+            .iter()
+            .find(|p| p.center_idx == 0)
+            .expect("Ti1 octahedron");
+        assert_eq!(ti1.coordination_number, 6);
+
+        let ctx = ConnectivityContext::new(&atoms, 1.15, 4, 3.0);
+        let verts: Vec<[f64; 3]> = ti1.neighbor_indices.iter().map(|&i| atoms[i].cart_pos).collect();
+        let c = ctx.of(atoms[0].cart_pos, &verts, &enabled);
+        assert_eq!(c, Connectivity { corner: 1, edge: 1, face: 0 });
+    }
+
+    /// Signed volume of a hull: Σ v0·(v1×v2)/6 over outward faces. Origin-
+    /// independent only if the faces tile the surface exactly once.
+    fn hull_volume(pts: &[[f64; 3]], faces: &[Face]) -> f64 {
+        faces
+            .iter()
+            .map(|f| {
+                let p = |i: usize| v(pts[f.vertex_atom_indices[i]]);
+                p(0).dot(&p(1).cross(&p(2))) / 6.0
+            })
+            .sum()
+    }
+
+    #[test]
+    fn cube_hull_is_twelve_triangles_not_overlapping_copies() {
+        let mut pts = Vec::new();
+        for x in [-1.0, 1.0] {
+            for y in [-1.0, 1.0] {
+                for z in [-1.0, 1.0] {
+                    pts.push([x, y, z]);
+                }
+            }
+        }
+        let idx: Vec<usize> = (0..8).collect();
+        let faces = convex_hull_3d([0.0; 3], &pts, &idx);
+        assert_eq!(faces.len(), 12, "6 square faces x 2 triangles");
+        assert!((hull_volume(&pts, &faces) - 8.0).abs() < 1e-9);
+        // Shifting the whole shape must not change the volume.
+        let shifted: Vec<[f64; 3]> = pts.iter().map(|p| [p[0] + 5.0, p[1] - 3.0, p[2] + 2.0]).collect();
+        let faces = convex_hull_3d([5.0, -3.0, 2.0], &shifted, &idx);
+        assert!((hull_volume(&shifted, &faces) - 8.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn square_pyramid_volume_is_independent_of_the_origin() {
+        // The PbTiO3 TiO5 shape: a square base and an apex, with the cation
+        // INSIDE the pyramid but off-centre. Base 2x2, height 2: V = 8/3.
+        let base_z = 3.0;
+        let pts = vec![
+            [1.0, 1.0, base_z],
+            [1.0, -1.0, base_z],
+            [-1.0, 1.0, base_z],
+            [-1.0, -1.0, base_z],
+            [0.0, 0.0, base_z + 2.0],
+        ];
+        let idx: Vec<usize> = (0..5).collect();
+        let faces = convex_hull_3d([0.0, 0.0, base_z + 0.3], &pts, &idx);
+        assert_eq!(faces.len(), 6, "4 sides + base as 2 triangles");
+        assert!((hull_volume(&pts, &faces) - 8.0 / 3.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_cation_outside_its_polyhedron_does_not_flip_faces() {
+        // Orientation comes from the vertex centroid, so a centre that lies
+        // outside the hull must give the same faces and volume.
+        let pts = vec![
+            [1.0, 1.0, 0.0],
+            [1.0, -1.0, 0.0],
+            [-1.0, 1.0, 0.0],
+            [-1.0, -1.0, 0.0],
+            [0.0, 0.0, 2.0],
+        ];
+        let idx: Vec<usize> = (0..5).collect();
+        let faces = convex_hull_3d([0.0, 0.0, -1.5], &pts, &idx);
+        assert!((hull_volume(&pts, &faces) - 8.0 / 3.0).abs() < 1e-9);
+    }
+
     #[test]
     fn feature_edges_skip_the_diagonals_of_flat_faces() {
         // A unit cube: 6 square faces, each split into two triangles. Of the
@@ -972,12 +1305,10 @@ mod tests {
         };
         let flags = feature_edge_flags(&poly, &atoms);
         let kept: usize = flags.iter().flatten().filter(|&&b| b).count();
-        // Every real edge is shared by two faces' triangles; a flat square
-        // contributes its 4 boundary edges, once each per side.
-        let total: usize = flags.iter().map(|f| f.len()).sum();
-        assert!(kept < total, "diagonals must be dropped ({kept}/{total})");
-        // 12 cube edges, each present in 2 triangles along it (or 1 or 2).
-        assert!(kept >= 12, "all 12 cube edges must survive ({kept})");
+        // 12 triangles = 36 edge slots. The 6 diagonals sit in 2 slots each
+        // (dropped: 12); each of the 12 cube edges sits in 2 slots (kept: 24).
+        assert_eq!(flags.len(), 12);
+        assert_eq!(kept, 24);
     }
 
     #[test]

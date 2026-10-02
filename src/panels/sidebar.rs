@@ -704,6 +704,31 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
     });
     container.append(&btn_auto);
 
+    // ── Polyhedra report ─────────────────────────────────────────────────────
+    // Per-polyhedron metrics and linkage, written to Structure Info.
+    {
+        let btn_report = Button::with_label("Polyhedra report");
+        btn_report.set_tooltip_text(Some(
+            "Write polyhedron metrics (distortion, volume) and corner/edge/face \
+             linkage to Structure Info",
+        ));
+        btn_report.set_margin_bottom(6);
+        let s_rep = state.clone();
+        btn_report.connect_clicked(move |_| {
+            let st = s_rep.borrow();
+            let tab = st.active_tab();
+            let (atoms, _, _) =
+                crate::rendering::scene::calculate_scene(tab, &st.config, 800.0, 600.0, false, None, None);
+            match crate::utils::report::polyhedra_summary(tab, &atoms) {
+                Some(text) => console::info_report(&text),
+                None => console::log_info(
+                    "Polyhedra report: enable polyhedra first (Auto-detect, or pick elements below)",
+                ),
+            }
+        });
+        container.append(&btn_report);
+    }
+
     // ── Opacity slider ───────────────────────────────────────────────────────
     // Edits the active tab's copy of the saved polyhedra style; Preferences
     // holds the default for new tabs. Higher = more opaque.

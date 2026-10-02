@@ -2,7 +2,9 @@
 
 use crate::model::structure::Structure;
 use crate::physics::bond_valence::{analyze_structure, BVSQuality};
-use crate::state::SelectedAtom;
+use crate::rendering::polyhedra::{self, Polyhedron};
+use crate::rendering::scene::RenderAtom;
+use crate::state::{SelectedAtom, TabState};
 use crate::utils::geometry;
 use std::collections::HashMap;
 
@@ -297,4 +299,156 @@ pub fn measurement_report(picked: &[&SelectedAtom], structure: Option<&Structure
     )),
   }
   out
+}
+
+
+// ─── Polyhedra ───────────────────────────────────────────────────────────────
+
+/// Composition of a polyhedron as a formula, e.g. "TiO6" (centre first).
+fn polyhedron_formula(poly: &Polyhedron, atoms: &[RenderAtom]) -> String {
+  let mut counts: Vec<(String, usize)> = Vec::new();
+  for &i in &poly.neighbor_indices {
+    let el = &atoms[i].element;
+    match counts.iter_mut().find(|(e, _)| e == el) {
+      Some((_, n)) => *n += 1,
+      None => counts.push((el.clone(), 1)),
+    }
+  }
+  counts.sort();
+  let tail: String = counts
+    .iter()
+    .map(|(e, n)| if *n == 1 { e.clone() } else { format!("{e}{n}") })
+    .collect();
+  format!("{}{}", atoms[poly.center_idx].element, tail)
+}
+
+/// Metrics block for one polyhedron (shown when its centre atom is picked).
+pub fn polyhedron_report(poly: &Polyhedron, atoms: &[RenderAtom]) -> String {
+  let m = poly.metrics(atoms);
+  let centre = &atoms[poly.center_idx];
+  let ligand = {
+    let mut els: Vec<&str> = poly
+      .neighbor_indices
+      .iter()
+      .map(|&i| atoms[i].element.as_str())
+      .collect();
+    els.sort();
+    els.dedup();
+    if els.len() == 1 { els[0].to_string() } else { "X".to_string() }
+  };
+
+  let mut out = String::new();
+  out.push_str(&format!(
+    "Polyhedron {}  (centre {} #{})\n",
+    polyhedron_formula(poly, atoms),
+    centre.element,
+    centre.original_index
+  ));
+  out.push_str(&format!("  Coordination number    {}\n", poly.coordination_number));
+  out.push_str(&format!(
+    "  Mean {}–{} distance    {:.3} Å  (range {:.3}–{:.3})\n",
+    centre.element, ligand, m.mean_bond_length, m.bond_length_range.0, m.bond_length_range.1
+  ));
+  out.push_str(&format!("  Baur distortion Δ      {:.4}\n", m.baur_distortion));
+  match m.quadratic_elongation {
+    Some(l) => out.push_str(&format!("  Quadratic elongation   {:.4}\n", l)),
+    None => out.push_str("  Quadratic elongation   n/a (no reference polyhedron for this CN)\n"),
+  }
+  match m.bond_angle_variance {
+    Some(v) => out.push_str(&format!("  Bond-angle variance    {:.2} deg²\n", v)),
+    None => out.push_str("  Bond-angle variance    n/a (no reference polyhedron for this CN)\n"),
+  }
+  out.push_str(&format!("  Volume                 {:.3} Å³", m.volume));
+  out
+}
+
+/// Summary of every polyhedron in the cell: per formula, how many, their mean
+/// metrics, and how they link to each other. None if polyhedra are not shown.
+pub fn polyhedra_summary(tab: &TabState, atoms: &[RenderAtom]) -> Option<String> {
+  let settings = tab.style.polyhedra_settings.as_ref().filter(|s| s.show_polyhedra)?;
+  let polys = polyhedra::build_for_tab(atoms, tab)?;
+  // One representative per physical polyhedron: the ones centred in the cell,
+  // not their periodic images.
+  let base: Vec<&Polyhedron> = polys
+    .iter()
+    .filter(|p| !atoms[p.center_idx].is_ghost && !atoms[p.center_idx].is_coord_only)
+    .collect();
+  if base.is_empty() {
+    return Some("No polyhedra found with the current elements and bond range.".to_string());
+  }
+
+  // Group by formula.
+  let mut groups: Vec<(String, Vec<&Polyhedron>)> = Vec::new();
+  for p in &base {
+    let f = polyhedron_formula(p, atoms);
+    match groups.iter_mut().find(|(g, _)| *g == f) {
+      Some((_, v)) => v.push(p),
+      None => groups.push((f, vec![p])),
+    }
+  }
+  groups.sort_by(|a, b| a.0.cmp(&b.0));
+
+  let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len().max(1) as f64;
+  let mut out = String::from("Polyhedra summary\n");
+  out.push_str(&format!(
+    "{:<10} {:>3} {:>4} {:>9} {:>8} {:>8} {:>9} {:>9}\n",
+    "Polyhedron", "N", "CN", "⟨d⟩ (Å)", "Δ", "⟨λ⟩", "σ² (deg²)", "V (Å³)"
+  ));
+  let na = "—".to_string();
+  for (f, ps) in &groups {
+    let ms: Vec<_> = ps.iter().map(|p| p.metrics(atoms)).collect();
+    let opt_mean = |sel: &dyn Fn(&polyhedra::PolyhedronMetrics) -> Option<f64>| {
+      let v: Vec<f64> = ms.iter().filter_map(sel).collect();
+      if v.is_empty() { na.clone() } else { format!("{:.3}", mean(&v)) }
+    };
+    out.push_str(&format!(
+      "{:<10} {:>3} {:>4} {:>9.3} {:>8.4} {:>8} {:>9} {:>9.3}\n",
+      f,
+      ps.len(),
+      ps[0].coordination_number,
+      mean(&ms.iter().map(|m| m.mean_bond_length).collect::<Vec<_>>()),
+      mean(&ms.iter().map(|m| m.baur_distortion).collect::<Vec<_>>()),
+      opt_mean(&|m| m.quadratic_elongation),
+      opt_mean(&|m| m.bond_angle_variance),
+      mean(&ms.iter().map(|m| m.volume).collect::<Vec<_>>()),
+    ));
+  }
+
+  out.push_str("\nLinkage (other polyhedra sharing 1 / 2 / 3+ vertices; mean per polyhedron)\n");
+  // Asked of the structure's periodic images, not the scene: the scene only
+  // holds images near the cell, so polyhedra on a cell face would miss neighbours.
+  let images = tab
+    .structure
+    .as_ref()
+    .map(polyhedra::periodic_atoms)
+    .unwrap_or_default();
+  let ctx = polyhedra::ConnectivityContext::new(
+    &images,
+    tab.view.bond_cutoff,
+    settings.min_coordination,
+    settings.max_bond_dist,
+  );
+  for (f, ps) in &groups {
+    let conns: Vec<polyhedra::Connectivity> = ps
+      .iter()
+      .map(|p| {
+        let verts: Vec<[f64; 3]> = p.neighbor_indices.iter().map(|&i| atoms[i].cart_pos).collect();
+        ctx.of(atoms[p.center_idx].cart_pos, &verts, &settings.enabled_elements)
+      })
+      .collect();
+    let avg = |sel: &dyn Fn(&polyhedra::Connectivity) -> usize| {
+      conns.iter().map(|c| sel(c) as f64).sum::<f64>() / conns.len().max(1) as f64
+    };
+    out.push_str(&format!(
+      "  {:<10} corner {:.1}   edge {:.1}   face {:.1}\n",
+      f,
+      avg(&|c| c.corner),
+      avg(&|c| c.edge),
+      avg(&|c| c.face)
+    ));
+  }
+  out.push_str(
+    "\nΔ: Baur (1974).  ⟨λ⟩, σ²: Robinson et al. (1971); — where no reference polyhedron exists.",
+  );
+  Some(out)
 }

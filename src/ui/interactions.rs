@@ -262,6 +262,7 @@ pub fn setup_interactions(
         }
 
         if let Some(sel) = clicked {
+            let clicked_id = sel.unique_id;
             st.toggle_selection(sel);
 
             let tab = st.active_tab();
@@ -270,6 +271,19 @@ pub fn setup_interactions(
             let picked = tab.interaction.selected_in_order();
             let text = report::measurement_report(&picked, tab.structure.as_ref());
             console::info(&text);
+
+            // Picking the centre atom of a polyhedron also reports its
+            // coordination geometry.
+            if tab.interaction.selected.contains_key(&clicked_id) {
+                if let Some(polys) = crate::rendering::polyhedra::build_for_tab(&atoms, tab) {
+                    if let Some(p) = polys
+                        .iter()
+                        .find(|p| atoms[p.center_idx].unique_id == clicked_id)
+                    {
+                        console::info(&report::polyhedron_report(p, &atoms));
+                    }
+                }
+            }
 
             da.queue_draw();
         }

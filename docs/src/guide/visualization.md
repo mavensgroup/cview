@@ -148,8 +148,22 @@ A coordination polyhedron is the 3D shape formed by connecting the nearest-neigh
 1. **Auto-detect Polyhedra** button: Automatically enables polyhedra for elements with average coordination number 4–8
 2. **Per-element checkboxes**: Manually enable/disable polyhedra for specific elements
    - Checkbox labels show the average CN (e.g., "Ti (CN 6)")
-3. **Poly Transparency** slider: Adjust polyhedra opacity (5–95%)
-4. **Poly Color** control: Use the central element colour or choose a custom colour
+3. **Poly Opacity** slider: Adjust polyhedra opacity (5–95%; higher is more opaque). This sets the value for the current structure; the default for new tabs is in Preferences → Polyhedra.
+4. **Color by** dropdown: what colours the polyhedra
+   - **Element** (the central atom's colour) or **Custom color**
+   - **A computed property**: coordination number, mean bond length, Baur distortion Δ, quadratic elongation ⟨λ⟩, bond-angle variance σ², or volume. A colour scale is drawn in the bottom-right of the viewport and in exported images. The scale follows the range of the polyhedra on screen; if they all share one value, the legend states it instead of drawing a gradient. Where a property is undefined for a polyhedron (⟨λ⟩ and σ² need a reference shape for that coordination number), it is drawn grey.
+5. **Polyhedra report** button: writes a summary to *Structure Info*: per polyhedron type, the count, mean metrics, and how the polyhedra link (the mean number of other polyhedra each shares one vertex = corner, two = edge, three or more = face). Linkage is computed from the structure's own periodic images, so polyhedra on the cell boundary are counted correctly.
+
+**Inspecting one polyhedron**: click the central atom of a polyhedron in the viewport. Besides the usual selection report, *Structure Info* lists its coordination number, mean and range of bond lengths, Δ, ⟨λ⟩, σ² and volume.
+
+### Appearance (Preferences → Polyhedra)
+
+How polyhedra are drawn is a saved preference, separate from what is shown:
+
+- **Edges**: None, Subtle (default) or Strong. Only real polyhedron edges are drawn, not the diagonals across flat faces.
+- **Default opacity**, **Back-face opacity** (faces turned away from you are drawn fainter, which keeps overlapping polyhedra readable), **Shading strength** (0 is flat), **Mute element colors**, and the **Colormap** used for property colouring.
+
+Changes apply to the current structure immediately and are used for new tabs. Which elements are shown, the colour-by choice and the bond range belong to the structure and are not saved.
 
 ### How Polyhedra are Computed
 
@@ -157,7 +171,7 @@ A coordination polyhedron is the 3D shape formed by connecting the nearest-neigh
 1. Identify cation centers (user-selected or auto-detected)
 2. Find nearest anion neighbors within the bond cutoff distance
 3. Compute the **convex hull** of the anion positions
-4. Filter degenerate faces (coplanar vertices)
+4. Merge coplanar vertices into single flat faces (a square face is one polygon, triangulated once)
 5. Render with proper depth sorting (Polyhedra → Bonds → Atoms)
 
 **Critical detail**: Polyhedra vertices are restricted to **anions only**. This prevents chemically meaningless polyhedra (e.g., around O in oxides).
@@ -167,7 +181,7 @@ A coordination polyhedron is the 3D shape formed by connecting the nearest-neigh
 
 ### Settings
 
-Polyhedra use the configured bond tolerance, a maximum bond-distance cap, and an internal coordination range of 4–12. The current UI exposes element selection, auto-detection, transparency, and element/custom colour controls; it does not expose coordination-number filters in Preferences.
+Polyhedra use the configured bond tolerance, a maximum bond-distance cap, and an internal coordination range of 4–12. The sidebar exposes element selection, auto-detection, opacity, colour-by and the bond range; Preferences exposes how polyhedra are drawn. Coordination-number filters are not exposed.
 
 ### Practical Example: BaTiO₃
 

@@ -143,15 +143,7 @@ fn draw_all_polyhedra(
     };
     let style = &tab.style.polyhedra_style;
 
-    let built = polyhedra::build_polyhedra_for_draw(
-        atoms,
-        &settings.enabled_elements,
-        tab.view.bond_cutoff,
-        settings.min_coordination,
-        settings.max_coordination,
-        settings.max_bond_dist,
-        tab.view.show_full_unit_cell,
-    );
+    let built = polyhedra::build_for_tab(atoms, tab)?;
 
     // Property colouring: one value per polyhedron, scaled to the range of
     // the polyhedra on screen.
@@ -219,8 +211,22 @@ fn draw_all_polyhedra(
                 polyhedra_lighting::desaturate(base, style.desaturation)
             }
         };
-        let center_cart = atoms[poly.center_idx].cart_pos;
-        let center_screen = atoms[poly.center_idx].screen_pos;
+        // The vertex centroid is always inside the polyhedron; the cation can
+        // sit outside it (off-centre Ti in a ferroelectric), which would flip
+        // the lighting normals and the front/back test.
+        let nv = poly.neighbor_indices.len().max(1) as f64;
+        let mean = |f: &dyn Fn(&RenderAtom) -> [f64; 3]| {
+            let mut c = [0.0; 3];
+            for &i in &poly.neighbor_indices {
+                let p = f(&atoms[i]);
+                for k in 0..3 {
+                    c[k] += p[k] / nv;
+                }
+            }
+            c
+        };
+        let center_cart = mean(&|a| a.cart_pos);
+        let center_screen = mean(&|a| a.screen_pos);
         let flags = polyhedra::feature_edge_flags(poly, atoms);
 
         for (fi, face) in poly.faces.iter().enumerate() {
