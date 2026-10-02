@@ -73,9 +73,25 @@ pub fn build(
     btn_change.set_valign(Align::End);
     row_change.append(&btn_change);
 
+    // Mix the new element into the selected sites instead of swapping.
+    let spin_sel_frac = SpinButton::with_range(0.01, 0.99, 0.01);
+    spin_sel_frac.set_digits(2);
+    spin_sel_frac.set_value(0.5);
+    spin_sel_frac.set_hexpand(true);
+    let btn_mix_sel = Button::with_label("Mix in");
+    btn_mix_sel.set_valign(Align::End);
+    btn_mix_sel.set_tooltip_text(Some(
+        "Make each selected site a mix: it keeps its element and the new element \
+         takes this fraction of the site (a partial occupancy, for disordered alloys)",
+    ));
+    let row_mix_sel = GtkBox::new(Orientation::Horizontal, 8);
+    row_mix_sel.append(&captioned("Fraction of new element", &spin_sel_frac));
+    row_mix_sel.append(&btn_mix_sel);
+
     let sel_body = card_body(8);
     sel_body.append(&lbl_count);
     sel_body.append(&row_change);
+    sel_body.append(&row_mix_sel);
     controls.append(&group("Selected atoms", &sel_body));
 
     // --- Replace an element: all of it, or some of it ---
@@ -112,6 +128,17 @@ pub fn build(
     let btn_sub = Button::with_label("Replace");
     btn_sub.set_sensitive(false);
 
+    // Mix the new element in as a partial occupancy instead of swapping it in.
+    let check_mix = CheckButton::with_label("Mix in as a partial occupancy (disordered site)");
+    let spin_frac = SpinButton::with_range(0.01, 0.99, 0.01);
+    spin_frac.set_digits(2);
+    spin_frac.set_value(0.5);
+    spin_frac.set_hexpand(true);
+    spin_frac.set_sensitive(false);
+    let row_frac = GtkBox::new(Orientation::Vertical, 4);
+    row_frac.append(&check_mix);
+    row_frac.append(&captioned("Fraction of Replace-with on each site", &spin_frac));
+
     let row_rand = GtkBox::new(Orientation::Horizontal, 8);
     row_rand.append(&check_random);
     btn_repick.set_halign(Align::End);
@@ -120,7 +147,9 @@ pub fn build(
 
     let sub_note = Label::new(Some(
         "Replacing fewer than all gives a partial substitution, e.g. one O of \
-         three. The atoms it will change are ringed in the preview.",
+         three. Mixing keeps both elements on each chosen site at fractional \
+         occupancies, e.g. O 0.67 / N 0.33. The atoms it will change are \
+         ringed in the preview.",
     ));
     sub_note.set_wrap(true);
     sub_note.set_xalign(0.0);
@@ -130,6 +159,7 @@ pub fn build(
     sub_body.append(&row_sub);
     sub_body.append(&row_count);
     sub_body.append(&row_rand);
+    sub_body.append(&row_frac);
     sub_body.append(&sub_note);
     sub_body.append(&btn_sub);
     controls.append(&group("Replace an element", &sub_body));
@@ -230,6 +260,13 @@ pub fn build(
         check_random.connect_toggled(move |_| r());
     }
     {
+        let (spin, btn) = (spin_frac.clone(), btn_sub.clone());
+        check_mix.connect_toggled(move |c| {
+            spin.set_sensitive(c.is_active());
+            btn.set_label(if c.is_active() { "Mix in" } else { "Replace" });
+        });
+    }
+    {
         let (r, seed) = (refresh_replace.clone(), seed.clone());
         btn_repick.connect_clicked(move |_| {
             seed.set(seed.get().wrapping_add(1));
@@ -242,11 +279,13 @@ pub fn build(
         let state = state.clone();
         let lbl = lbl_count.clone();
         let btn = btn_change.clone();
+        let mix_btn = btn_mix_sel.clone();
         let rr = refresh_replace.clone();
         Rc::new(move || {
             let n = selected_original_indices(&state.borrow()).len();
             lbl.set_text(&format!("{} atom(s) selected in the main view", n));
             btn.set_sensitive(n > 0);
+            mix_btn.set_sensitive(n > 0);
             // The preview highlight depends on both the selection and the
             // replace picks; rebuild it from the latter.
             rr();
@@ -308,16 +347,83 @@ pub fn build(
             refresh();
         });
     }
+    // Mixing: shared by the Selected atoms card and the Replace card. Atoms are
+    // re-indexed (a species is inserted), so per-atom overrides and the
+    // selection no longer apply and are cleared.
+    let apply_mix: Rc<dyn Fn(Vec<usize>, String, f64)> = {
+        let state = state.clone();
+        let nb = main_notebook.downgrade();
+        let refresh = refresh.clone();
+        Rc::new(move |indices: Vec<usize>, new_el: String, fraction: f64| {
+            if indices.is_empty() || new_el.is_empty() {
+                return;
+            }
+            {
+                let mut s = state.borrow_mut();
+                let tab = s.active_tab_mut();
+                if let Some(current) = &tab.structure {
+                    let new_s = basis::mix_sites(current, &indices, &new_el, fraction);
+                    if new_s.atoms.len() == current.atoms.len()
+                        && new_s
+                            .atoms
+                            .iter()
+                            .zip(&current.atoms)
+                            .all(|(a, b)| a.occupancy == b.occupancy)
+                    {
+                        crate::utils::console::log_info(&format!(
+                            "Mixed occupancy: nothing to mix ({} is already the element)",
+                            new_el
+                        ));
+                        return;
+                    }
+                    tab.structure = Some(new_s);
+                    tab.interaction.selected.clear();
+                    tab.overrides.clear();
+                    tab.invalidate_derived();
+                    if let Some(s) = &tab.structure {
+                        crate::utils::console::structure_changed(
+                            &format!(
+                                "Mixed occupancy: {} site(s) now {:.0}% {}",
+                                indices.len(),
+                                fraction * 100.0,
+                                new_el
+                            ),
+                            s,
+                        );
+                    }
+                }
+            }
+            redraw_main(&nb);
+            refresh();
+        })
+    };
+    {
+        let state = state.clone();
+        let (entry, frac) = (entry_el.clone(), spin_sel_frac.clone());
+        let apply_mix = apply_mix.clone();
+        btn_mix_sel.connect_clicked(move |_| {
+            let indices = selected_original_indices(&state.borrow());
+            apply_mix(indices, entry.text().to_string(), frac.value());
+        });
+    }
     {
         let state = state.clone();
         let nb = main_notebook.downgrade();
         let (find, repl) = (entry_find.clone(), entry_replace.clone());
         let (picks, seed) = (picks.clone(), seed.clone());
+        let (check_mix, spin_frac) = (check_mix.clone(), spin_frac.clone());
+        let apply_mix = apply_mix.clone();
         let rr = refresh_replace.clone();
         btn_sub.connect_clicked(move |_| {
             let (from, to) = (find.text().to_string(), repl.text().to_string());
             let chosen = picks.borrow().clone();
             if from.is_empty() || to.is_empty() || chosen.is_empty() {
+                return;
+            }
+            if check_mix.is_active() {
+                apply_mix(chosen, to, spin_frac.value());
+                seed.set(seed.get().wrapping_add(1));
+                rr();
                 return;
             }
             {

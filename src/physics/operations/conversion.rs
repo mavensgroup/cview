@@ -19,6 +19,13 @@ pub enum CellType {
 }
 
 pub fn convert_structure(structure: &Structure, cell_type: CellType) -> Result<Structure, String> {
+    // Standardization keys atoms by element and treats coincident atoms as an
+    // error or merges them, so a mixed site cannot go through it.
+    if structure.atoms.iter().any(|a| a.occupancy < 0.999) {
+        return Err("Primitive/conventional conversion does not support partially \
+                    occupied sites. Convert the cell first, then set the mixed occupancies."
+            .to_string());
+    }
     // 1. Build element ↔ integer mapping using atomic numbers.
     //    This is scientifically correct (unique per element) and avoids
     //    fragile alphabetical-sort or insertion-order schemes.
@@ -117,21 +124,28 @@ pub fn convert_structure(structure: &Structure, cell_type: CellType) -> Result<S
 }
 
 /// Build a chemical formula string sorted alphabetically (e.g. "Cl6Cs2Mo").
+/// Counts are summed occupancies, so a mixed site contributes its fractions
+/// (e.g. "BaN0.33O2.67Ti"); a fully ordered structure reads as before.
 pub(crate) fn build_formula(atoms: &[Atom]) -> String {
-    let mut counts: HashMap<&str, usize> = HashMap::new();
+    let mut counts: HashMap<&str, f64> = HashMap::new();
     for atom in atoms {
-        *counts.entry(&atom.element).or_insert(0) += 1;
+        *counts.entry(&atom.element).or_insert(0.0) += atom.occupancy.clamp(0.0, 1.0);
     }
     let mut parts: Vec<_> = counts.into_iter().collect();
     parts.sort_by(|a, b| a.0.cmp(b.0));
 
     parts
         .iter()
-        .map(|(el, count)| {
-            if *count > 1 {
-                format!("{}{}", el, count)
+        .filter(|(_, n)| *n >= 0.005)
+        .map(|(el, n)| {
+            if (n - n.round()).abs() < 0.005 {
+                match n.round() as usize {
+                    1 => (*el).to_string(),
+                    c => format!("{}{}", el, c),
+                }
             } else {
-                (*el).to_string()
+                let frac = format!("{:.2}", n);
+                format!("{}{}", el, frac.trim_end_matches('0').trim_end_matches('.'))
             }
         })
         .collect::<Vec<_>>()

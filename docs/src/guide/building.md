@@ -39,6 +39,27 @@ For a disordered model you usually want a supercell first (`Structure → Superc
 >[!NOTE]
 >This operation preserves all atomic positions and lattice parameters — only the element identity changes. The structure's formula is updated to match.
 
+### Mixed Occupancy (Disordered Sites)
+
+For a disordered alloy or solid solution you want each site to hold *both* elements at fractional occupancies (for example Fe₀.₅Ni₀.₅, or O₀.₆₇N₀.₃₃), not a fixed pattern of swapped atoms.
+
+**In the Basis tab**
+1. In **Replace an element**, enter *Find* and *Replace with* as usual and choose how many sites to affect (all by default; the count and **Choose at random** work as above).
+2. Tick **Mix in as a partial occupancy**, set the **Fraction of Replace-with on each site**, and click **Mix in**.
+
+Each chosen site keeps its element at `1 − fraction` of its occupancy, and the new element takes `fraction`, at the same position. For example, mixing N into every O of BaTiO₃ at 0.33 leaves three sites of O 0.67 / N 0.33.
+
+To mix specific sites by hand, select them in the main view and use **Mix in** under **Selected atoms**.
+
+**What you will see**: the main view and the Structure preview draw a mixed site as a sphere split into sectors by occupancy. Structure Info gains an `Occ` column and the formula carries the fractions (for example `BaN0.33O2.67Ti`).
+
+**What uses the occupancies**: XRD and bond-valence sums weight each species by its occupancy (a virtual-crystal approximation). Supercells copy mixed sites unchanged.
+
+>[!WARNING]
+>**Slab generation and primitive/conventional conversion do not support mixed sites** and will refuse with a message rather than return a wrong structure. Build the slab or convert the cell first, then set the mixed occupancies.
+>
+>**Saving**: POSCAR, QE, XYZ and SPR-KKR have no occupancy field here, so a mixed site is written as two atoms at the same position and a warning is logged. There is no CIF writer yet, so the occupancies cannot currently be saved to a file.
+
 ### Selection-Based Editing
 
 **Selective Modification**: Change the element type of specific atoms rather than all instances.

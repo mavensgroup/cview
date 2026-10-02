@@ -28,6 +28,14 @@ pub fn generate_slab(
     if structure.atoms.is_empty() {
         return Err("Input structure has no atoms".to_string());
     }
+    // The slab pipeline rebuilds every atom at full occupancy and merges
+    // atoms at the same position, which would drop one species of a mixed
+    // site. Refuse rather than return a wrong structure.
+    if structure.atoms.iter().any(|a| a.occupancy < 0.999) {
+        return Err("Slab generation does not support partially occupied sites. \
+                    Build the slab first, then set the mixed occupancies."
+            .to_string());
+    }
 
     // ========== 1. CONSTRUCT LATTICE MATRIX ==========
     // Lattice vectors as columns

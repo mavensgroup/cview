@@ -13,6 +13,7 @@
 
 use crate::model::elements::get_element_color;
 use crate::model::structure::Structure;
+use crate::rendering::occupancy::PartialSites;
 use crate::state::AppState;
 use gtk4::glib;
 use gtk4::prelude::*;
@@ -226,8 +227,13 @@ fn draw(st: &AppState, d: &PreviewData, cr: &gtk4::cairo::Context, w: i32, h: i3
 
     // Points to draw: (cartesian, atom index). A periodic cell also draws the
     // images that sit on its faces and edges, as the Slab canvas does.
+    // A mixed site is one atom drawn as a pie; its other species are skipped.
+    let sites = PartialSites::build(structure);
     let mut pts: Vec<([f64; 3], usize)> = Vec::new();
     for (i, a) in structure.atoms.iter().enumerate() {
+        if sites.is_hidden(i) {
+            continue;
+        }
         if periodic {
             if let Some(f) = to_frac(a.position) {
                 for dx in -1..=1 {
@@ -331,10 +337,39 @@ fn draw(st: &AppState, d: &PreviewData, cr: &gtk4::cairo::Context, w: i32, h: i3
     for (x, y, _, i) in drawn {
         let el = &structure.atoms[i].element;
         let (r, g, b) = colors.get(el).copied().unwrap_or((0.0, 0.5, 0.5));
-        cr.new_path();
-        cr.arc(x, y, radius, 0.0, 2.0 * PI);
-        cr.set_source_rgba(r, g, b, 0.85);
-        let _ = cr.fill();
+        match sites.members(i) {
+            // A mixed site: flat sectors sized by occupancy, clockwise from
+            // 12 o'clock, any vacant share left white.
+            Some(members) if members.len() > 1 || structure.atoms[i].occupancy < 0.999 => {
+                let mut start = -PI / 2.0;
+                for &m in members {
+                    let atom = &structure.atoms[m];
+                    let (sr, sg, sb) = colors
+                        .get(&atom.element)
+                        .copied()
+                        .unwrap_or((0.0, 0.5, 0.5));
+                    let end = start + atom.occupancy.clamp(0.0, 1.0) * 2.0 * PI;
+                    cr.new_path();
+                    cr.move_to(x, y);
+                    cr.arc(x, y, radius, start, end);
+                    cr.close_path();
+                    cr.set_source_rgba(sr, sg, sb, 0.85);
+                    let _ = cr.fill();
+                    start = end;
+                }
+                cr.new_path();
+                cr.arc(x, y, radius, 0.0, 2.0 * PI);
+                cr.set_source_rgba(0.2, 0.2, 0.2, 0.7);
+                cr.set_line_width(0.8);
+                let _ = cr.stroke();
+            }
+            _ => {
+                cr.new_path();
+                cr.arc(x, y, radius, 0.0, 2.0 * PI);
+                cr.set_source_rgba(r, g, b, 0.85);
+                let _ = cr.fill();
+            }
+        }
 
         if hl.contains(&i) {
             // Dark ring (as the Slab canvas marks a selected atom): the atoms

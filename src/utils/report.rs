@@ -22,9 +22,11 @@ pub fn structure_summary_after(structure: &Structure, operation: &str) -> String
 }
 
 fn summary_with_header(structure: &Structure, header: &str) -> String {
-  let mut counts: HashMap<String, usize> = HashMap::new();
+  // Summed occupancies, so a mixed site reads as its fractions (N0.33 O2.67)
+  // rather than as two whole atoms.
+  let mut counts: HashMap<String, f64> = HashMap::new();
   for atom in &structure.atoms {
-    *counts.entry(atom.element.clone()).or_insert(0) += 1;
+    *counts.entry(atom.element.clone()).or_insert(0.0) += atom.occupancy.clamp(0.0, 1.0);
   }
 
   let mut parts: Vec<_> = counts.into_iter().collect();
@@ -32,25 +34,45 @@ fn summary_with_header(structure: &Structure, header: &str) -> String {
 
   let formula_str: String = parts
     .iter()
-    .map(|(el, n)| format!("{}{}", el, n))
+    .map(|(el, n)| {
+      if (n - n.round()).abs() < 0.005 {
+        format!("{}{}", el, n.round() as usize)
+      } else {
+        let f = format!("{:.2}", n);
+        format!("{}{}", el, f.trim_end_matches('0').trim_end_matches('.'))
+      }
+    })
     .collect::<Vec<_>>()
     .join(" ");
+
+  // An occupancy column appears only when some site is partly occupied.
+  let partial = structure.atoms.iter().any(|a| a.occupancy < 0.999);
+  let rule = if partial {
+    "-----------------------------------------------------------\n"
+  } else {
+    "--------------------------------------------------\n"
+  };
 
   let mut out = String::new();
   out.push_str(&format!("{}\n", header));
   out.push_str(&format!("Formula: {}\n", formula_str));
-  out.push_str("--------------------------------------------------\n");
+  out.push_str(rule);
   out.push_str(&format!(
-    "{:<8} {:<8} {:<10} {:<10} {:<10}\n",
+    "{:<8} {:<8} {:<10} {:<10} {:<10}",
     "Index", "Element", "X", "Y", "Z"
   ));
-  out.push_str("--------------------------------------------------\n");
+  out.push_str(if partial { " Occ\n" } else { "\n" });
+  out.push_str(rule);
 
   for (i, atom) in structure.atoms.iter().take(20).enumerate() {
     out.push_str(&format!(
-      "{:<8} {:<8} {:<10.4} {:<10.4} {:<10.4}\n",
+      "{:<8} {:<8} {:<10.4} {:<10.4} {:<10.4}",
       i, atom.element, atom.position[0], atom.position[1], atom.position[2]
     ));
+    if partial {
+      out.push_str(&format!(" {:.2}", atom.occupancy));
+    }
+    out.push('\n');
   }
   if structure.atoms.len() > 20 {
     out.push_str(&format!(

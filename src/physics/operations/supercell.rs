@@ -127,9 +127,9 @@ pub fn transform(structure: &Structure, matrix: [[i32; 3]; 3]) -> Structure {
     }
 
     Structure {
+        formula: crate::physics::operations::conversion::build_formula(&new_atoms),
         atoms: new_atoms,
         lattice: new_lattice,
-        formula: structure.formula.clone(),
         is_periodic: structure.is_periodic,
     }
 }

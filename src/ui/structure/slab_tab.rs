@@ -148,7 +148,11 @@ pub fn build(state: Rc<RefCell<AppState>>) -> (Box, std::boxed::Box<dyn Fn()>) {
 
             if let Some(inv_lat) = lat_mat.try_inverse() {
                 let to_frac = inv_lat.transpose();
-                for atom in &structure.atoms {
+                let sites = crate::rendering::occupancy::PartialSites::build(structure);
+                for (ai, atom) in structure.atoms.iter().enumerate() {
+                    if sites.is_hidden(ai) {
+                        continue;
+                    }
                     let cart = Vector3::new(atom.position[0], atom.position[1], atom.position[2]);
                     let frac = to_frac * cart;
 
