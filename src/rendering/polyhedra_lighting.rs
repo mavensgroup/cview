@@ -44,57 +44,84 @@ fn shade_color(rgb: (f64, f64, f64), brightness: f64) -> (f64, f64, f64) {
     )
 }
 
-fn edge_color(rgb: (f64, f64, f64), brightness: f64, alpha: f64) -> (f64, f64, f64, f64) {
-    let eb = (brightness * 0.55).clamp(0.0, 1.0);
+// ── Colour helpers ────────────────────────────────────────────────────────────
+
+/// Pull a colour toward its grey by `amount` (0 = unchanged, 1 = grey).
+pub fn desaturate(rgb: (f64, f64, f64), amount: f64) -> (f64, f64, f64) {
+    let lum = 0.299 * rgb.0 + 0.587 * rgb.1 + 0.114 * rgb.2;
+    let a = amount.clamp(0.0, 1.0);
     (
-        (rgb.0 * eb).clamp(0.0, 1.0),
-        (rgb.1 * eb).clamp(0.0, 1.0),
-        (rgb.2 * eb).clamp(0.0, 1.0),
-        (alpha * 0.85).clamp(0.0, 1.0),
+        rgb.0 + a * (lum - rgb.0),
+        rgb.1 + a * (lum - rgb.1),
+        rgb.2 + a * (lum - rgb.2),
     )
+}
+
+/// Face brightness: full Lambertian contrast at `strength` 1, flat at 0.
+fn brightness(normal: Vector3<f64>, strength: f64) -> f64 {
+    1.0 - strength.clamp(0.0, 1.0) * (1.0 - lambertian(normal))
 }
 
 // ── Cairo draw ────────────────────────────────────────────────────────────────
 
-/// Draw a shaded triangle.
-/// `screen_verts`: [x, y, z(depth)] — x/y for drawing, z for depth sort only.
-/// `cart_verts` + `poly_center_cart`: Cartesian coords used for the lighting normal.
-pub fn draw_shaded_face(
-    cr: &cairo::Context,
-    screen_verts: &[[f64; 3]],
-    cart_verts: [[f64; 3]; 3],
-    poly_center_cart: [f64; 3],
-    base_color: (f64, f64, f64),
-    alpha: f64,
-    draw_edges: bool,
-) {
-    if screen_verts.len() < 3 {
+/// Everything needed to draw one triangular face.
+pub struct FaceDraw<'a> {
+    /// [x, y, z(depth)] per vertex: x/y for drawing, z for depth sort only.
+    pub screen_verts: &'a [[f64; 3]],
+    /// Cartesian vertices and polyhedron centre: used for the lighting normal.
+    pub cart_verts: [[f64; 3]; 3],
+    pub poly_center_cart: [f64; 3],
+    pub color: (f64, f64, f64),
+    /// Effective opacity for this face (already scaled for back faces).
+    pub alpha: f64,
+    /// Which of the three edges (v0v1, v1v2, v2v0) are real polyhedron edges
+    /// rather than triangulation diagonals across a flat face.
+    pub edge_flags: [bool; 3],
+    pub style: &'a crate::config::PolyhedraStyle,
+}
+
+/// Draw a shaded triangle, then its real edges as the style asks.
+pub fn draw_shaded_face(cr: &cairo::Context, f: &FaceDraw) {
+    use crate::config::EdgeStyle;
+    if f.screen_verts.len() < 3 {
         return;
     }
-
     let normal = face_normal(
-        cart_verts[0],
-        cart_verts[1],
-        cart_verts[2],
-        poly_center_cart,
+        f.cart_verts[0],
+        f.cart_verts[1],
+        f.cart_verts[2],
+        f.poly_center_cart,
     );
-    let brightness = lambertian(normal);
-    let shaded = shade_color(base_color, brightness);
+    let b = brightness(normal, f.style.shading);
+    let shaded = shade_color(f.color, b);
 
-    cr.move_to(screen_verts[0][0], screen_verts[0][1]);
-    for v in &screen_verts[1..] {
+    cr.new_path();
+    cr.move_to(f.screen_verts[0][0], f.screen_verts[0][1]);
+    for v in &f.screen_verts[1..3] {
         cr.line_to(v[0], v[1]);
     }
     cr.close_path();
+    cr.set_source_rgba(shaded.0, shaded.1, shaded.2, f.alpha);
+    cr.fill().ok();
 
-    cr.set_source_rgba(shaded.0, shaded.1, shaded.2, alpha);
-    if draw_edges {
-        cr.fill_preserve().ok();
-        let (er, eg, eb, ea) = edge_color(base_color, brightness, alpha);
-        cr.set_source_rgba(er, eg, eb, ea);
-        cr.set_line_width(0.8);
-        cr.stroke().ok();
-    } else {
-        cr.fill().ok();
+    let (width, darken, edge_alpha) = match f.style.edge_style {
+        EdgeStyle::None => return,
+        EdgeStyle::Subtle => (0.8, 0.72, (f.alpha + 0.25).clamp(0.35, 0.8)),
+        EdgeStyle::Strong => (1.5, 0.42, (f.alpha + 0.5).clamp(0.6, 0.95)),
+    };
+    cr.set_source_rgba(
+        shaded.0 * darken,
+        shaded.1 * darken,
+        shaded.2 * darken,
+        edge_alpha,
+    );
+    cr.set_line_width(width);
+    for k in 0..3 {
+        if f.edge_flags[k] {
+            let (v0, v1) = (f.screen_verts[k], f.screen_verts[(k + 1) % 3]);
+            cr.move_to(v0[0], v0[1]);
+            cr.line_to(v1[0], v1[1]);
+        }
     }
+    cr.stroke().ok();
 }

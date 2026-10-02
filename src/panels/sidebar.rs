@@ -704,26 +704,21 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
     });
     container.append(&btn_auto);
 
-    // ── Transparency slider (global, shown once) ─────────────────────────────
+    // ── Opacity slider ───────────────────────────────────────────────────────
+    // Edits the active tab's copy of the saved polyhedra style; Preferences
+    // holds the default for new tabs. Higher = more opaque.
     {
         let trans_row = GtkBox::new(Orientation::Horizontal, 8);
         trans_row.append(
             &Label::builder()
-                .label("Poly Transparency:")
+                .label("Poly Opacity:")
                 .halign(Align::Start)
                 .build(),
         );
 
-        let current_trans = state
-            .borrow()
-            .active_tab()
-            .style
-            .polyhedra_settings
-            .as_ref()
-            .map(|ps| ps.transparency)
-            .unwrap_or(0.3);
+        let current = state.borrow().active_tab().style.polyhedra_style.opacity;
 
-        let adj = gtk4::Adjustment::new(current_trans, 0.05, 0.95, 0.05, 0.05, 0.0);
+        let adj = gtk4::Adjustment::new(current, 0.05, 0.95, 0.05, 0.05, 0.0);
         let trans_scale = gtk4::Scale::new(Orientation::Horizontal, Some(&adj));
         trans_scale.set_digits(2);
         trans_scale.set_draw_value(true);
@@ -734,14 +729,7 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
         let s_tr = state.clone();
         let nb_tr = nb_weak.clone();
         trans_scale.connect_value_changed(move |sc| {
-            let v = sc.value();
-            let mut st = s_tr.borrow_mut();
-            let tab = st.active_tab_mut();
-            if tab.style.polyhedra_settings.is_none() {
-                tab.style.polyhedra_settings = Some(crate::config::PolyhedraSettings::default());
-            }
-            tab.style.polyhedra_settings.as_mut().unwrap().transparency = v;
-            drop(st);
+            s_tr.borrow_mut().active_tab_mut().style.polyhedra_style.opacity = sc.value();
             if let Some(nb) = nb_tr.upgrade() {
                 if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
                     da.queue_draw();
@@ -752,101 +740,99 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
         container.append(&trans_row);
     }
 
-    // ── Polyhedra color picker ─────────────────────────────────────────────────
+    // ── Colour by ────────────────────────────────────────────────────────────
+    // What colours the polyhedra: the element, one chosen colour, or a computed
+    // property (distortion, bond length, ...) with a colour scale on the canvas.
     {
+        use crate::config::{PolyProperty, PolyhedraColorMode as Mode};
+
         let color_row = GtkBox::new(Orientation::Horizontal, 8);
         color_row.append(
             &Label::builder()
-                .label("Poly Color:")
+                .label("Color by:")
                 .halign(Align::Start)
                 .build(),
         );
 
-        // Current custom color (if any)
-        let current_custom = state
+        // Index 0 = element, 1 = custom colour, 2.. = PolyProperty::ALL.
+        let mut names: Vec<&str> = vec!["Element", "Custom color"];
+        names.extend(PolyProperty::ALL.iter().map(|p| p.label()));
+        let dd_color = gtk4::DropDown::from_strings(&names);
+        dd_color.set_hexpand(true);
+
+        let current_mode = state
             .borrow()
             .active_tab()
             .style
             .polyhedra_settings
             .as_ref()
-            .and_then(|ps| {
-                if let crate::config::PolyhedraColorMode::Custom(r, g, b) = ps.color_mode {
-                    Some((r, g, b))
-                } else {
-                    None
-                }
-            });
-
-        let is_element_mode = current_custom.is_none();
-
-        // "Use element color" checkbox
-        let check_elem_color = gtk4::CheckButton::with_label("Element");
-        check_elem_color.set_active(is_element_mode);
+            .map(|ps| ps.color_mode.clone())
+            .unwrap_or(Mode::Element);
+        dd_color.set_selected(match &current_mode {
+            Mode::Element => 0,
+            Mode::Custom(..) => 1,
+            Mode::Property(p) => {
+                2 + PolyProperty::ALL.iter().position(|q| q == p).unwrap_or(0) as u32
+            }
+        });
 
         let btn_poly_color = ColorButton::new();
-        let default_poly = current_custom.unwrap_or((0.3, 0.6, 0.9));
+        let default_poly = match current_mode {
+            Mode::Custom(r, g, b) => (r, g, b),
+            _ => (0.3, 0.6, 0.9),
+        };
         btn_poly_color.set_rgba(&gdk::RGBA::new(
             default_poly.0 as f32,
             default_poly.1 as f32,
             default_poly.2 as f32,
             1.0,
         ));
-        btn_poly_color.set_sensitive(!is_element_mode);
+        btn_poly_color.set_sensitive(dd_color.selected() == 1);
 
-        let s_pc = state.clone();
-        let nb_pc = nb_weak.clone();
-        btn_poly_color.connect_color_set(move |b| {
-            let c = b.rgba();
-            let mut st = s_pc.borrow_mut();
-            let tab = st.active_tab_mut();
-            if tab.style.polyhedra_settings.is_none() {
-                tab.style.polyhedra_settings = Some(crate::config::PolyhedraSettings::default());
-            }
-            tab.style.polyhedra_settings.as_mut().unwrap().color_mode =
-                crate::config::PolyhedraColorMode::Custom(
-                    c.red() as f64,
-                    c.green() as f64,
-                    c.blue() as f64,
-                );
-            drop(st);
-            if let Some(nb) = nb_pc.upgrade() {
-                if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
-                    da.queue_draw();
+        // One place that turns the two widgets into the tab's colour mode.
+        let apply: Rc<dyn Fn()> = {
+            let state = state.clone();
+            let nb = nb_weak.clone();
+            let dd = dd_color.clone();
+            let btn = btn_poly_color.clone();
+            Rc::new(move || {
+                let mode = match dd.selected() {
+                    0 => Mode::Element,
+                    1 => {
+                        let c = btn.rgba();
+                        Mode::Custom(c.red() as f64, c.green() as f64, c.blue() as f64)
+                    }
+                    n => Mode::Property(PolyProperty::ALL[(n as usize - 2).min(5)]),
+                };
+                {
+                    let mut st = state.borrow_mut();
+                    let tab = st.active_tab_mut();
+                    tab.style
+                        .polyhedra_settings
+                        .get_or_insert_with(crate::config::PolyhedraSettings::default)
+                        .color_mode = mode;
                 }
-            }
-        });
-
-        let s_ec = state.clone();
-        let nb_ec = nb_weak.clone();
-        let btn_ref_ec = btn_poly_color.clone();
-        check_elem_color.connect_toggled(move |c| {
-            let use_element = c.is_active();
-            btn_ref_ec.set_sensitive(!use_element);
-            let mut st = s_ec.borrow_mut();
-            let tab = st.active_tab_mut();
-            if tab.style.polyhedra_settings.is_none() {
-                tab.style.polyhedra_settings = Some(crate::config::PolyhedraSettings::default());
-            }
-            let settings = tab.style.polyhedra_settings.as_mut().unwrap();
-            if use_element {
-                settings.color_mode = crate::config::PolyhedraColorMode::Element;
-            } else {
-                let rgba = btn_ref_ec.rgba();
-                settings.color_mode = crate::config::PolyhedraColorMode::Custom(
-                    rgba.red() as f64,
-                    rgba.green() as f64,
-                    rgba.blue() as f64,
-                );
-            }
-            drop(st);
-            if let Some(nb) = nb_ec.upgrade() {
-                if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
-                    da.queue_draw();
+                if let Some(nb) = nb.upgrade() {
+                    if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
+                        da.queue_draw();
+                    }
                 }
-            }
-        });
+            })
+        };
+        {
+            let apply = apply.clone();
+            let btn = btn_poly_color.clone();
+            dd_color.connect_selected_notify(move |dd| {
+                btn.set_sensitive(dd.selected() == 1);
+                apply();
+            });
+        }
+        {
+            let apply = apply.clone();
+            btn_poly_color.connect_color_set(move |_| apply());
+        }
 
-        color_row.append(&check_elem_color);
+        color_row.append(&dd_color);
         color_row.append(&btn_poly_color);
         container.append(&color_row);
     }

@@ -98,18 +98,50 @@ pub fn draw_unit_cell(cr: &cairo::Context, corners: &[[f64; 2]], is_export: bool
 // POLYHEDRA RENDERING  (Lambertian shading via polyhedra_lighting module)
 // ============================================================================
 
-/// Draw all polyhedra with Lambertian shading, globally depth-sorted.
+/// Scale for property-coloured polyhedra. Drawn once per frame, after the atoms,
+/// so exports carry it too: colour without a scale is meaningless.
+pub struct PolyLegend {
+    title: &'static str,
+    unit: &'static str,
+    min: f64,
+    max: f64,
+    integer: bool,
+    colormap: crate::rendering::colormap::Colormap,
+}
+
+fn property_value(
+    prop: crate::config::PolyProperty,
+    cn: usize,
+    m: &polyhedra::PolyhedronMetrics,
+) -> Option<f64> {
+    use crate::config::PolyProperty as P;
+    match prop {
+        P::Coordination => Some(cn as f64),
+        P::MeanBondLength => Some(m.mean_bond_length),
+        P::BaurDistortion => Some(m.baur_distortion),
+        P::QuadraticElongation => m.quadratic_elongation,
+        P::AngleVariance => m.bond_angle_variance,
+        P::Volume => Some(m.volume),
+    }
+}
+
+/// Draw all polyhedra with directional shading, globally depth-sorted.
+/// Returns the colour scale to draw afterwards when colouring by a property.
 fn draw_all_polyhedra(
     cr: &cairo::Context,
     atoms: &[RenderAtom],
     tab: &TabState,
     _scale: f64,
     color_scheme: ColorScheme,
-) {
+) -> Option<PolyLegend> {
+    use crate::config::PolyhedraColorMode as Mode;
+    use crate::rendering::colormap::colormap_rgb;
+
     let settings = match &tab.style.polyhedra_settings {
         Some(s) if s.show_polyhedra => s,
-        _ => return,
+        _ => return None,
     };
+    let style = &tab.style.polyhedra_style;
 
     let built = polyhedra::build_polyhedra_for_draw(
         atoms,
@@ -121,49 +153,202 @@ fn draw_all_polyhedra(
         tab.view.show_full_unit_cell,
     );
 
-    // Gather all faces: depth key, screen verts, cart verts, poly cart center, color
-    let mut items: Vec<(f64, [[f64; 3]; 3], [[f64; 3]; 3], [f64; 3], (f64, f64, f64))> = Vec::new();
+    // Property colouring: one value per polyhedron, scaled to the range of
+    // the polyhedra on screen.
+    let prop = match &settings.color_mode {
+        Mode::Property(p) => Some(*p),
+        _ => None,
+    };
+    let values: Vec<Option<f64>> = built
+        .iter()
+        .map(|poly| {
+            prop.and_then(|p| property_value(p, poly.coordination_number, &poly.metrics(atoms)))
+        })
+        .collect();
+    let (vmin, vmax) = values
+        .iter()
+        .flatten()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &v| {
+            (lo.min(v), hi.max(v))
+        });
+    let legend = prop.filter(|_| vmin.is_finite()).map(|p| PolyLegend {
+        title: p.label(),
+        unit: p.unit(),
+        min: vmin,
+        max: vmax,
+        integer: matches!(p, crate::config::PolyProperty::Coordination),
+        colormap: style.colormap,
+    });
 
-    for poly in &built {
-        let base_color = match &settings.color_mode {
-            crate::config::PolyhedraColorMode::Custom(r, g, b) => (*r, *g, *b),
-            _ => {
+    struct Item {
+        depth: f64,
+        sv: [[f64; 3]; 3],
+        cv: [[f64; 3]; 3],
+        center_cart: [f64; 3],
+        color: (f64, f64, f64),
+        alpha: f64,
+        edges: [bool; 3],
+    }
+    let mut items: Vec<Item> = Vec::new();
+
+    for (pi, poly) in built.iter().enumerate() {
+        let color = match &settings.color_mode {
+            Mode::Custom(r, g, b) => {
+                polyhedra_lighting::desaturate((*r, *g, *b), style.desaturation)
+            }
+            Mode::Property(_) => match values[pi] {
+                Some(v) => {
+                    let t = if vmax - vmin < 1e-12 {
+                        0.5
+                    } else {
+                        (v - vmin) / (vmax - vmin)
+                    };
+                    colormap_rgb(style.colormap, t)
+                }
+                // Undefined for this polyhedron (no reference shape): neutral grey.
+                None => (0.62, 0.62, 0.62),
+            },
+            Mode::Element => {
                 let elem = &atoms[poly.center_idx].element;
-                tab.style
+                let base = tab
+                    .style
                     .element_colors
                     .get(elem)
                     .copied()
-                    .unwrap_or_else(|| get_element_color(elem, color_scheme))
+                    .unwrap_or_else(|| get_element_color(elem, color_scheme));
+                polyhedra_lighting::desaturate(base, style.desaturation)
             }
         };
         let center_cart = atoms[poly.center_idx].cart_pos;
-        for face in &poly.faces {
+        let center_screen = atoms[poly.center_idx].screen_pos;
+        let flags = polyhedra::feature_edge_flags(poly, atoms);
+
+        for (fi, face) in poly.faces.iter().enumerate() {
             let sv = face.screen_vertices(atoms);
             let sc = face.screen_center(atoms);
-            // Cartesian vertices for lighting normal
             let cv: [[f64; 3]; 3] = [
                 atoms[face.vertex_atom_indices[0]].cart_pos,
                 atoms[face.vertex_atom_indices[1]].cart_pos,
                 atoms[face.vertex_atom_indices[2]].cart_pos,
             ];
-            items.push((sc[2], sv, cv, center_cart, base_color));
+
+            // Facing: the outward normal in screen space, against the view
+            // direction. Larger z is farther, so a face turned toward the
+            // viewer has an outward normal with z < 0.
+            let e1 = [sv[1][0] - sv[0][0], sv[1][1] - sv[0][1], sv[1][2] - sv[0][2]];
+            let e2 = [sv[2][0] - sv[0][0], sv[2][1] - sv[0][1], sv[2][2] - sv[0][2]];
+            let mut n = [
+                e1[1] * e2[2] - e1[2] * e2[1],
+                e1[2] * e2[0] - e1[0] * e2[2],
+                e1[0] * e2[1] - e1[1] * e2[0],
+            ];
+            let out = [
+                sc[0] - center_screen[0],
+                sc[1] - center_screen[1],
+                sc[2] - center_screen[2],
+            ];
+            if n[0] * out[0] + n[1] * out[1] + n[2] * out[2] < 0.0 {
+                n = [-n[0], -n[1], -n[2]];
+            }
+            let front = n[2] < 0.0;
+
+            items.push(Item {
+                depth: sc[2],
+                sv,
+                cv,
+                center_cart,
+                color,
+                alpha: style.opacity * if front { 1.0 } else { style.back_face_opacity },
+                edges: flags[fi],
+            });
         }
     }
 
     // Global depth sort: back to front
-    items.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(Ordering::Equal));
+    items.sort_by(|a, b| b.depth.partial_cmp(&a.depth).unwrap_or(Ordering::Equal));
 
-    for (_z, sv, cv, center_cart, base_color) in items {
+    for it in &items {
         polyhedra_lighting::draw_shaded_face(
             cr,
-            &sv,
-            cv,
-            center_cart,
-            base_color,
-            settings.transparency,
-            settings.show_edges,
+            &polyhedra_lighting::FaceDraw {
+                screen_verts: &it.sv,
+                cart_verts: it.cv,
+                poly_center_cart: it.center_cart,
+                color: it.color,
+                alpha: it.alpha,
+                edge_flags: it.edges,
+                style,
+            },
         );
     }
+    legend
+}
+
+/// Colour bar for property-coloured polyhedra, bottom-right of the canvas.
+fn draw_poly_legend(cr: &cairo::Context, legend: &PolyLegend, background: (f64, f64, f64)) {
+    use crate::rendering::colormap::colormap_rgb;
+    let Ok((x0, y0, x1, y1)) = cr.clip_extents() else {
+        return;
+    };
+    let (w, h) = (x1 - x0, y1 - y0);
+    let (bar_w, bar_h, margin) = (150.0, 10.0, 14.0);
+    if w < bar_w + 2.0 * margin || h < 70.0 {
+        return;
+    }
+    // Text colour from the background luminance.
+    let lum = 0.299 * background.0 + 0.587 * background.1 + 0.114 * background.2;
+    let ink = if lum > 0.5 { (0.1, 0.1, 0.1) } else { (0.92, 0.92, 0.92) };
+
+    let bx = x1 - margin - bar_w;
+    let by = y1 - margin - 16.0 - bar_h;
+    cr.select_font_face("sans-serif", cairo::FontSlant::Normal, cairo::FontWeight::Normal);
+    cr.set_font_size(11.0);
+
+    let fmt = |v: f64| {
+        if legend.integer {
+            format!("{:.0}{}", v, legend.unit)
+        } else if v.abs() >= 100.0 {
+            format!("{:.1}{}", v, legend.unit)
+        } else {
+            format!("{:.3}{}", v, legend.unit)
+        }
+    };
+
+    // All polyhedra share one value: a gradient would imply a range that is
+    // not there, so state the value instead.
+    if legend.max - legend.min < 1e-9 {
+        let text = format!("{} = {} (uniform)", legend.title, fmt(legend.min));
+        let width = cr.text_extents(&text).map(|e| e.width()).unwrap_or(bar_w);
+        cr.set_source_rgb(ink.0, ink.1, ink.2);
+        cr.move_to(x1 - margin - width, by + bar_h);
+        let _ = cr.show_text(&text);
+        return;
+    }
+
+    cr.set_source_rgb(ink.0, ink.1, ink.2);
+    cr.move_to(bx, by - 6.0);
+    let _ = cr.show_text(legend.title);
+
+    let steps = 64;
+    for i in 0..steps {
+        let t = i as f64 / (steps - 1) as f64;
+        let (r, g, b) = colormap_rgb(legend.colormap, t);
+        cr.set_source_rgb(r, g, b);
+        cr.rectangle(bx + bar_w * i as f64 / steps as f64, by, bar_w / steps as f64 + 0.5, bar_h);
+        let _ = cr.fill();
+    }
+    cr.set_source_rgba(ink.0, ink.1, ink.2, 0.6);
+    cr.set_line_width(0.8);
+    cr.rectangle(bx, by, bar_w, bar_h);
+    let _ = cr.stroke();
+
+    cr.set_source_rgb(ink.0, ink.1, ink.2);
+    cr.move_to(bx, by + bar_h + 12.0);
+    let _ = cr.show_text(&fmt(legend.min));
+    let max_text = fmt(legend.max);
+    let ext = cr.text_extents(&max_text).map(|e| e.width()).unwrap_or(0.0);
+    cr.move_to(bx + bar_w - ext, by + bar_h + 12.0);
+    let _ = cr.show_text(&max_text);
 }
 
 // ============================================================================
@@ -328,7 +513,7 @@ pub fn draw_structure(
     // ========================================================================
     // STEP 4: Draw Polyhedra (background — behind bonds and atoms)
     // ========================================================================
-    draw_all_polyhedra(cr, atoms, tab, scale, color_scheme);
+    let poly_legend = draw_all_polyhedra(cr, atoms, tab, scale, color_scheme);
 
     // ========================================================================
     // STEP 5: Draw Bonds (on top of polyhedra)
@@ -555,6 +740,11 @@ pub fn draw_structure(
             );
             cr.fill().ok();
         }
+    }
+
+    // Colour scale for property-coloured polyhedra, over everything else.
+    if let Some(legend) = &poly_legend {
+        draw_poly_legend(cr, legend, tab.style.background_color);
     }
 }
 

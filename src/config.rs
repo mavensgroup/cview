@@ -148,8 +148,11 @@ pub struct RenderStyle {
     pub bvs_threshold_good: f64,
     pub bvs_threshold_warn: f64,
 
-    // Polyhedra settings
+    // Polyhedra settings. `polyhedra_settings` is per-structure and session
+    // only (which elements, colour-by). `polyhedra_style` is how they are
+    // drawn: saved, edited in Preferences, copied into each new tab.
     pub polyhedra_settings: Option<PolyhedraSettings>,
+    pub polyhedra_style: PolyhedraStyle,
 
     // SOTA LRU sprite cache (not serialized)
     pub atom_cache: Rc<RefCell<SpriteCache>>,
@@ -163,7 +166,7 @@ impl Serialize for RenderStyle {
         S: serde::Serializer,
     {
         use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("RenderStyle", 10)?;
+        let mut state = serializer.serialize_struct("RenderStyle", 11)?;
         state.serialize_field("atom_scale", &self.atom_scale)?;
         state.serialize_field("bond_radius", &self.bond_radius)?;
         state.serialize_field("bond_color", &self.bond_color)?;
@@ -174,6 +177,7 @@ impl Serialize for RenderStyle {
         state.serialize_field("color_mode", &self.color_mode)?;
         state.serialize_field("bvs_threshold_good", &self.bvs_threshold_good)?;
         state.serialize_field("bvs_threshold_warn", &self.bvs_threshold_warn)?;
+        state.serialize_field("polyhedra_style", &self.polyhedra_style)?;
         state.end()
     }
 }
@@ -196,6 +200,9 @@ impl<'de> Deserialize<'de> for RenderStyle {
             color_mode: ColorMode,
             bvs_threshold_good: f64,
             bvs_threshold_warn: f64,
+            // Absent in settings files written before polyhedra styling was saved.
+            #[serde(default)]
+            polyhedra_style: PolyhedraStyle,
         }
 
         let data = RenderStyleData::deserialize(deserializer)?;
@@ -212,6 +219,7 @@ impl<'de> Deserialize<'de> for RenderStyle {
             bvs_threshold_good: data.bvs_threshold_good,
             bvs_threshold_warn: data.bvs_threshold_warn,
             polyhedra_settings: None,
+            polyhedra_style: data.polyhedra_style,
             atom_cache: Rc::new(RefCell::new(SpriteCache::default())),
             show_labels: false,
         })
@@ -243,6 +251,7 @@ impl Default for RenderStyle {
             bvs_threshold_good: 0.15,
             bvs_threshold_warn: 0.40,
             polyhedra_settings: None,
+            polyhedra_style: PolyhedraStyle::default(),
             atom_cache: Rc::new(RefCell::new(SpriteCache::default())),
             show_labels: false,
         }
@@ -443,12 +452,11 @@ impl Config {
 // POLYHEDRA SETTINGS
 // ============================================================================
 
+/// Per-structure polyhedra choices (session only): what is drawn, not how.
 #[derive(Debug, Clone)]
 pub struct PolyhedraSettings {
     pub show_polyhedra: bool,
     pub enabled_elements: Vec<String>,
-    pub transparency: f64,
-    pub show_edges: bool,
     pub min_coordination: usize,
     pub max_coordination: usize,
     pub color_mode: PolyhedraColorMode,
@@ -457,11 +465,59 @@ pub struct PolyhedraSettings {
     pub max_bond_dist: f64,
 }
 
-#[derive(Debug, Clone)]
+/// What colours a polyhedron.
+#[derive(Debug, Clone, PartialEq)]
 pub enum PolyhedraColorMode {
+    /// The centre atom's element colour.
     Element,
-    Coordination,
     Custom(f64, f64, f64),
+    /// A computed property, mapped through the style's colormap.
+    Property(PolyProperty),
+}
+
+/// Per-polyhedron quantities that can colour it. Metric definitions are in
+/// `rendering::polyhedra::PolyhedronMetrics`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PolyProperty {
+    Coordination,
+    MeanBondLength,
+    BaurDistortion,
+    QuadraticElongation,
+    AngleVariance,
+    Volume,
+}
+
+impl PolyProperty {
+    pub const ALL: [PolyProperty; 6] = [
+        PolyProperty::Coordination,
+        PolyProperty::MeanBondLength,
+        PolyProperty::BaurDistortion,
+        PolyProperty::QuadraticElongation,
+        PolyProperty::AngleVariance,
+        PolyProperty::Volume,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            PolyProperty::Coordination => "Coordination number",
+            PolyProperty::MeanBondLength => "Mean bond length",
+            PolyProperty::BaurDistortion => "Baur distortion Δ",
+            PolyProperty::QuadraticElongation => "Quadratic elongation ⟨λ⟩",
+            PolyProperty::AngleVariance => "Bond-angle variance σ²",
+            PolyProperty::Volume => "Volume",
+        }
+    }
+
+    pub fn unit(self) -> &'static str {
+        match self {
+            PolyProperty::Coordination => "",
+            PolyProperty::MeanBondLength => " Å",
+            PolyProperty::BaurDistortion => "",
+            PolyProperty::QuadraticElongation => "",
+            PolyProperty::AngleVariance => " deg²",
+            PolyProperty::Volume => " Å³",
+        }
+    }
 }
 
 impl Default for PolyhedraSettings {
@@ -469,12 +525,88 @@ impl Default for PolyhedraSettings {
         Self {
             show_polyhedra: false,
             enabled_elements: vec![],
-            transparency: 0.3,
-            show_edges: true,
             min_coordination: 4,
             max_coordination: 12,
             color_mode: PolyhedraColorMode::Element,
             max_bond_dist: 3.5,
         }
+    }
+}
+
+/// How polyhedra edges are drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum EdgeStyle {
+    None,
+    #[default]
+    Subtle,
+    Strong,
+}
+
+/// How polyhedra are drawn (saved; edited in Preferences). All fields default
+/// so settings files from older versions keep loading.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PolyhedraStyle {
+    /// Face opacity, 0.05..0.95 (higher = more opaque).
+    pub opacity: f64,
+    pub edge_style: EdgeStyle,
+    /// Strength of the directional shading: 0 = flat, 1 = full contrast.
+    pub shading: f64,
+    /// Faces turned away from the viewer are drawn at this fraction of the
+    /// opacity, which keeps overlapping translucent polyhedra from muddying.
+    pub back_face_opacity: f64,
+    /// 0 = full element colour, 1 = grey. Applies to element/custom colours,
+    /// not to property colouring.
+    pub desaturation: f64,
+    pub colormap: crate::rendering::colormap::Colormap,
+}
+
+impl Default for PolyhedraStyle {
+    fn default() -> Self {
+        Self {
+            opacity: 0.45,
+            edge_style: EdgeStyle::Subtle,
+            shading: 0.6,
+            back_face_opacity: 0.5,
+            desaturation: 0.15,
+            colormap: crate::rendering::colormap::Colormap::Viridis,
+        }
+    }
+}
+
+#[cfg(test)]
+mod polyhedra_style_tests {
+    use super::*;
+
+    #[test]
+    fn settings_file_without_polyhedra_style_still_loads() {
+        // A `style` block as written before polyhedra styling was saved.
+        let json = r#"{
+            "atom_scale": 0.4, "bond_radius": 0.12,
+            "bond_color": [0.5,0.5,0.5], "background_color": [0.9,0.9,0.9],
+            "metallic": 0.0, "roughness": 0.3, "transmission": 0.0,
+            "color_mode": "Element",
+            "bvs_threshold_good": 0.15, "bvs_threshold_warn": 0.4
+        }"#;
+        let style: RenderStyle = serde_json::from_str(json).expect("old style must load");
+        assert_eq!(style.polyhedra_style, PolyhedraStyle::default());
+    }
+
+    #[test]
+    fn polyhedra_style_round_trips_through_the_style() {
+        let mut style = RenderStyle::default();
+        style.polyhedra_style.edge_style = EdgeStyle::Strong;
+        style.polyhedra_style.opacity = 0.7;
+        style.polyhedra_style.colormap = crate::rendering::colormap::Colormap::Plasma;
+        let json = serde_json::to_string(&style).unwrap();
+        let back: RenderStyle = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.polyhedra_style, style.polyhedra_style);
+    }
+
+    #[test]
+    fn partial_polyhedra_style_fills_missing_fields_with_defaults() {
+        let s: PolyhedraStyle = serde_json::from_str(r#"{"opacity": 0.8}"#).unwrap();
+        assert_eq!(s.opacity, 0.8);
+        assert_eq!(s.edge_style, EdgeStyle::Subtle);
     }
 }

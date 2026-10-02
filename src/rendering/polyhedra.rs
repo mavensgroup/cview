@@ -852,6 +852,55 @@ fn bond_angle_variance(
 }
 
 // ============================================================================
+// EDGES
+// ============================================================================
+
+/// For each face of `poly`, which of its three edges (v0v1, v1v2, v2v0) are
+/// real polyhedron edges. A convex-hull triangulation splits flat quads and
+/// pentagons into triangles; the diagonals are not edges and must not be
+/// stroked. An edge is real if only one face has it, or the two faces meeting
+/// there are not coplanar.
+pub fn feature_edge_flags(poly: &Polyhedron, atoms: &[RenderAtom]) -> Vec<[bool; 3]> {
+    use std::collections::HashMap;
+    // cos(3°): faces closer to parallel than this count as coplanar.
+    const COPLANAR_DOT: f64 = 0.9986;
+
+    let normal = |f: &Face| -> Vector3<f64> {
+        let p = |i: usize| v(atoms[f.vertex_atom_indices[i]].cart_pos);
+        let n = (p(1) - p(0)).cross(&(p(2) - p(0)));
+        let len = n.norm();
+        if len > 1e-12 { n / len } else { n }
+    };
+    let normals: Vec<Vector3<f64>> = poly.faces.iter().map(normal).collect();
+
+    let key = |f: &Face, k: usize| {
+        let (a, b) = (f.vertex_atom_indices[k], f.vertex_atom_indices[(k + 1) % 3]);
+        (a.min(b), a.max(b))
+    };
+    let mut edge_faces: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
+    for (fi, f) in poly.faces.iter().enumerate() {
+        for k in 0..3 {
+            edge_faces.entry(key(f, k)).or_default().push(fi);
+        }
+    }
+
+    poly.faces
+        .iter()
+        .map(|f| {
+            let mut flags = [true; 3];
+            for k in 0..3 {
+                if let Some(faces) = edge_faces.get(&key(f, k)) {
+                    if faces.len() == 2 {
+                        flags[k] = normals[faces[0]].dot(&normals[faces[1]]) < COPLANAR_DOT;
+                    }
+                }
+            }
+            flags
+        })
+        .collect()
+}
+
+// ============================================================================
 // STATELESS ENTRY POINT
 // ============================================================================
 
@@ -885,6 +934,50 @@ mod tests {
     fn mock(pts: Vec<[f64; 3]>) -> (Vec<[f64; 3]>, Vec<usize>) {
         let n = pts.len();
         (pts, (0..n).collect())
+    }
+
+    #[test]
+    fn feature_edges_skip_the_diagonals_of_flat_faces() {
+        // A unit cube: 6 square faces, each split into two triangles. Of the
+        // 18 triangle edges, 6 are diagonals; the 12 cube edges must be kept.
+        let mut pts = Vec::new();
+        for x in [-1.0, 1.0] {
+            for y in [-1.0, 1.0] {
+                for z in [-1.0, 1.0] {
+                    pts.push([x, y, z]);
+                }
+            }
+        }
+        let atoms: Vec<RenderAtom> = pts
+            .iter()
+            .enumerate()
+            .map(|(i, p)| RenderAtom {
+                screen_pos: *p,
+                cart_pos: *p,
+                element: "O".into(),
+                original_index: i,
+                unique_id: i,
+                is_ghost: false,
+                is_coord_only: false,
+                screen_radius: 1.0,
+            })
+            .collect();
+        let idx: Vec<usize> = (0..pts.len()).collect();
+        let faces = convex_hull_3d([0.0; 3], &pts, &idx);
+        let poly = Polyhedron {
+            center_idx: 0,
+            neighbor_indices: idx,
+            faces,
+            coordination_number: 8,
+        };
+        let flags = feature_edge_flags(&poly, &atoms);
+        let kept: usize = flags.iter().flatten().filter(|&&b| b).count();
+        // Every real edge is shared by two faces' triangles; a flat square
+        // contributes its 4 boundary edges, once each per side.
+        let total: usize = flags.iter().map(|f| f.len()).sum();
+        assert!(kept < total, "diagonals must be dropped ({kept}/{total})");
+        // 12 cube edges, each present in 2 triangles along it (or 1 or 2).
+        assert!(kept >= 12, "all 12 cube edges must survive ({kept})");
     }
 
     #[test]

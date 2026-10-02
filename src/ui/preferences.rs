@@ -2,7 +2,9 @@
 // Preferences window — 3 tabs:
 //   1. General      — 7 settings (file load defaults, zoom, rotation)
 //   2. Appearance   — 8 settings (colors, toggles, scales)
-//   3. Export/Plot  — 6 settings (charge density export font sizes, colormap)
+//   3. Polyhedra    — how coordination polyhedra are drawn (saved; edge style,
+//                     opacity, shading, back faces, desaturation, colormap)
+//   4. Export/Plot  — 6 settings (charge density export font sizes, colormap)
 //
 // Removed tabs (settings kept in Config for serde backward-compat):
 //   - Bond Valence  (3 settings — none were wired to runtime behavior)
@@ -42,7 +44,11 @@ pub fn show_preferences_window(
     let appearance_tab = build_appearance_tab(state.clone(), drawing_area.clone());
     notebook.append_page(&appearance_tab, Some(&gtk::Label::new(Some("Appearance"))));
 
-    // TAB 3: Export / Plot
+    // TAB 3: Polyhedra
+    let polyhedra_tab = build_polyhedra_tab(state.clone(), drawing_area.clone());
+    notebook.append_page(&polyhedra_tab, Some(&gtk::Label::new(Some("Polyhedra"))));
+
+    // TAB 4: Export / Plot
     let export_tab = build_export_plot_tab(state.clone());
     notebook.append_page(&export_tab, Some(&gtk::Label::new(Some("Export / Plot"))));
 
@@ -398,6 +404,144 @@ fn build_appearance_tab(state: Rc<RefCell<AppState>>, da: gtk::DrawingArea) -> g
 // ============================================================================
 // TAB 3: EXPORT / PLOT (6 settings)
 // ============================================================================
+
+// ============================================================================
+// TAB 3: POLYHEDRA — how they are drawn. What is drawn (elements, colour-by)
+// lives in the sidebar. Every change is saved and applied to the active tab.
+// ============================================================================
+
+fn build_polyhedra_tab(state: Rc<RefCell<AppState>>, da: gtk::DrawingArea) -> gtk::Box {
+    use crate::config::{EdgeStyle, PolyhedraStyle};
+    use crate::rendering::colormap::Colormap;
+    use crate::ui::style::{captioned, card_body, group};
+
+    let vbox = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    vbox.set_margin_top(15);
+    vbox.set_margin_bottom(15);
+    vbox.set_margin_start(15);
+    vbox.set_margin_end(15);
+
+    // Writes one field of the saved style and of the active tab's copy, so the
+    // change shows on the structure you are looking at, then saves.
+    let apply = {
+        let state = state.clone();
+        let da = da.clone();
+        move |edit: &dyn Fn(&mut PolyhedraStyle)| {
+            {
+                let mut st = state.borrow_mut();
+                edit(&mut st.config.style.polyhedra_style);
+                if !st.tabs.is_empty() {
+                    edit(&mut st.active_tab_mut().style.polyhedra_style);
+                }
+                st.save_config();
+            }
+            da.queue_draw();
+        }
+    };
+    let apply = Rc::new(apply);
+    let current = state.borrow().config.style.polyhedra_style.clone();
+
+    let scale = |lo: f64, hi: f64, step: f64, val: f64| {
+        let s = gtk::Scale::with_range(gtk::Orientation::Horizontal, lo, hi, step);
+        s.set_value(val);
+        s.set_digits(2);
+        s.set_draw_value(true);
+        s.set_value_pos(gtk::PositionType::Right);
+        s.set_hexpand(true);
+        s.add_css_class("thin-slider");
+        s
+    };
+
+    // --- Edges and faces ---
+    let body = card_body(10);
+
+    let dd_edges = gtk::DropDown::from_strings(&["None", "Subtle", "Strong"]);
+    dd_edges.set_selected(match current.edge_style {
+        EdgeStyle::None => 0,
+        EdgeStyle::Subtle => 1,
+        EdgeStyle::Strong => 2,
+    });
+    {
+        let apply = apply.clone();
+        dd_edges.connect_selected_notify(move |d| {
+            let e = match d.selected() {
+                0 => EdgeStyle::None,
+                2 => EdgeStyle::Strong,
+                _ => EdgeStyle::Subtle,
+            };
+            apply(&|s| s.edge_style = e);
+        });
+    }
+    body.append(&captioned("Edges", &dd_edges));
+
+    let sc_opacity = scale(0.05, 0.95, 0.05, current.opacity);
+    {
+        let apply = apply.clone();
+        sc_opacity.connect_value_changed(move |s| {
+            let v = s.value();
+            apply(&|st| st.opacity = v);
+        });
+    }
+    body.append(&captioned("Default opacity (new tabs; the sidebar sets it per structure)", &sc_opacity));
+
+    let sc_back = scale(0.1, 1.0, 0.05, current.back_face_opacity);
+    {
+        let apply = apply.clone();
+        sc_back.connect_value_changed(move |s| {
+            let v = s.value();
+            apply(&|st| st.back_face_opacity = v);
+        });
+    }
+    body.append(&captioned("Back-face opacity (lower keeps overlapping polyhedra clear)", &sc_back));
+    vbox.append(&group("Faces and edges", &body));
+
+    // --- Colour ---
+    let body = card_body(10);
+
+    let sc_shade = scale(0.0, 1.0, 0.05, current.shading);
+    {
+        let apply = apply.clone();
+        sc_shade.connect_value_changed(move |s| {
+            let v = s.value();
+            apply(&|st| st.shading = v);
+        });
+    }
+    body.append(&captioned("Shading strength (0 = flat)", &sc_shade));
+
+    let sc_desat = scale(0.0, 0.6, 0.05, current.desaturation);
+    {
+        let apply = apply.clone();
+        sc_desat.connect_value_changed(move |s| {
+            let v = s.value();
+            apply(&|st| st.desaturation = v);
+        });
+    }
+    body.append(&captioned("Mute element colors", &sc_desat));
+
+    let dd_cmap = gtk::DropDown::from_strings(&["Viridis", "Plasma", "Blue–White–Red", "Grayscale"]);
+    dd_cmap.set_selected(match current.colormap {
+        Colormap::Viridis => 0,
+        Colormap::Plasma => 1,
+        Colormap::BlueWhiteRed => 2,
+        Colormap::Grayscale => 3,
+    });
+    {
+        let apply = apply.clone();
+        dd_cmap.connect_selected_notify(move |d| {
+            let c = match d.selected() {
+                1 => Colormap::Plasma,
+                2 => Colormap::BlueWhiteRed,
+                3 => Colormap::Grayscale,
+                _ => Colormap::Viridis,
+            };
+            apply(&|st| st.colormap = c);
+        });
+    }
+    body.append(&captioned("Colormap for property coloring", &dd_cmap));
+    vbox.append(&group("Color", &body));
+
+    vbox
+}
 
 fn build_export_plot_tab(state: Rc<RefCell<AppState>>) -> gtk::Box {
     let vbox = gtk::Box::new(gtk::Orientation::Vertical, 12);

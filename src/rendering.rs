@@ -1,3 +1,4 @@
+pub mod colormap;
 pub mod export;
 pub mod occupancy;
 pub mod painter;
