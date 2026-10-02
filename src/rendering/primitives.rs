@@ -10,6 +10,8 @@ pub struct RenderBond {
   pub start: [f64; 3],
   pub end: [f64; 3],
   pub radius: f64,
+  /// Indices (into the scene atom list) of the two atoms joined.
+  pub atoms: (usize, usize),
 }
 
 pub enum RenderPrimitive<'a> {

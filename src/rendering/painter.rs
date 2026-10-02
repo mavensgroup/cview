@@ -125,15 +125,37 @@ fn property_value(
     }
 }
 
-/// Draw all polyhedra with directional shading, globally depth-sorted.
-/// Returns the colour scale to draw afterwards when colouring by a property.
-fn draw_all_polyhedra(
-    cr: &cairo::Context,
+/// One face to draw, with the depth it sorts at.
+struct FaceItem {
+    depth: f64,
+    sv: [[f64; 3]; 3],
+    cv: [[f64; 3]; 3],
+    center_cart: [f64; 3],
+    color: (f64, f64, f64),
+    alpha: f64,
+    edges: [bool; 3],
+}
+
+/// Everything the polyhedra contribute to a frame. The faces are not drawn
+/// here: they are sorted together with the atoms and bonds, so an opaque face
+/// can hide what is behind it, including its own central atom.
+struct PolyPlan {
+    faces: Vec<FaceItem>,
+    legend: Option<PolyLegend>,
+    /// Depth at which a polyhedron's central atom sorts: inside the polyhedron,
+    /// after its back faces and before its front faces.
+    centre_depth: std::collections::HashMap<usize, f64>,
+    /// Same depth for the bonds from the centre to its vertices.
+    inner_bond_depth: std::collections::HashMap<(usize, usize), f64>,
+}
+
+/// Plan the polyhedra: faces with depth keys, colour scale, and the depths at
+/// which each polyhedron's interior (centre atom, centre bonds) sorts.
+fn plan_polyhedra(
     atoms: &[RenderAtom],
     tab: &TabState,
-    _scale: f64,
     color_scheme: ColorScheme,
-) -> Option<PolyLegend> {
+) -> Option<PolyPlan> {
     use crate::config::PolyhedraColorMode as Mode;
     use crate::rendering::colormap::colormap_rgb;
 
@@ -172,16 +194,12 @@ fn draw_all_polyhedra(
         colormap: style.colormap,
     });
 
-    struct Item {
-        depth: f64,
-        sv: [[f64; 3]; 3],
-        cv: [[f64; 3]; 3],
-        center_cart: [f64; 3],
-        color: (f64, f64, f64),
-        alpha: f64,
-        edges: [bool; 3],
-    }
-    let mut items: Vec<Item> = Vec::new();
+    let mut items: Vec<FaceItem> = Vec::new();
+    let mut centre_depth = std::collections::HashMap::new();
+    let mut inner_bond_depth = std::collections::HashMap::new();
+    // Keeps back faces strictly behind, and front faces strictly in front of,
+    // the polyhedron's interior in the shared depth sort.
+    const INTERIOR_GAP: f64 = 0.05;
 
     for (pi, poly) in built.iter().enumerate() {
         let color = match &settings.color_mode {
@@ -227,6 +245,12 @@ fn draw_all_polyhedra(
         };
         let center_cart = mean(&|a| a.cart_pos);
         let center_screen = mean(&|a| a.screen_pos);
+        let interior_z = center_screen[2];
+        centre_depth.insert(poly.center_idx, interior_z);
+        for &vtx in &poly.neighbor_indices {
+            let key = (poly.center_idx.min(vtx), poly.center_idx.max(vtx));
+            inner_bond_depth.insert(key, interior_z);
+        }
         let flags = polyhedra::feature_edge_flags(poly, atoms);
 
         for (fi, face) in poly.faces.iter().enumerate() {
@@ -258,8 +282,13 @@ fn draw_all_polyhedra(
             }
             let front = n[2] < 0.0;
 
-            items.push(Item {
-                depth: sc[2],
+            let depth = if front {
+                sc[2].min(interior_z - INTERIOR_GAP)
+            } else {
+                sc[2].max(interior_z + INTERIOR_GAP)
+            };
+            items.push(FaceItem {
+                depth,
                 sv,
                 cv,
                 center_cart,
@@ -270,24 +299,12 @@ fn draw_all_polyhedra(
         }
     }
 
-    // Global depth sort: back to front
-    items.sort_by(|a, b| b.depth.partial_cmp(&a.depth).unwrap_or(Ordering::Equal));
-
-    for it in &items {
-        polyhedra_lighting::draw_shaded_face(
-            cr,
-            &polyhedra_lighting::FaceDraw {
-                screen_verts: &it.sv,
-                cart_verts: it.cv,
-                poly_center_cart: it.center_cart,
-                color: it.color,
-                alpha: it.alpha,
-                edge_flags: it.edges,
-                style,
-            },
-        );
-    }
-    legend
+    Some(PolyPlan {
+        faces: items,
+        legend,
+        centre_depth,
+        inner_bond_depth,
+    })
 }
 
 /// Colour bar for property-coloured polyhedra, bottom-right of the canvas.
@@ -390,13 +407,13 @@ pub fn draw_structure(
         .unwrap_or_default();
 
     // Separate lists for depth-sorted rendering
-    let mut render_atoms: Vec<&RenderAtom> = Vec::with_capacity(atoms.len());
+    let mut render_atoms: Vec<(usize, &RenderAtom)> = Vec::with_capacity(atoms.len());
     let mut render_bonds: Vec<RenderBond> = Vec::with_capacity(atoms.len() * 2);
 
     // ========================================================================
     // STEP 1: Collect Atoms (skip coord-only ghosts and invisible ghosts)
     // ========================================================================
-    for atom in atoms {
+    for (idx, atom) in atoms.iter().enumerate() {
         if atom.is_coord_only {
             continue;
         }
@@ -406,7 +423,7 @@ pub fn draw_structure(
         if sites.is_hidden(atom.original_index) {
             continue;
         }
-        render_atoms.push(atom);
+        render_atoms.push((idx, atom));
     }
 
     // ========================================================================
@@ -494,6 +511,7 @@ pub fn draw_structure(
                             start,
                             end,
                             radius: tab.style.bond_radius * scale,
+                            atoms: (i, j),
                         });
                     }
                 }
@@ -502,43 +520,12 @@ pub fn draw_structure(
     }
 
     // ========================================================================
-    // STEP 3: Depth Sort (Far to Near)
+    // STEP 3: Plan the polyhedra (faces, and where their interiors sort)
     // ========================================================================
-    render_bonds.sort_by(|a, b| {
-        let z_a = (a.start[2] + a.end[2]) / 2.0;
-        let z_b = (b.start[2] + b.end[2]) / 2.0;
-        z_b.partial_cmp(&z_a).unwrap_or(Ordering::Equal)
-    });
-
-    render_atoms.sort_by(|a, b| {
-        b.screen_pos[2]
-            .partial_cmp(&a.screen_pos[2])
-            .unwrap_or(Ordering::Equal)
-    });
+    let plan = plan_polyhedra(atoms, tab, color_scheme);
 
     // ========================================================================
-    // STEP 4: Draw Polyhedra (background — behind bonds and atoms)
-    // ========================================================================
-    let poly_legend = draw_all_polyhedra(cr, atoms, tab, scale, color_scheme);
-
-    // ========================================================================
-    // STEP 5: Draw Bonds (on top of polyhedra)
-    // ========================================================================
-    for bond in render_bonds {
-        draw_cylinder_impostor(
-            cr,
-            bond.start,
-            bond.end,
-            bond.radius,
-            tab.style.bond_color,
-            tab.style.metallic,
-            tab.style.roughness,
-            tab.style.transmission,
-        );
-    }
-
-    // ========================================================================
-    // STEP 6: Draw Atoms (foreground — on top of everything)
+    // STEP 4: Atom drawing (called from the shared depth-ordered pass below)
     // ========================================================================
     let mut cache_access = tab.style.atom_cache.borrow_mut();
 
@@ -574,7 +561,7 @@ pub fn draw_structure(
         }
     };
 
-    for atom in render_atoms {
+    let mut draw_atom = |atom: &RenderAtom| {
         let raw_r = get_covalent_radius(&atom.element);
         let override_rgb = tab.override_color(atom.original_index);
         let rgb = atom_rgb(atom.original_index, &atom.element);
@@ -746,10 +733,87 @@ pub fn draw_structure(
             );
             cr.fill().ok();
         }
+    };
+
+    // ========================================================================
+    // STEP 5: One back-to-front pass over faces, bonds and atoms
+    //
+    // Sorting them together (rather than polyhedra, then bonds, then atoms)
+    // is what lets an opaque front face hide the central atom and the bonds
+    // inside a polyhedron. Larger z is farther. At equal depth a face is
+    // drawn before a bond and a bond before an atom.
+    // ========================================================================
+    enum Item {
+        Face(usize),
+        Bond(usize),
+        Atom(usize),
+    }
+    let mut order: Vec<(f64, u8, Item)> = Vec::new();
+    if let Some(plan) = &plan {
+        for (i, f) in plan.faces.iter().enumerate() {
+            order.push((f.depth, 0, Item::Face(i)));
+        }
+    }
+    for (i, b) in render_bonds.iter().enumerate() {
+        let key = (b.atoms.0.min(b.atoms.1), b.atoms.0.max(b.atoms.1));
+        let depth = plan
+            .as_ref()
+            .and_then(|p| p.inner_bond_depth.get(&key).copied())
+            .unwrap_or((b.start[2] + b.end[2]) / 2.0);
+        order.push((depth, 1, Item::Bond(i)));
+    }
+    for (i, (idx, a)) in render_atoms.iter().enumerate() {
+        let depth = plan
+            .as_ref()
+            .and_then(|p| p.centre_depth.get(idx).copied())
+            .unwrap_or(a.screen_pos[2]);
+        order.push((depth, 2, Item::Atom(i)));
+    }
+    order.sort_by(|a, b| {
+        b.0.partial_cmp(&a.0)
+            .unwrap_or(Ordering::Equal)
+            .then(a.1.cmp(&b.1))
+    });
+
+    let poly_style = &tab.style.polyhedra_style;
+    for (_, _, item) in &order {
+        match item {
+            Item::Face(i) => {
+                if let Some(plan) = &plan {
+                    let f = &plan.faces[*i];
+                    polyhedra_lighting::draw_shaded_face(
+                        cr,
+                        &polyhedra_lighting::FaceDraw {
+                            screen_verts: &f.sv,
+                            cart_verts: f.cv,
+                            poly_center_cart: f.center_cart,
+                            color: f.color,
+                            alpha: f.alpha,
+                            edge_flags: f.edges,
+                            style: poly_style,
+                        },
+                    );
+                }
+            }
+            Item::Bond(i) => {
+                let bond = &render_bonds[*i];
+                draw_cylinder_impostor(
+                    cr,
+                    bond.start,
+                    bond.end,
+                    bond.radius,
+                    tab.style.bond_color,
+                    tab.style.metallic,
+                    tab.style.roughness,
+                    tab.style.transmission,
+                );
+            }
+            Item::Atom(i) => draw_atom(render_atoms[*i].1),
+        }
     }
 
     // Colour scale for property-coloured polyhedra, over everything else.
-    if let Some(legend) = &poly_legend {
+    if let Some(legend) = plan.as_ref().and_then(|p| p.legend.as_ref()) {
         draw_poly_legend(cr, legend, tab.style.background_color);
     }
 }
