@@ -64,18 +64,19 @@ Phonon calculations (via DFPT or frozen phonons) often require supercells to sam
 
 ### Interface
 
-The dialog is titled **Matrix Transformation** and presents a 3×3 integer matrix. Its default is the identity matrix, which leaves the structure unchanged.
+The **Supercell** tab of the Structure window presents a 3×3 integer matrix, with a live **Preview** of the resulting structure and its atom count. Past about 4000 atoms the preview is skipped and only the count is shown. Its default is the identity matrix, which leaves the structure unchanged.
 
 - In the default diagonal mode, use diagonal values such as `2, 2, 3` for a 2×2×3 replication.
 - Enable **General Matrix (Shear/Swap)** to edit off-diagonal entries for non-diagonal cell transformations.
-- The matrix must be non-singular; a singular matrix leaves the original structure unchanged.
+- The matrix must be non-singular; with a singular matrix (determinant 0) the **Transform** button is disabled.
+- After **Transform** the matrix returns to the identity, so the preview shows the structure as it now is. **Reset to as-loaded** goes back to the originally loaded cell.
 
 ### Workflow
 
 1. Load your structure (e.g., a primitive cell)
 2. Open `Structure → Supercell...`
 3. Enter the desired diagonal values (for example, `2`, `2`, `3`)
-4. Click **Transform**
+4. Check the preview, then click **Transform**
 5. The new structure replaces the current tab
 
 >[!TIP]

@@ -2,7 +2,8 @@
 
 use crate::physics::operations::conversion::{convert_structure, CellType};
 use crate::state::AppState;
-use crate::ui::dialogs::{atom_instances_dlg, basis_dlg, miller_dlg, supercell_dlg};
+use crate::ui::dialogs::miller_dlg;
+use crate::ui::structure::window::{show_structure_window, StructureTab};
 use crate::utils::console;
 use gtk4::prelude::*;
 use gtk4::{Application, ApplicationWindow, DrawingArea, Notebook};
@@ -16,68 +17,28 @@ pub fn setup(
     notebook: &Notebook,
     _drawing_area: &DrawingArea,
 ) {
-    // --- SUPERCELL ---
-    let sc_action = gtk4::gio::SimpleAction::new("supercell", None);
-    let win_weak = window.downgrade();
-    let state_weak = Rc::downgrade(&state);
-    let nb_weak = notebook.downgrade();
+    // --- STRUCTURE WINDOW: Supercell, Basis, Atom Instances, Slab ---
+    // One window with a tab per tool; each action opens it on its own tab.
+    for (name, tab) in [
+        ("supercell", StructureTab::Supercell),
+        ("basis", StructureTab::Basis),
+        ("atom_instances", StructureTab::Instances),
+        ("slab", StructureTab::Slab),
+    ] {
+        let action = gtk4::gio::SimpleAction::new(name, None);
+        let win_weak = window.downgrade();
+        let state_weak = Rc::downgrade(&state);
+        let nb_weak = notebook.downgrade();
 
-    sc_action.connect_activate(move |_, _| {
-        if let Some(win) = win_weak.upgrade() {
-            if let Some(st) = state_weak.upgrade() {
-                if let Some(nb) = nb_weak.upgrade() {
-                    supercell_dlg::show(&win, st, &nb);
-                }
+        action.connect_activate(move |_, _| {
+            if let (Some(win), Some(st), Some(nb)) =
+                (win_weak.upgrade(), state_weak.upgrade(), nb_weak.upgrade())
+            {
+                show_structure_window(&win, st, &nb, tab);
             }
-        }
-    });
-    app.add_action(&sc_action);
-
-    // --- BASIS / CHEMISTRY ---
-    let basis_action = gtk4::gio::SimpleAction::new("basis", None);
-    let win_weak_b = window.downgrade();
-    let state_weak_b = Rc::downgrade(&state);
-    let nb_weak_b = notebook.downgrade();
-
-    basis_action.connect_activate(move |_, _| {
-        if let Some(win) = win_weak_b.upgrade() {
-            if let Some(st) = state_weak_b.upgrade() {
-                if let Some(nb) = nb_weak_b.upgrade() {
-                    basis_dlg::show(&win, st, &nb);
-                }
-            }
-        }
-    });
-    app.add_action(&basis_action);
-
-    // --- ATOM INSTANCES ---
-    let inst_action = gtk4::gio::SimpleAction::new("atom_instances", None);
-    let win_weak_i = window.downgrade();
-    let state_weak_i = Rc::downgrade(&state);
-    let nb_weak_i = notebook.downgrade();
-
-    inst_action.connect_activate(move |_, _| {
-        if let Some(win) = win_weak_i.upgrade() {
-            if let Some(st) = state_weak_i.upgrade() {
-                if let Some(nb) = nb_weak_i.upgrade() {
-                    atom_instances_dlg::show(&win, st, &nb);
-                }
-            }
-        }
-    });
-    app.add_action(&inst_action);
-
-    // --- SLAB ---
-    let slab_action = gtk4::gio::SimpleAction::new("slab", None);
-    let win_weak_s = window.downgrade();
-    let state_weak_s = Rc::downgrade(&state);
-
-    slab_action.connect_activate(move |_, _| {
-        if let (Some(win), Some(st)) = (win_weak_s.upgrade(), state_weak_s.upgrade()) {
-            crate::ui::analysis::window::show_slab_window(&win, st);
-        }
-    });
-    app.add_action(&slab_action);
+        });
+        app.add_action(&action);
+    }
 
     // --- MILLER PLANES ---
     let mil_action = gtk4::gio::SimpleAction::new("miller_planes", None);

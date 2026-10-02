@@ -2,11 +2,19 @@
 
 CView provides several tools to manipulate and construct crystal structures. These operations are accessible via the **Structure** menu and enable you to prepare input geometries for *ab-initio* calculations.
 
+Supercell, Basis, Atom Instances and Slab are the four tabs of one **Structure** window. Each menu entry opens the window on its own tab. The first three share a **Preview** pane that shows the structure as a ball-and-stick view, using the same orientation and colours as the main viewport (rotate in the main view and the preview follows):
+
+- **Supercell** previews the structure the current matrix would produce, before you press Transform.
+- **Basis** highlights the atoms an action would touch: the atoms selected in the main view, and every atom of the element typed into *Find*.
+- **Atom Instances** highlights the rows selected in the list.
+
+The window is not modal, so you can keep it open next to the main view.
+
 ---
 
 ## Basis Operations
 
-The **Basis** dialog (`Structure → Basis...`) allows you to perform chemical modifications to your structure.
+The **Basis** tab (`Structure → Basis...`) allows you to perform chemical modifications to your structure.
 
 ### Element Substitution
 
@@ -19,9 +27,8 @@ The **Basis** dialog (`Structure → Basis...`) allows you to perform chemical m
 
 **How to use**:
 1. Open `Structure → Basis...`
-2. Select the **Global** tab
-3. Enter the source and replacement element symbols
-4. Click **Replace All**
+2. In **Replace element everywhere**, enter the source element in *Find* (its atoms are highlighted in the preview) and the new element in *Replace with*
+3. Click **Replace all**
 
 >[!NOTE]
 >This operation preserves all atomic positions and lattice parameters — only the element identity changes.
@@ -32,9 +39,9 @@ The **Basis** dialog (`Structure → Basis...`) allows you to perform chemical m
 
 **Workflow**:
 1. Select atoms in the viewport (click + Shift to multi-select)
-2. Open the **Selection** tab in the Basis dialog
+2. Open `Structure → Basis...`; the **Selected atoms** card shows how many atoms are selected, and the preview highlights them
 3. Enter the replacement element symbol
-4. Click **Change Element**
+4. Click **Change element**
 
 **Atom Removal**: Press `Delete` after selecting atoms to create vacancies or remove unwanted species.
 
@@ -71,18 +78,18 @@ Crystallographic structures can be represented in two standard forms:
 
 ### Standardization
 
-The **Tools** tab of the Basis dialog provides **Standardize Positions [0, 1)**, which wraps atomic fractional coordinates into the unit cell. It does not perform crystallographic IUCr standardization; use primitive/conventional conversion for Moyo-based standard cells.
+The **Positions** card of the Basis tab provides **Standardize positions [0, 1)**, which wraps atomic fractional coordinates into the unit cell. It does not perform crystallographic IUCr standardization; use primitive/conventional conversion for Moyo-based standard cells.
 
 ---
 
 ## Atom Instance Management
 
-The **Atom Instances** dialog provides session-only cosmetic overrides for individual atoms. It lets you filter the atom list and apply or reset a display label and colour for selected sites.
+The **Atom Instances** tab provides session-only cosmetic overrides for individual atoms. It lets you filter the atom list and apply or reset a display label and colour for selected sites.
 
 **Access**: `Structure → Atom Instances...`
 
 >[!NOTE]
->These overrides are not written to structure files. Use `View → Hide Symmetric Basis` or `Ctrl + B` to toggle visible periodic images.
+>These overrides are not written to structure files. Use `View → Hide Symmetric Basis` or `Ctrl + Shift + B` to toggle visible periodic images.
 
 ---
 

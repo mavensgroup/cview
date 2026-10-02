@@ -20,7 +20,9 @@ struct VisState {
     structure: Option<Structure>,
 }
 
-pub fn build(state: Rc<RefCell<AppState>>) -> Box {
+/// Returns the whole tab page (its own cutting-plane canvas on the left, the
+/// controls on the right) and a hook that refreshes it when the tab is shown.
+pub fn build(state: Rc<RefCell<AppState>>) -> (Box, std::boxed::Box<dyn Fn()>) {
     // --- Layout Setup ---
     let root = Box::new(Orientation::Horizontal, 15);
     root.set_margin_top(15);
@@ -45,9 +47,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
 
     // Right Pane: Controls
     let right_pane = Box::new(Orientation::Vertical, 10);
-    // Wider than the shared analysis column: this is its own window now, and
-    // three compact h/k/l fields need ~390 px to fit without clipping.
-    right_pane.set_width_request(400);
+    right_pane.set_width_request(super::CONTROL_PANE_WIDTH);
 
     let spin_h = SpinButton::with_range(-10.0, 10.0, 1.0);
     spin_h.set_value(1.0);
@@ -353,5 +353,18 @@ pub fn build(state: Rc<RefCell<AppState>>) -> Box {
         }
     });
 
-    root
+    // The plane is drawn over the structure as it is when the tab is shown,
+    // not the one it was built with: the structure may have changed on another
+    // tab or in the main window.
+    let on_enter: std::boxed::Box<dyn Fn()> = {
+        let vis = vis_state.clone();
+        let state = state.clone();
+        let da = drawing_area.clone();
+        std::boxed::Box::new(move || {
+            vis.borrow_mut().structure = state.borrow().active_tab().structure.clone();
+            da.queue_draw();
+        })
+    };
+
+    (root, on_enter)
 }

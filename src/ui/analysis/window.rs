@@ -1,7 +1,6 @@
 // src/ui/analysis/window.rs
 use super::charge_density_tab;
 use super::kpath_tab;
-use super::slab_tab;
 use super::symmetry_tab;
 use super::voids_tab;
 use super::xrd_tab;
@@ -53,22 +52,6 @@ pub fn show_analysis_window(
 
     window.set_child(Some(&notebook));
     notebook.set_current_page(Some(start as u32));
-    window.present();
-}
-
-/// Opens the Slab generator in its own non-modal window: it has a live
-/// preview and edits the structure, so it stays beside the main view.
-pub fn show_slab_window(parent: &ApplicationWindow, state: Rc<RefCell<AppState>>) {
-    let window = Window::builder()
-        .title("Slab Generator")
-        .transient_for(parent)
-        .default_width(960)
-        .default_height(520)
-        .modal(false)
-        .build();
-
-    let slab_page = slab_tab::build(state);
-    window.set_child(Some(&slab_page));
     window.present();
 }
 
