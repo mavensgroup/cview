@@ -2,6 +2,7 @@ pub mod bravais;
 pub mod charge_density;
 pub mod interstitial;
 pub mod isosurface;
+pub mod volumetric;
 pub mod kpath;
 pub mod symmetry;
 pub mod voids;
