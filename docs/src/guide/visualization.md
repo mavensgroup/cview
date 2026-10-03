@@ -15,10 +15,23 @@ CView automatically detects the file type based on extension and content. You ca
 | :--- | :--- | :--- |
 | **CIF** | `.cif` | Standard Crystallographic Information Files. |
 | **VASP** | `POSCAR`, `CONTCAR`, `.vasp` | Standard VASP structure inputs and outputs. |
-| **Quantum Espresso** | `.in`, `.out`, `.pwi`, `.qe` | Reads atomic positions and cell parameters from input/output logs. |
-| **SPR-KKR** | `.pot`, `.pot_new`, `.sys` | Munich SPR-KKR potential and system files. Chemical disorder (CPA sites with several occupants) is read as mixed sites and written back as CPA sites. Reading needs nothing extra (`.pot`, `.pot_new`, `.pot_out`); writing uses ase2sprkkr when installed, else a built-in writer. |
+| **VASP run** | `vasprun.xml` (any name; recognised by content) | Every ionic step of a relaxation or MD run, with its energy and largest force. |
+| **Quantum Espresso** | `.in`, `.out`, `.pwi`, `.qe` | Inputs, and every geometry of a relax, vc-relax or MD output (starting with the input structure), with energies and forces. |
+| **LAMMPS** | `.dump`, `.lammpstrj`, `.dat`, any name starting with `ITEM: TIMESTEP` | Text dumps: wrapped, scaled or unwrapped positions; orthogonal or triclinic boxes; every frame. Species come from an `element` or `mass` column, otherwise atoms are shown as `Type n`. |
+| **SPR-KKR** | `.pot`, `.pot_new`, `.sys` | Munich SPR-KKR potential and system files. Chemical disorder (CPA sites with several occupants) is read as mixed sites and written back as CPA sites. Reading needs nothing extra (`.pot`, `.pot_new`, `.pot_out`). Writing uses CView's own writer; set the environment variable `CVIEW_PYTHON` to a Python that has ase2sprkkr to write with ase2sprkkr instead. |
 | **XYZ** | `.xyz` | Cartesian coordinates (Standard and Extended XYZ). |
 | **PDB** | `.pdb`, `.ent` | Protein Data Bank records. Reads the `CRYST1` cell, `ATOM`/`HETATM` sites, occupancies and formal charges; the first `MODEL` only. Files without a real cell load as non-periodic molecules. |
+
+### Trajectories (Relaxation and MD)
+
+Files with several frames — `vasprun.xml`, Quantum Espresso relax/MD output, LAMMPS dumps — open as one structure in the main view: the **first** or **last** frame, set in `Preferences → General → Relaxation / MD files open at`. All frames are kept.
+
+`Structure → Trajectory Player… (Ctrl + Shift + P)` plays them in a separate window drawn on the GPU:
+
+* Play, step and jump with the buttons or **Space**, **, / .** (or **← / →**), **Home / End**; set the speed in frames per second.
+* For relaxations, the energy of every step is plotted under the view (click to jump), with the energy, ΔE and largest force of the current step on screen.
+* **Show in Main View** copies the current frame into the main window for measurements, analysis and vector export; **Undo** restores the previous structure.
+* **Save Image…** writes the 3D view as a PNG.
 
 ### Tab Management
 CView uses a tabbed interface to handle multiple structures simultaneously. The application employs a **smart loading strategy** to keep the workspace clean:
@@ -214,6 +227,7 @@ This visualization immediately reveals the corner-sharing connectivity character
 | `Ctrl + M` | Add Miller plane |
 | `Ctrl + B` | Toggle bonds |
 | `Ctrl + Shift + B` | Toggle full-unit-cell/ghost display |
+| `Ctrl + Shift + P` | Trajectory Player (relaxation / MD files) |
 | **Mouse scroll** | Zoom in/out |
 | **Left-click drag** | Rotate structure |
 | **Shift + click** | Multi-select atoms |

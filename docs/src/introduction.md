@@ -28,10 +28,10 @@
 
 | Feature | Description |
 | :--- | :--- |
-| **Fast & Lightweight** | Built on Rust/GTK4. No GPU drivers required. Runs on any laptop. |
+| **Fast & Lightweight** | Built on Rust/GTK4. The main viewer needs no GPU; the 3D charge density view and the trajectory player use OpenGL 3.3, which any laptop from the last decade provides. |
 | **Analysis First** | Dedicated tools for [K-Paths](guide/kpath.md), [Slabs](guide/slabs.md), and [Void Analysis](guide/voids.md). |
-| **DFT Ready** | Native support for VASP, Quantum Espresso, and SPRKKR formats. |
-| **Publication Quality** | Export high-resolution PNG, PDF, and SVG figures with Cairo-based rendering. |
+| **DFT Ready** | Native support for VASP (including every step of a `vasprun.xml`), Quantum Espresso, SPRKKR and LAMMPS formats. Relaxations and MD runs play back in the [Trajectory Player](guide/visualization.md#trajectories-relaxation-and-md). |
+| **Publication Quality** | Export high-resolution PNG, PDF, and SVG figures with Cairo-based rendering, and journal-ready [3D charge density figures](guide/charge_density.md#3d-isosurfaces) at a physical size and dpi. |
 
 ---
 
@@ -65,10 +65,10 @@ See the [Installation Page](installation.md) for detailed OS-specific instructio
 
 ## Supported Formats
 
-Format | VASP | Quantum Espresso | SPRKKR | CIF / XYZ | PDB |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| **Read** | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 |
-| **Write** | 🟢 | 🟠 | 🟠 | 🟢 | 🟢 |
+Format | VASP | Quantum Espresso | SPRKKR | CIF / XYZ | PDB | LAMMPS dump |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **Read** | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 | 🟢 |
+| **Write** | 🟢 | 🟠 | 🟠 | 🟢 | 🟢 | — |
 
 ---
 
