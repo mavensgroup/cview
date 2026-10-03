@@ -11,6 +11,7 @@
 //   - Performance   (5 settings — none were wired to runtime behavior)
 //   - Advanced      (5 settings — none were wired to runtime behavior)
 
+use crate::model::trajectory::FrameChoice;
 use crate::config::RotationCenter;
 use crate::model::elements::ColorScheme;
 use crate::state::AppState;
@@ -184,6 +185,31 @@ fn build_general_tab(state: Rc<RefCell<AppState>>, da: gtk::DrawingArea) -> gtk:
         st.save_config();
     });
     vbox.append(&check7);
+
+    // 8. Frame shown for multi-frame files
+    vbox.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
+    let frame_label = gtk::Label::new(Some("Relaxation / MD files open at:"));
+    frame_label.set_halign(gtk::Align::Start);
+    vbox.append(&frame_label);
+    let frame_dropdown = gtk::DropDown::from_strings(&["First frame", "Last frame"]);
+    frame_dropdown.set_selected(match state.borrow().config.open_frame {
+        FrameChoice::First => 0,
+        FrameChoice::Last => 1,
+    });
+    frame_dropdown.set_tooltip_text(Some(
+        "vasprun.xml, QE relax/MD output and LAMMPS dumps. All frames stay \
+         available in Structure \u{2192} Trajectory Player.",
+    ));
+    let s8 = state.clone();
+    frame_dropdown.connect_selected_notify(move |d| {
+        let mut st = s8.borrow_mut();
+        st.config.open_frame = match d.selected() {
+            1 => FrameChoice::Last,
+            _ => FrameChoice::First,
+        };
+        st.save_config();
+    });
+    vbox.append(&frame_dropdown);
 
     // Suppress unused variable warning for `da` (kept for API consistency)
     let _ = da;

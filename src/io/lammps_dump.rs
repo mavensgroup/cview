@@ -11,6 +11,7 @@
 // general `abc origin` form. Species come from an `element` column, else from
 // a `mass` column, else are named `Type n`.
 
+use crate::model::trajectory::{Frame, Trajectory};
 use crate::model::{Atom, Structure};
 use nalgebra::{Matrix3, Vector3};
 use std::fs::File;
@@ -132,12 +133,30 @@ fn classify(name: &str) -> Col {
 
 /// Read the first frame of a dump as a `Structure`.
 pub fn parse(path: &str) -> io::Result<Structure> {
-    let mut lines = BufReader::with_capacity(1 << 16, File::open(path)?).lines();
+    let t = read_frames(path, Some(1))?;
+    t.structure_at(0).ok_or_else(|| bad("no ITEM: ATOMS section in LAMMPS dump"))
+}
+
+/// Read every frame of a dump.
+pub fn parse_trajectory(path: &str) -> io::Result<Trajectory> {
+    read_frames(path, None)
+}
+
+/// Read up to `limit` frames. A frame cut short at the end of the file (a
+/// simulation still writing) ends the read without an error, as does a frame
+/// whose atoms differ from the first one.
+fn read_frames(path: &str, limit: Option<usize>) -> io::Result<Trajectory> {
+    let mut lines = BufReader::with_capacity(1 << 20, File::open(path)?).lines();
     let mut n_atoms = None;
     let mut bx = None;
     let mut step = 0i64;
+    let mut traj: Option<Trajectory> = None;
+    let have = |t: &Option<Trajectory>| t.as_ref().map_or(0, |t| t.len());
 
     while let Some(line) = lines.next() {
+        if limit.is_some_and(|l| have(&traj) >= l) {
+            break;
+        }
         let line = line?;
         let Some(item) = line.trim().strip_prefix("ITEM:").map(str::trim) else {
             if line.trim().is_empty() {
@@ -145,29 +164,74 @@ pub fn parse(path: &str) -> io::Result<Structure> {
             }
             return Err(bad(format!("expected an ITEM: line, found '{}'", line.trim())));
         };
+        // Past the first frame, running out of file mid-frame is a frame
+        // still being written: keep what is complete.
+        let partial_ok = have(&traj) > 0;
+        macro_rules! or_stop {
+            ($e:expr) => {
+                match $e {
+                    Ok(v) => v,
+                    Err(_) if partial_ok => {
+                        crate::utils::console::log_warn(&format!(
+                            "{path}: last frame is incomplete and was skipped"
+                        ));
+                        break;
+                    }
+                    Err(e) => return Err(e),
+                }
+            };
+        }
         if item.starts_with("TIMESTEP") {
-            step = next_line(&mut lines, "TIMESTEP")?.trim().parse().unwrap_or(0);
+            step = or_stop!(next_line(&mut lines, "TIMESTEP")).trim().parse().unwrap_or(0);
         } else if item.starts_with("NUMBER OF ATOMS") {
             n_atoms = Some(
-                next_line(&mut lines, "NUMBER OF ATOMS")?
+                or_stop!(next_line(&mut lines, "NUMBER OF ATOMS"))
                     .trim()
                     .parse::<usize>()
                     .map_err(|_| bad("bad NUMBER OF ATOMS"))?,
             );
         } else if item.starts_with("BOX BOUNDS") {
-            bx = Some(parse_box(item, &mut lines)?);
+            bx = Some(or_stop!(parse_box(item, &mut lines)));
         } else if let Some(cols) = item.strip_prefix("ATOMS") {
             let n = n_atoms.ok_or_else(|| bad("ATOMS before NUMBER OF ATOMS"))?;
-            let bx = bx.ok_or_else(|| bad("ATOMS before BOX BOUNDS"))?;
+            let b = bx.as_ref().ok_or_else(|| bad("ATOMS before BOX BOUNDS"))?;
             let roles: Vec<Col> = cols.split_whitespace().map(classify).collect();
-            return read_atoms(&mut lines, &roles, n, &bx, step);
-        } else if !(item.starts_with("UNITS") || item == "TIME") {
-            return Err(bad(format!("unsupported dump section 'ITEM: {item}'")));
+            let s = or_stop!(read_atoms(&mut lines, &roles, n, b, step));
+            let frame = Frame {
+                lattice: s.lattice,
+                positions: s.atoms.iter().map(|a| a.position).collect(),
+                energy: None,
+                max_force: None,
+                step: Some(step),
+            };
+            match traj.as_mut() {
+                None => {
+                    traj = Some(Trajectory {
+                        species: s.atoms.into_iter().map(|a| a.element).collect(),
+                        frames: vec![frame],
+                        is_periodic: s.is_periodic,
+                        format: "LAMMPS dump",
+                    })
+                }
+                Some(t) => {
+                    let same = s.atoms.len() == t.species.len()
+                        && s.atoms.iter().zip(&t.species).all(|(a, sp)| &a.element == sp);
+                    if !same || !t.push_checked(frame) {
+                        crate::utils::console::log_warn(&format!(
+                            "{path}: atoms change at step {step}; reading stopped after {} frames",
+                            t.len()
+                        ));
+                        break;
+                    }
+                }
+            }
+        } else if item.starts_with("UNITS") || item == "TIME" {
+            or_stop!(next_line(&mut lines, item)); // one value line
         } else {
-            next_line(&mut lines, item)?; // UNITS / TIME carry one value line
+            return Err(bad(format!("unsupported dump section 'ITEM: {item}'")));
         }
     }
-    Err(bad("no ITEM: ATOMS section in LAMMPS dump"))
+    traj.ok_or_else(|| bad("no ITEM: ATOMS section in LAMMPS dump"))
 }
 
 fn read_atoms(
@@ -293,7 +357,7 @@ fn element_from_mass(mass: f64) -> Option<&'static str> {
         ("Ru", 101.07), ("Rh", 102.91), ("Pd", 106.42), ("Ag", 107.87), ("Cd", 112.41), ("In", 114.82),
         ("Sn", 118.71), ("Sb", 121.76), ("Te", 127.6), ("I", 126.9), ("Xe", 131.29), ("Cs", 132.91),
     ];
-    if !(mass > 0.5) {
+    if mass.is_nan() || mass <= 0.5 {
         return None;
     }
     W.iter()
@@ -350,6 +414,21 @@ mod tests {
         let s = parse(&write_tmp("tri.dat", body)).unwrap();
         assert_eq!(s.lattice, [[10.0, 0.0, 0.0], [2.0, 10.0, 0.0], [0.0, 0.0, 10.0]]);
         assert_eq!(s.atoms[0].element, "Fe");
+    }
+
+    #[test]
+    fn all_frames_and_an_incomplete_tail() {
+        let mut body = String::new();
+        for x in ["0", "1", "2"] {
+            body += HEAD;
+            body += &format!("ITEM: ATOMS id type x y z\n1 1 {x} 0 0\n2 1 0 0 0\n");
+        }
+        body += HEAD;
+        body += "ITEM: ATOMS id type x y z\n1 1 0 0 0\n";
+        let t = parse_trajectory(&write_tmp("multi.dat", &body)).unwrap();
+        assert_eq!(t.len(), 3);
+        assert!(near(t.frames[2].positions[0], [7.0, 5.0, 5.0]));
+        assert_eq!(t.frames[1].step, Some(7));
     }
 
     #[test]

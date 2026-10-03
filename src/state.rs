@@ -209,6 +209,11 @@ pub struct TabState {
     /// Covalent-equivalent radius per species the element table does not
     /// know (LAMMPS `Type n`); everything else uses the table.
     pub species_radius: HashMap<String, f64>,
+    /// All frames of the file this tab was opened from, when it had more
+    /// than one (relaxation, MD). Played by the Trajectory Player window.
+    pub trajectory: Option<std::rc::Rc<crate::model::trajectory::Trajectory>>,
+    /// Frame of `trajectory` the structure was taken from.
+    pub trajectory_frame: usize,
 }
 
 impl TabState {
@@ -228,6 +233,8 @@ impl TabState {
             bvs_cache_valid: false,
             overrides: HashMap::new(),
             species_radius: HashMap::new(),
+            trajectory: None,
+            trajectory_frame: 0,
         }
     }
 
@@ -318,6 +325,10 @@ impl TabState {
 }
 
 pub struct AppState {
+    /// Files being read on worker threads. Dropping a handle cancels its job,
+    /// so they are held for the session (a handle is one flag; finished
+    /// ones cost nothing).
+    pub load_jobs: Vec<crate::utils::task::JobHandle>,
     pub tabs: Vec<TabState>,
     pub active_tab_index: usize,
     pub config: Config,
@@ -328,6 +339,7 @@ impl AppState {
         let (config, msg) = Config::load();
         crate::utils::console::log_info(&msg);
         Self {
+            load_jobs: vec![],
             tabs: vec![],
             active_tab_index: 0,
             config,
@@ -338,6 +350,7 @@ impl AppState {
         let (config, log) = Config::load();
         let initial_tab = TabState::new(&config);
         let state = Self {
+            load_jobs: vec![],
             config,
             tabs: vec![initial_tab],
             active_tab_index: 0,

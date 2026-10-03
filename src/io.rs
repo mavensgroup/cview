@@ -6,9 +6,11 @@ pub mod pdb;
 pub mod poscar;
 pub mod qe;
 pub mod sprkkr;
+pub mod vasprun;
 pub mod xrd_exp;
 pub mod xyz;
 
+use crate::model::trajectory::{FrameChoice, Trajectory};
 use crate::model::Structure;
 use std::io;
 use std::path::Path;
@@ -22,12 +24,55 @@ fn is_sprkkr_potential(lower_path: &str) -> bool {
         .is_some_and(|e| e == "pot" || e.starts_with("pot_"))
 }
 
+/// What opening a file gives the main view: one structure, plus all frames
+/// when the file holds a relaxation or MD run.
+pub struct Document {
+    pub structure: Structure,
+    /// Present only when the file has more than one frame.
+    pub trajectory: Option<Trajectory>,
+    /// Index of the frame `structure` was taken from.
+    pub frame: usize,
+}
+
+/// Load `path` for display. Multi-frame files (vasprun.xml, QE relax/MD
+/// output, LAMMPS dump) are read in full, and `choice` picks the frame shown.
+pub fn load_document(path: &str, choice: FrameChoice) -> io::Result<Document> {
+    let traj = if lammps_dump::sniff(path) {
+        Some(lammps_dump::parse_trajectory(path)?)
+    } else if vasprun::sniff(path) {
+        Some(vasprun::parse_trajectory(path)?)
+    } else if is_qe_path(&path.to_lowercase()) {
+        qe::parse_trajectory(path)?
+    } else {
+        None
+    };
+    match traj {
+        Some(t) => {
+            let frame = t.index_of(choice);
+            let structure = t
+                .structure_at(frame)
+                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "file has no frames"))?;
+            let trajectory = (t.len() > 1).then_some(t);
+            Ok(Document { structure, trajectory, frame })
+        }
+        None => load_structure(path).map(|structure| Document { structure, trajectory: None, frame: 0 }),
+    }
+}
+
+fn is_qe_path(lower: &str) -> bool {
+    [".in", ".pwi", ".qe", ".out", ".log", ".pwo"].iter().any(|e| lower.ends_with(e))
+}
+
 pub fn load_structure(path: &str) -> io::Result<Structure> {
     let p = path.to_lowercase();
 
     // LAMMPS dumps go by content: `.dat`, `.dump`, `.lammpstrj` or no extension.
     if lammps_dump::sniff(path) {
         return lammps_dump::parse(path);
+    }
+
+    if vasprun::sniff(path) {
+        return vasprun::parse(path);
     }
 
     // Check extension-based formats first

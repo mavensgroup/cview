@@ -1,5 +1,6 @@
 // src/io/qe.rs
 
+use crate::model::trajectory::{Frame, Trajectory};
 use crate::model::{Atom, Structure};
 use crate::utils::linalg::frac_to_cart;
 use std::fs;
@@ -12,10 +13,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
     let content = fs::read_to_string(path)?;
 
     // Heuristic: Output files contain execution markers
-    if content.contains("Program PWSCF")
-        || content.contains("JOB DONE")
-        || content.contains("unit-cell volume")
-    {
+    if is_output(&content) {
         parse_output(&content)
     } else {
         parse_input(&content)
@@ -25,111 +23,181 @@ pub fn parse(path: &str) -> io::Result<Structure> {
 // =======================
 //   QE OUTPUT PARSER
 // =======================
-fn parse_output(content: &str) -> io::Result<Structure> {
-    let mut lattice = None;
-    let mut atoms = Vec::new();
-    let mut alat = 0.0;
 
+const RY_TO_EV: f64 = 13.605693122994;
+/// Ry/bohr to eV/Å.
+const RY_BOHR_TO_EV_ANG: f64 = RY_TO_EV / BOHR_TO_ANG;
+
+/// True if `content` is pw.x output rather than input.
+fn is_output(content: &str) -> bool {
+    content.contains("Program PWSCF") || content.contains("JOB DONE") || content.contains("unit-cell volume")
+}
+
+/// All geometries of a pw.x output, or `None` if `path` is an input file.
+pub fn parse_trajectory(path: &str) -> io::Result<Option<Trajectory>> {
+    let content = fs::read_to_string(path)?;
+    if !is_output(&content) {
+        return Ok(None);
+    }
+    parse_output_frames(&content).map(Some)
+}
+
+/// The three numbers inside `= ( ... )`, as in `a(1) = ( 1.0 0.0 0.0 )`.
+fn paren_vec3(line: &str) -> Option<[f64; 3]> {
+    let inner = line.rsplit_once("= (").or_else(|| line.rsplit_once("=("))?.1;
+    let inner = inner.split(')').next()?;
+    let v: Vec<f64> = inner.split_whitespace().filter_map(|t| t.replace(['d', 'D'], "e").parse().ok()).collect();
+    (v.len() >= 3).then(|| [v[0], v[1], v[2]])
+}
+
+/// Every geometry of a pw.x run, in order: the input structure from the
+/// header, then one frame per `ATOMIC_POSITIONS` block of a relax, vc-relax
+/// or MD run. Energies and forces belong to the geometry they were computed
+/// for, which is the latest frame when they are printed. The block repeated
+/// between "Begin/End final coordinates" is not a new geometry and is skipped.
+fn parse_output_frames(content: &str) -> io::Result<Trajectory> {
     let lines: Vec<&str> = content.lines().collect();
+    let mut alat = 0.0;
+    let mut lattice: Option<[[f64; 3]; 3]> = None;
+    let mut species: Vec<String> = Vec::new();
+    let mut traj = Trajectory {
+        species: vec![],
+        frames: vec![],
+        is_periodic: true,
+        format: "QE output",
+    };
+    let mut in_final = false;
     let mut i = 0;
 
     while i < lines.len() {
         let line = lines[i].trim();
 
-        // lattice parameter (alat)  =      10.2000  a.u.
         if ascii_contains_ci(line, "lattice parameter (alat)") {
             if let Some(val) = extract_val(line, "=") {
                 alat = val * BOHR_TO_ANG;
             }
-        }
-
-        if ascii_starts_with_ci(line, "cell_parameters") {
-            let (unit, scale) = parse_header_unit(line, alat);
-
-            if i + 3 < lines.len() {
-                let v1 = parse_vec3(lines[i + 1]);
-                let v2 = parse_vec3(lines[i + 2]);
-                let v3 = parse_vec3(lines[i + 3]);
-
-                let factor = if unit == "alat" {
-                    scale
-                } else if unit == "bohr" {
-                    BOHR_TO_ANG
-                } else {
-                    1.0
-                };
-
-                lattice = Some([
-                    [v1[0] * factor, v1[1] * factor, v1[2] * factor],
-                    [v2[0] * factor, v2[1] * factor, v2[2] * factor],
-                    [v3[0] * factor, v3[1] * factor, v3[2] * factor],
-                ]);
+        } else if line.starts_with("crystal axes:") && lattice.is_none() {
+            // a(1..3) in units of alat: the starting cell.
+            let rows: Vec<[f64; 3]> = (1..=3).filter_map(|k| lines.get(i + k).and_then(|l| paren_vec3(l))).collect();
+            if rows.len() == 3 {
+                lattice = Some([0, 1, 2].map(|r| rows[r].map(|x| x * alat)));
             }
-        }
-
-        if ascii_starts_with_ci(line, "atomic_positions") {
-            let (unit, scale_factor) = parse_header_unit(line, alat);
-            atoms.clear(); // Keep only the latest step
-
-            i += 1;
-            while i < lines.len() {
-                let atom_line = lines[i].trim();
-                if atom_line.is_empty()
-                    || atom_line.starts_with("End")
-                    || ascii_contains_ci(atom_line, "total energy")
-                {
+        } else if line.starts_with("site n.") && traj.frames.is_empty() {
+            // Starting positions:   1   C   tau(   1) = ( x y z )   (alat units)
+            let mut positions = Vec::new();
+            let mut k = i + 1;
+            while let Some(l) = lines.get(k) {
+                let Some(v) = paren_vec3(l).filter(|_| l.contains("tau(")) else { break };
+                let el = l.split_whitespace().nth(1).unwrap_or("X").to_string();
+                species.push(el);
+                positions.push(v.map(|x| x * alat));
+                k += 1;
+            }
+            if let (Some(lat), false) = (lattice, positions.is_empty()) {
+                traj.species = species.clone();
+                traj.frames.push(Frame { lattice: lat, positions, energy: None, max_force: None, step: Some(0) });
+            }
+            i = k;
+            continue;
+        } else if line.starts_with("Begin final coordinates") {
+            in_final = true;
+        } else if line.starts_with("End final coordinates") {
+            in_final = false;
+        } else if ascii_starts_with_ci(line, "cell_parameters") {
+            let (unit, scale) = parse_header_unit(line, alat);
+            if i + 3 < lines.len() {
+                let factor = match unit.as_str() {
+                    "alat" => scale,
+                    "bohr" => BOHR_TO_ANG,
+                    _ => 1.0,
+                };
+                lattice = Some([1, 2, 3].map(|k| parse_vec3(lines[i + k]).map(|x| x * factor)));
+            }
+        } else if line.starts_with('!') && ascii_contains_ci(line, "total energy") {
+            if let (Some(e), Some(f)) = (extract_val(line, "="), traj.frames.last_mut()) {
+                f.energy = Some(e * RY_TO_EV);
+            }
+        } else if line.starts_with("Forces acting on atoms") {
+            let mut max2: f64 = 0.0;
+            let mut k = i + 1;
+            while let Some(l) = lines.get(k) {
+                let t = l.trim();
+                if t.starts_with("Total force") || t.starts_with("The non-local") {
                     break;
                 }
-
-                let parts: Vec<&str> = atom_line.split_whitespace().collect();
-                if parts.len() >= 4 {
-                    let el = parts[0].to_string();
-                    let coords = parse_vec3(atom_line);
-                    let (x, y, z) = (coords[0], coords[1], coords[2]);
-
-                    let pos = if unit == "crystal" {
-                        // Convert fractional to Cartesian using nalgebra
-                        if let Some(lat) = lattice {
-                            frac_to_cart([x, y, z], lat)
-                        } else {
-                            [0.0, 0.0, 0.0]
-                        }
-                    } else if unit == "alat" {
-                        [x * scale_factor, y * scale_factor, z * scale_factor]
-                    } else if unit == "bohr" {
-                        [x * BOHR_TO_ANG, y * BOHR_TO_ANG, z * BOHR_TO_ANG]
-                    } else {
-                        [x, y, z] // Angstrom
-                    };
-
-                    atoms.push(Atom {
-                        element: el,
-                        position: pos,
-                        original_index: atoms.len(),
-                        oxidation: None,
-                        occupancy: 1.0,
-                    });
+                if t.starts_with("atom") {
+                    if let Some(rest) = t.split("force =").nth(1) {
+                        let v = parse_vec3(rest);
+                        max2 = max2.max(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+                    }
                 }
-                i += 1;
+                k += 1;
+            }
+            if let Some(f) = traj.frames.last_mut() {
+                f.max_force = Some(max2.sqrt() * RY_BOHR_TO_EV_ANG);
+            }
+            i = k;
+            continue;
+        } else if ascii_starts_with_ci(line, "atomic_positions") {
+            let (unit, scale) = parse_header_unit(line, alat);
+            let lat = lattice.ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "ATOMIC_POSITIONS before any cell in QE output")
+            })?;
+            let mut els = Vec::new();
+            let mut positions = Vec::new();
+            let mut k = i + 1;
+            while let Some(l) = lines.get(k) {
+                let t = l.trim();
+                let parts: Vec<&str> = t.split_whitespace().collect();
+                if t.is_empty() || t.starts_with("End") || parts.len() < 4 || parts[1].parse::<f64>().is_err() {
+                    break;
+                }
+                let c = parse_vec3(&parts[1..].join(" "));
+                positions.push(match unit.as_str() {
+                    "crystal" => frac_to_cart(c, lat),
+                    "alat" => c.map(|x| x * scale),
+                    "bohr" => c.map(|x| x * BOHR_TO_ANG),
+                    _ => c,
+                });
+                els.push(parts[0].to_string());
+                k += 1;
+            }
+            i = k;
+            if traj.frames.is_empty() {
+                // No header geometry found: this block starts the path.
+                traj.species = els.clone();
+            }
+            let frame = Frame { lattice: lat, positions, energy: None, max_force: None, step: Some(traj.frames.len() as i64) };
+            if in_final {
+                if let Some(last) = traj.frames.last() {
+                    let same = last.positions.len() == frame.positions.len()
+                        && last.positions.iter().zip(&frame.positions).all(|(a, b)| (0..3).all(|d| (a[d] - b[d]).abs() < 1e-6));
+                    if same {
+                        continue;
+                    }
+                }
+            }
+            if !traj.push_checked(frame) {
+                crate::utils::console::log_warn("QE output: atom count changes between steps; later steps were not read");
+                break;
             }
             continue;
         }
         i += 1;
     }
 
-    let final_lattice = lattice.ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            "No CELL_PARAMETERS found in output",
-        )
-    })?;
+    if traj.frames.is_empty() {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, "No atomic positions found in QE output"));
+    }
+    Ok(traj)
+}
 
-    Ok(Structure {
-        lattice: final_lattice,
-        formula: generate_formula(&atoms),
-        atoms,
-        is_periodic: true,
-    })
+/// The last geometry of a pw.x output (the relaxed structure).
+fn parse_output(content: &str) -> io::Result<Structure> {
+    let t = parse_output_frames(content)?;
+    let mut s = t.structure_at(t.len() - 1).expect("non-empty");
+    s.formula = generate_formula(&s.atoms);
+    Ok(s)
 }
 
 // =======================
@@ -652,5 +720,59 @@ mod tests {
         assert_eq!(s.atoms[0].element, "C");
         approx(s.atoms[0].position[1], 2.0);
         approx(s.lattice[2][2], 5.0);
+    }
+}
+
+#[cfg(test)]
+mod trajectory_tests {
+    use super::*;
+
+    const RELAX: &str = "     Program PWSCF v.7.0 starts on ...
+     lattice parameter (alat)  =      10.0000  a.u.
+     crystal axes: (cart. coord. in units of alat)
+               a(1) = (   1.000000   0.000000   0.000000 )
+               a(2) = (   0.000000   1.000000   0.000000 )
+               a(3) = (   0.000000   0.000000   1.000000 )
+
+     site n.     atom                  positions (alat units)
+         1           C   tau(   1) = (   0.1000000   0.0000000   0.0000000  )
+         2           O   tau(   2) = (   0.0000000   0.0000000   0.0000000  )
+
+!    total energy              =     -43.0 Ry
+     Forces acting on atoms (cartesian axes, Ry/au):
+
+     atom    1 type  2   force =    -0.10000000    0.00000000    0.00000000
+     atom    2 type  1   force =     0.10000000    0.00000000    0.00000000
+
+     Total force =     0.141421     Total SCF correction =     0.000092
+ATOMIC_POSITIONS (bohr)
+C        2.000000000   0.000000000   0.000000000
+O        0.000000000   0.000000000   0.000000000
+
+!    total energy              =     -43.1 Ry
+Begin final coordinates
+
+ATOMIC_POSITIONS (bohr)
+C        2.000000000   0.000000000   0.000000000
+O        0.000000000   0.000000000   0.000000000
+End final coordinates
+     JOB DONE.
+";
+
+    #[test]
+    fn relax_frames_energies_forces() {
+        let t = parse_output_frames(RELAX).unwrap();
+        assert_eq!(t.len(), 2, "header geometry + one step; final block is a repeat");
+        assert_eq!(t.species, vec!["C", "O"]);
+        let a = 10.0 * BOHR_TO_ANG;
+        assert!((t.frames[0].lattice[0][0] - a).abs() < 1e-9);
+        assert!((t.frames[0].positions[0][0] - 0.1 * a).abs() < 1e-9);
+        assert!((t.frames[1].positions[0][0] - 2.0 * BOHR_TO_ANG).abs() < 1e-9);
+        assert!((t.frames[0].energy.unwrap() + 43.0 * RY_TO_EV).abs() < 1e-9);
+        assert!((t.frames[1].energy.unwrap() + 43.1 * RY_TO_EV).abs() < 1e-9);
+        assert!((t.frames[0].max_force.unwrap() - 0.1 * RY_BOHR_TO_EV_ANG).abs() < 1e-9);
+        // Fixed-cell relax has no CELL_PARAMETERS: the cell comes from the header.
+        let s = parse_output(RELAX).unwrap();
+        assert_eq!(s.atoms.len(), 2);
     }
 }

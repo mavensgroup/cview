@@ -14,6 +14,135 @@ use gtk4::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
+/// Everything `open_path` needs to put a loaded file on screen. All weak, so
+/// a load that finishes after its window closed does nothing.
+#[derive(Clone)]
+pub struct OpenContext {
+    pub state: std::rc::Weak<RefCell<AppState>>,
+    pub notebook: gtk4::glib::WeakRef<Notebook>,
+    pub atom_box: gtk4::glib::WeakRef<gtk4::Box>,
+    pub window: gtk4::glib::WeakRef<ApplicationWindow>,
+    pub handles: Rc<SidebarHandles>,
+}
+
+/// Open `path`: read it on a worker thread (an MD trajectory can be hundreds
+/// of MB), then show it in the current tab if that is the empty placeholder,
+/// otherwise in a new tab.
+pub fn open_path(ctx: &OpenContext, path_str: &str) {
+    let Some(st_rc) = ctx.state.upgrade() else { return };
+    let filename = std::path::Path::new(path_str)
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+    let choice = st_rc.borrow().config.open_frame;
+    let worker_path = path_str.to_string();
+    let ctx = ctx.clone();
+    let started = std::time::Instant::now();
+    let job = crate::utils::task::spawn(
+        move |_cancel| Some(io::load_document(&worker_path, choice)),
+        move |result| match result {
+            Ok(doc) => show_document(&ctx, &filename, doc, started.elapsed()),
+            Err(e) => console::log_error(&format!("Error loading '{}': {}", filename, e)),
+        },
+    );
+    st_rc.borrow_mut().load_jobs.push(job);
+}
+
+fn show_document(ctx: &OpenContext, filename: &str, doc: io::Document, took: std::time::Duration) {
+    let Some(st_rc) = ctx.state.upgrade() else { return };
+    let io::Document { structure, trajectory, frame } = doc;
+    let trajectory = trajectory.map(Rc::new);
+    let tab_index: usize;
+    let replace_current_tab;
+
+    {
+        let mut s = st_rc.borrow_mut();
+        let is_replace_mode = if s.tabs.is_empty() {
+            false
+        } else {
+            let t = s.active_tab();
+            t.structure.is_none() && t.file_name == "Untitled"
+        };
+
+        if is_replace_mode {
+            let tab = s.active_tab_mut();
+            tab.original_structure = Some(structure.clone());
+            tab.structure = Some(structure);
+            tab.file_name = filename.to_string();
+            // Replacing the structure in-place must reset every per-tab piece
+            // of state that referred to the previous structure — otherwise old
+            // selections appear as "pre-highlighted" atoms on the new one.
+            tab.interaction.selected.clear();
+            tab.interaction.undo_stack.clear();
+            tab.miller_planes.clear();
+            tab.kpath_result = None;
+            tab.void_result = None;
+            tab.invalidate_derived();
+            tab.style_generic_species();
+            replace_current_tab = true;
+            tab_index = s.active_tab_index;
+        } else {
+            s.add_tab(structure, filename.to_string());
+            replace_current_tab = false;
+            tab_index = s.tabs.len() - 1;
+        }
+        let tab = &mut s.tabs[tab_index];
+        tab.trajectory = trajectory.clone();
+        tab.trajectory_frame = frame;
+    }
+
+    if let Some(nb) = ctx.notebook.upgrade() {
+        if replace_current_tab {
+            if let Some(page) = nb.nth_page(nb.current_page()) {
+                if let Some(lbl_box) = nb.tab_label(&page) {
+                    if let Some(bx) = lbl_box.downcast_ref::<gtk4::Box>() {
+                        if let Some(first_child) = bx.first_child() {
+                            if let Some(l) = first_child.downcast_ref::<Label>() {
+                                l.set_text(filename);
+                            }
+                        }
+                    } else if let Some(l) = lbl_box.downcast_ref::<Label>() {
+                        l.set_text(filename);
+                    }
+                }
+            }
+            if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
+                da.queue_draw();
+            }
+        } else {
+            let (new_da, container) = create_tab_content(st_rc.clone(), tab_index);
+            crate::ui::add_closable_tab(&nb, &container, filename, st_rc.clone());
+            container.show();
+            if let Some(w) = ctx.window.upgrade() {
+                crate::ui::setup_interactions(&w, st_rc.clone(), &new_da, ctx.handles.clone());
+            }
+            nb.set_current_page(Some(tab_index as u32));
+        }
+    }
+
+    // Refresh sidebar & log
+    if let (Some(nb), Some(ab)) = (ctx.notebook.upgrade(), ctx.atom_box.upgrade()) {
+        crate::panels::sidebar::refresh_atom_list(&ab, st_rc.clone(), &nb);
+    }
+    crate::menu::actions_trajectory::refresh_enabled(&st_rc.borrow());
+
+    console::log_info(&format!("Loaded: {} ({:.2} s)", filename, took.as_secs_f64()));
+    if let Some(t) = &trajectory {
+        console::log_info(&format!(
+            "{}: {} frames ({}); showing frame {}. Structure \u{2192} Trajectory Player to play them.",
+            filename,
+            t.len(),
+            t.format,
+            frame + 1
+        ));
+    }
+    let s = st_rc.borrow();
+    if let Some(strc) = s.tabs.get(tab_index).and_then(|t| t.structure.as_ref()) {
+        console::info_report(&report::structure_summary(strc, filename));
+    }
+}
+
 pub fn setup(
     app: &Application,
     window: &ApplicationWindow,
@@ -28,7 +157,6 @@ pub fn setup(
 
     let win_weak = window.downgrade();
     let state_weak = Rc::downgrade(&state);
-    let da_weak = drawing_area.downgrade();
     let notebook_weak = notebook.downgrade();
     let atom_box_weak = atom_list_box.downgrade();
 
@@ -138,7 +266,6 @@ pub fn setup(
         dialog.add_filter(&filter_any);
 
         let state_inner = state_weak.clone();
-        let da_inner = da_weak.clone();
         let nb_inner = notebook_weak.clone();
         let atom_box_inner = atom_box_weak.clone();
         let win_weak_inner = win.downgrade();
@@ -149,128 +276,16 @@ pub fn setup(
                 if let Some(file) = d.file() {
                     if let Some(path) = file.path() {
                         let path_str = path.to_string_lossy().to_string();
-                        let filename = path
-                            .file_name()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                            .to_string();
-
-                        if let Some(st_rc) = state_inner.upgrade() {
-                            match io::load_structure(&path_str) {
-                                Ok(structure) => {
-                                    let mut new_tab_index: Option<usize> = None;
-                                    let mut replace_current_tab = false;
-
-                                    {
-                                        let mut s = st_rc.borrow_mut();
-                                        let is_replace_mode = if s.tabs.is_empty() {
-                                            false
-                                        } else {
-                                            let t = s.active_tab();
-                                            t.structure.is_none() && t.file_name == "Untitled"
-                                        };
-
-                                        if is_replace_mode {
-                                            let tab = s.active_tab_mut();
-                                            tab.original_structure = Some(structure.clone());
-                                            tab.structure = Some(structure);
-                                            tab.file_name = filename.clone();
-                                            // Replacing the structure in-place must reset
-                                            // every per-tab piece of state that referred
-                                            // to the previous structure — otherwise old
-                                            // selections appear as "pre-highlighted"
-                                            // atoms on the new one.
-                                            tab.interaction.selected.clear();
-                                            tab.interaction.undo_stack.clear();
-                                            tab.miller_planes.clear();
-                                            tab.kpath_result = None;
-                                            tab.void_result = None;
-                                            tab.invalidate_derived();
-                                            tab.style_generic_species();
-                                            replace_current_tab = true;
-                                        } else {
-                                            s.add_tab(structure, filename.clone());
-                                            new_tab_index = Some(s.tabs.len() - 1);
-                                        }
-                                    }
-
-                                    if let Some(nb) = nb_inner.upgrade() {
-                                        if replace_current_tab {
-                                            if let Some(page) = nb.nth_page(nb.current_page()) {
-                                                if let Some(lbl_box) = nb.tab_label(&page) {
-                                                    if let Some(bx) =
-                                                        lbl_box.downcast_ref::<gtk4::Box>()
-                                                    {
-                                                        if let Some(first_child) = bx.first_child()
-                                                        {
-                                                            if let Some(l) =
-                                                                first_child.downcast_ref::<Label>()
-                                                            {
-                                                                l.set_text(&filename);
-                                                            }
-                                                        }
-                                                    } else if let Some(l) =
-                                                        lbl_box.downcast_ref::<Label>()
-                                                    {
-                                                        l.set_text(&filename);
-                                                    }
-                                                }
-                                            }
-                                            if let Some(da) = da_inner.upgrade() {
-                                                da.queue_draw();
-                                            }
-                                        } else if let Some(idx) = new_tab_index {
-                                            let (new_da, container) =
-                                                create_tab_content(st_rc.clone(), idx);
-                                            crate::ui::add_closable_tab(
-                                                &nb,
-                                                &container,
-                                                &filename,
-                                                st_rc.clone(),
-                                            );
-                                            container.show();
-
-                                            if let Some(w) = win_weak_inner.upgrade() {
-                                                crate::ui::setup_interactions(
-                                                    &w,
-                                                    st_rc.clone(),
-                                                    &new_da,
-                                                    handles_inner.clone(),
-                                                );
-                                            }
-                                            nb.set_current_page(Some(idx as u32));
-                                        }
-                                    }
-
-                                    // Refresh sidebar & log
-                                    if let (Some(nb), Some(ab)) =
-                                        (nb_inner.upgrade(), atom_box_inner.upgrade())
-                                    {
-                                        crate::panels::sidebar::refresh_atom_list(
-                                            &ab,
-                                            st_rc.clone(),
-                                            &nb,
-                                        );
-                                    }
-
-                                    console::log_info(&format!("Loaded: {}", filename));
-
-                                    let s = st_rc.borrow();
-                                    let tab = s.active_tab();
-                                    if let Some(strc) = &tab.structure {
-                                        let report_text =
-                                            report::structure_summary(strc, &filename);
-                                        console::info_report(&report_text);
-                                    }
-                                }
-                                Err(e) => {
-                                    console::log_error(&format!(
-                                        "Error loading '{}': {}",
-                                        filename, e
-                                    ));
-                                }
-                            }
-                        }
+                        open_path(
+                            &OpenContext {
+                                state: state_inner.clone(),
+                                notebook: nb_inner.clone(),
+                                atom_box: atom_box_inner.clone(),
+                                window: win_weak_inner.clone(),
+                                handles: handles_inner.clone(),
+                            },
+                            &path_str,
+                        );
                     }
                 }
             }

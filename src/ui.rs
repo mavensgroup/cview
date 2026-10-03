@@ -7,6 +7,7 @@ pub mod interactions;
 pub mod preferences;
 pub mod structure;
 pub mod style;
+pub mod trajectory_player;
 
 // Re-exports
 pub use interactions::setup_interactions;

@@ -51,6 +51,8 @@ num-complex = "0.4"
 rayon = "1.8"
 calamine = "0.24"
 log = "0.4"
+glow = "0.16"
+libloading = "0.8"
 
 [profile.release]
 opt-level = 3

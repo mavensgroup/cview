@@ -12,6 +12,7 @@ pub mod actions_analysis;
 pub mod actions_file;
 pub mod actions_help;
 pub mod actions_tools;
+pub mod actions_trajectory;
 pub mod actions_view;
 
 pub fn build_menu_and_actions(
@@ -44,6 +45,7 @@ pub fn build_menu_and_actions(
     actions_tools::setup(app, window, state.clone(), notebook, drawing_area);
     actions_analysis::setup(app, window, state.clone(), notebook);
     actions_help::setup(app, window);
+    actions_trajectory::setup(app, window, state.clone(), notebook);
 
     // --- 2. KEYBOARD SHORTCUTS ---
     app.set_accels_for_action("app.open", &["<Primary>o"]);
@@ -58,6 +60,7 @@ pub fn build_menu_and_actions(
     app.set_accels_for_action("app.toggle_interstitial_sites", &["<Primary>i"]);
     app.set_accels_for_action("app.supercell", &["<Primary><Shift>c"]);
     app.set_accels_for_action("app.miller_planes", &["<Primary>m"]);
+    app.set_accels_for_action("app.trajectory_player", &["<Primary><Shift>p"]);
 
     // --- 3. BUILD VISUAL MENU BAR ---
     let menu_bar = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
@@ -108,6 +111,10 @@ pub fn build_menu_and_actions(
         Some("app.toggle_cell_view"),
     );
     structure_menu.append_section(None, &structure_cell);
+    // Relaxation and MD files: every frame, played on the GPU.
+    let structure_traj = gtk4::gio::Menu::new();
+    structure_traj.append(Some("Trajectory Player..."), Some("app.trajectory_player"));
+    structure_menu.append_section(None, &structure_traj);
     root_model.append_submenu(Some("Structure"), &structure_menu);
 
     // --- ANALYSIS MENU (read-only; each entry opens its own tab) ---

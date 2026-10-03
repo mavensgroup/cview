@@ -4,6 +4,7 @@ pub mod bvs;
 pub mod elements;
 pub mod miller;
 pub mod structure;
+pub mod trajectory;
 
 // Re-exports for cleaner imports
 // pub use bs_data::BrillouinZoneData;

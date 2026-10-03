@@ -215,6 +215,7 @@ fn build_ui(app: &Application) {
         st.active_tab_index = page_num as usize;
         // Newly-active tab has its own ViewState; push it into the sliders.
         handles_nb.sync_from_view(&st.active_tab().view);
+        menu::actions_trajectory::refresh_enabled(&st);
     });
 
     window.present();
@@ -225,49 +226,15 @@ fn build_ui(app: &Application) {
         let path = &args[1];
         console::log_info(&format!("CLI: Opening '{}'", path));
 
-        match io::load_structure(path) {
-            Ok(structure) => {
-                {
-                    let mut st = state.borrow_mut();
-                    let tab = st.active_tab_mut();
-                    tab.original_structure = Some(structure.clone());
-                    tab.structure = Some(structure);
-                    tab.style_generic_species();
-                    tab.file_name = std::path::Path::new(path)
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .to_string();
-
-                    if let Some(page) = view_notebook.nth_page(Some(0)) {
-                        if let Some(lbl_widget) = view_notebook.tab_label(&page) {
-                            if let Some(bx) = lbl_widget.downcast_ref::<GtkBox>() {
-                                if let Some(first_child) = bx.first_child() {
-                                    if let Some(l) = first_child.downcast_ref::<Label>() {
-                                        l.set_text(&tab.file_name);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                console::log_info(&format!("Loaded: {}", path));
-
-                let st = state.borrow();
-                let tab = st.active_tab();
-                if let Some(s) = &tab.structure {
-                    let report = utils::report::structure_summary(s, &tab.file_name);
-                    console::info_report(&report);
-                }
-                drop(st);
-
-                panels::sidebar::refresh_atom_list(&atom_list_box, state.clone(), &view_notebook);
-                first_da.queue_draw();
-            }
-            Err(e) => {
-                console::log_error(&format!("Error loading '{}': {}", path, e));
-            }
-        }
+        menu::actions_file::open_path(
+            &menu::actions_file::OpenContext {
+                state: Rc::downgrade(&state),
+                notebook: view_notebook.downgrade(),
+                atom_box: atom_list_box.downgrade(),
+                window: window.downgrade(),
+                handles: sidebar_handles.clone(),
+            },
+            path,
+        );
     }
 }

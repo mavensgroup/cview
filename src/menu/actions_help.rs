@@ -34,6 +34,12 @@ pub fn setup(app: &Application, window: &ApplicationWindow) {
 • <b>Ctrl + I:</b> Toggle Interstitial Sites
 • <b>Ctrl + Shift + C:</b> Supercell Tool
 • <b>Ctrl + M:</b> Miller Indices Tool
+• <b>Ctrl + Shift + P:</b> Trajectory Player (relaxation / MD files)
+
+<b>Trajectory Player:</b>
+• <b>Space:</b> Play / pause
+• <b>, / .</b> or <b>← / →:</b> Previous / next frame
+• <b>Home / End:</b> First / last frame
 "#;
 
         let dialog = MessageDialog::new(

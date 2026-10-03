@@ -279,6 +279,9 @@ pub struct Config {
     pub auto_center_structure: bool,
     #[serde(default)]
     pub remember_last_view: bool,
+    /// Frame of a multi-frame file (relaxation, MD) shown on open.
+    #[serde(default)]
+    pub open_frame: crate::model::trajectory::FrameChoice,
 
     // ── APPEARANCE (6) — colors live in style, toggles via ViewState ──
     #[serde(default)]
@@ -367,6 +370,7 @@ impl Default for Config {
             default_zoom: 1.0,
             auto_center_structure: true,
             remember_last_view: false,
+            open_frame: Default::default(),
 
             color_scheme: ColorScheme::default(),
             render_quality: RenderQuality::Fast,

@@ -1,5 +1,23 @@
 # Plan: GPU rendering for MD playback and 3D charge density
 
+## Status (2026-10-03)
+
+Done:
+- **Phase 1:** GL core (`src/rendering/gl/`).
+- **Phase 3, partly:** the trajectory player (`src/ui/trajectory_player.rs`). Opened from **Structure → Trajectory Player…** (Ctrl+Shift+P) rather than Analysis, because "Show in Main View" changes the structure.
+- **Phase 5, partly:** multi-frame readers for vasprun.xml, QE output and LAMMPS dumps. Preferences → General picks whether the first or last frame opens.
+
+Differs from the plan:
+- Frames are held as `f64` (`model::trajectory`), not `f32`.
+- Whole files are parsed on a worker (`utils::task`), without the byte-offset index or LRU.
+- The `GpuBackend` interface takes the full instance list per frame (`set_atoms`/`set_bonds`/`set_lines`), so boundary images can change between frames.
+
+Not started:
+- Phase 2: CHGCAR 3D.
+- Phase 4: colour-by, movie export.
+- XDATCAR and multi-frame XYZ readers.
+- Indexed and lazy loading for very large dumps.
+
 ## Decision
 
 The **main viewport stays Cairo**: no change to `scene.rs`, `painter.rs`, the export dialog or the sidebar. The GPU is used only in **two separate windows**, in the same way charge density already works:
