@@ -20,32 +20,22 @@ use crate::model::trajectory::{Frame, Trajectory};
 use crate::model::Structure;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
-use std::path::Path;
 
 fn bad(msg: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, msg.into())
 }
 
-/// True for `vasprun.xml` (any case, any prefix/suffix such as
-/// `vasprun_relax.xml`), or any `.xml` whose header is a VASP `<modeling>`
-/// document.
+/// True if `path` is a VASP XML document: its root `<modeling>` element
+/// appears in the first few hundred bytes. Content, not name, decides, so
+/// `vasprun.xml~`, `vasprun.xml_1` and `run3.xml` are all recognised.
 pub fn sniff(path: &str) -> bool {
-    let name = Path::new(path)
-        .file_name()
-        .map(|n| n.to_string_lossy().to_lowercase())
-        .unwrap_or_default();
-    if !name.ends_with(".xml") {
+    use std::io::Read;
+    let Ok(f) = File::open(path) else { return false };
+    let mut head = Vec::with_capacity(512);
+    if f.take(512).read_to_end(&mut head).is_err() {
         return false;
     }
-    if name.contains("vasprun") {
-        return true;
-    }
-    let Ok(f) = File::open(path) else { return false };
-    BufReader::new(f)
-        .lines()
-        .take(5)
-        .map_while(Result::ok)
-        .any(|l| l.contains("<modeling>"))
+    String::from_utf8_lossy(&head).contains("<modeling>")
 }
 
 /// Text between `<tag ...>` and `</tag>` on one line.
@@ -295,11 +285,23 @@ mod tests {
 "#;
 
     fn tmp(name: &str, body: &str) -> String {
-        let dir = std::env::temp_dir().join(format!("cview_vasprun_{}", std::process::id()));
+        // One directory per file: tests run in parallel and clean up after themselves.
+        let dir = std::env::temp_dir().join(format!("cview_vasprun_{}_{}", std::process::id(), name.replace(['.', '~'], "_")));
         std::fs::create_dir_all(&dir).unwrap();
         let p = dir.join(name);
         std::fs::File::create(&p).unwrap().write_all(body.as_bytes()).unwrap();
         p.to_string_lossy().to_string()
+    }
+
+    #[test]
+    fn recognised_by_content_whatever_the_name() {
+        for name in ["vasprun.xml~", "vasprun.xml_1", "run3.xml", "noext"] {
+            assert!(sniff(&tmp(name, XML)), "{name}");
+        }
+        assert!(!sniff(&tmp("other.xml", "<?xml version=\"1.0\"?>\n<svg>\n")));
+        for name in ["vasprun.xml~", "vasprun.xml_1", "run3.xml", "noext", "other.xml"] {
+            let _ = std::fs::remove_dir_all(std::path::Path::new(&tmp(name, "")).parent().unwrap());
+        }
     }
 
     #[test]

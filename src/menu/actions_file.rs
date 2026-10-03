@@ -201,6 +201,8 @@ pub fn setup(
         filter_struct.add_pattern("*.qe");
         filter_struct.add_pattern("*.out");
         filter_struct.add_pattern("*.log");
+        filter_struct.add_pattern("vasprun*");
+        filter_struct.add_pattern("*.xml");
         filter_struct.add_pattern("*.dump");
         filter_struct.add_pattern("*.lammpstrj");
         filter_struct.add_pattern("*.dat");
@@ -220,7 +222,9 @@ pub fn setup(
         dialog.add_filter(&f_cif);
 
         let f_vasp = FileFilter::new();
-        f_vasp.set_name(Some("VASP (POSCAR, CONTCAR, *.vasp)"));
+        f_vasp.set_name(Some("VASP (POSCAR, CONTCAR, *.vasp, vasprun.xml)"));
+        f_vasp.add_pattern("vasprun*");
+        f_vasp.add_pattern("*.xml");
         f_vasp.add_pattern("POSCAR");
         f_vasp.add_pattern("POSCAR*");
         f_vasp.add_pattern("poscar");
