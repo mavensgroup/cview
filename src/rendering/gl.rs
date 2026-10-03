@@ -9,7 +9,9 @@
 
 pub mod backend;
 pub mod camera;
+pub mod export;
 pub mod loader;
 
-pub use backend::{AtomInstance, BondInstance, GlBackend, GpuBackend};
+pub use backend::{AtomInstance, BondInstance, GlBackend, GpuBackend, Material, MeshData, Section, Volume};
+pub use export::{ExportRequest, RgbaImage};
 pub use camera::Camera;

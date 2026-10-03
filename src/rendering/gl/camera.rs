@@ -65,11 +65,27 @@ impl Camera {
         (back * rot * to_origin).cast()
     }
 
-    pub fn projection(&self, width: f64, height: f64) -> Matrix4<f32> {
+    /// Half-width and half-height (Å, view space) visible on a
+    /// `width`×`height` canvas.
+    pub fn half_extents(&self, width: f64, height: f64) -> (f64, f64) {
         let aspect = (width / height.max(1.0)).max(1e-3);
         let half = self.radius * 1.08 / self.zoom;
-        let (hw, hh) = if aspect >= 1.0 { (half * aspect, half) } else { (half, half / aspect) };
-        Orthographic3::new(-hw, hw, -hh, hh, 0.01 * self.radius, 6.0 * self.radius)
+        if aspect >= 1.0 {
+            (half * aspect, half)
+        } else {
+            (half, half / aspect)
+        }
+    }
+
+    pub fn projection(&self, width: f64, height: f64) -> Matrix4<f32> {
+        let (hw, hh) = self.half_extents(width, height);
+        self.projection_window(-hw, hw, -hh, hh)
+    }
+
+    /// Orthographic projection of an arbitrary window of view space (Å);
+    /// exports use it for sub-regions and tiles.
+    pub fn projection_window(&self, left: f64, right: f64, bottom: f64, top: f64) -> Matrix4<f32> {
+        Orthographic3::new(left, right, bottom, top, 0.01 * self.radius, 6.0 * self.radius)
             .to_homogeneous()
             .cast()
     }
