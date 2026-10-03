@@ -1,6 +1,7 @@
 // src/io.rs
 pub mod chgcar;
 pub mod cif;
+pub mod lammps_dump;
 pub mod pdb;
 pub mod poscar;
 pub mod qe;
@@ -23,6 +24,11 @@ fn is_sprkkr_potential(lower_path: &str) -> bool {
 
 pub fn load_structure(path: &str) -> io::Result<Structure> {
     let p = path.to_lowercase();
+
+    // LAMMPS dumps go by content: `.dat`, `.dump`, `.lammpstrj` or no extension.
+    if lammps_dump::sniff(path) {
+        return lammps_dump::parse(path);
+    }
 
     // Check extension-based formats first
     if p.ends_with(".cif") {

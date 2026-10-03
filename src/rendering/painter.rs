@@ -6,7 +6,7 @@
 use super::primitives::*;
 use super::scene::RenderAtom;
 use crate::config::ColorMode;
-use crate::model::elements::{ColorScheme, get_atom_cov, get_covalent_radius, get_element_color};
+use crate::model::elements::{ColorScheme, get_atom_cov, get_element_color};
 use crate::physics::bond_valence::get_ideal_oxidation_state;
 use crate::physics::operations::miller_algo::MillerMath;
 use crate::rendering::occupancy::PartialSites;
@@ -476,8 +476,8 @@ pub fn draw_structure(
                 let min_bond_dist = 0.4;
 
                 if dist > min_bond_dist && dist < max_bond_dist {
-                    let raw_r1 = get_covalent_radius(&r1.element);
-                    let raw_r2 = get_covalent_radius(&r2.element);
+                    let raw_r1 = tab.base_radius(&r1.element);
+                    let raw_r2 = tab.base_radius(&r2.element);
 
                     let mult1 = tab.override_radius_scale(r1.original_index);
                     let mult2 = tab.override_radius_scale(r2.original_index);
@@ -562,7 +562,7 @@ pub fn draw_structure(
     };
 
     let mut draw_atom = |atom: &RenderAtom| {
-        let raw_r = get_covalent_radius(&atom.element);
+        let raw_r = tab.base_radius(&atom.element);
         let override_rgb = tab.override_color(atom.original_index);
         let rgb = atom_rgb(atom.original_index, &atom.element);
 

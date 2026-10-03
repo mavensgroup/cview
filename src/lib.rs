@@ -232,6 +232,7 @@ fn build_ui(app: &Application) {
                     let tab = st.active_tab_mut();
                     tab.original_structure = Some(structure.clone());
                     tab.structure = Some(structure);
+                    tab.style_generic_species();
                     tab.file_name = std::path::Path::new(path)
                         .file_name()
                         .unwrap_or_default()

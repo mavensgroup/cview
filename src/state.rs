@@ -206,6 +206,9 @@ pub struct TabState {
     /// Per-atom cosmetic overrides keyed by index into `structure.atoms`.
     /// Indices that aren't present here render with element defaults.
     pub overrides: HashMap<usize, AtomOverride>,
+    /// Covalent-equivalent radius per species the element table does not
+    /// know (LAMMPS `Type n`); everything else uses the table.
+    pub species_radius: HashMap<String, f64>,
 }
 
 impl TabState {
@@ -224,6 +227,42 @@ impl TabState {
             bvs_cache: Vec::new(),
             bvs_cache_valid: false,
             overrides: HashMap::new(),
+            species_radius: HashMap::new(),
+        }
+    }
+
+    /// Base (covalent-equivalent) radius of a species, before atom scale and
+    /// per-atom overrides.
+    pub fn base_radius(&self, element: &str) -> f64 {
+        self.species_radius
+            .get(element)
+            .copied()
+            .unwrap_or_else(|| crate::model::elements::get_covalent_radius(element))
+    }
+
+    /// Give generic `Type n` species (files with no element names) distinct
+    /// colours and a diameter of about one length unit, and drop bonds, which
+    /// the element table cannot judge for them.
+    pub fn style_generic_species(&mut self) {
+        const PALETTE: [(f64, f64, f64); 8] = [
+            (0.93, 0.36, 0.34), (0.36, 0.52, 0.93), (0.95, 0.78, 0.25), (0.40, 0.78, 0.50),
+            (0.70, 0.45, 0.85), (0.95, 0.60, 0.30), (0.40, 0.80, 0.85), (0.85, 0.50, 0.65),
+        ];
+        let Some(s) = &self.structure else { return };
+        let mut any = false;
+        for a in &s.atoms {
+            let Some(n) = a.element.strip_prefix("Type ").and_then(|n| n.parse::<usize>().ok()) else {
+                continue;
+            };
+            any = true;
+            self.style
+                .element_colors
+                .entry(a.element.clone())
+                .or_insert(PALETTE[n.max(1).saturating_sub(1) % PALETTE.len()]);
+            self.species_radius.entry(a.element.clone()).or_insert(1.25);
+        }
+        if any {
+            self.view.show_bonds = false;
         }
     }
 
@@ -326,6 +365,7 @@ impl AppState {
         if let Some(ref s) = new_tab.structure {
             new_tab.bvs_cache.resize(s.atoms.len(), 0.0);
         }
+        new_tab.style_generic_species();
         self.tabs.push(new_tab);
         self.active_tab_index = self.tabs.len() - 1;
     }

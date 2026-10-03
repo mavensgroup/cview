@@ -73,7 +73,17 @@ pub fn setup(
         filter_struct.add_pattern("*.qe");
         filter_struct.add_pattern("*.out");
         filter_struct.add_pattern("*.log");
+        filter_struct.add_pattern("*.dump");
+        filter_struct.add_pattern("*.lammpstrj");
+        filter_struct.add_pattern("*.dat");
         dialog.add_filter(&filter_struct);
+
+        let f_lmp = FileFilter::new();
+        f_lmp.set_name(Some("LAMMPS dump (*.dump, *.lammpstrj, *.dat)"));
+        f_lmp.add_pattern("*.dump");
+        f_lmp.add_pattern("*.lammpstrj");
+        f_lmp.add_pattern("*.dat");
+        dialog.add_filter(&f_lmp);
 
         let f_cif = FileFilter::new();
         f_cif.set_name(Some("CIF (*.cif)"));
@@ -176,6 +186,7 @@ pub fn setup(
                                             tab.kpath_result = None;
                                             tab.void_result = None;
                                             tab.invalidate_derived();
+                                            tab.style_generic_species();
                                             replace_current_tab = true;
                                         } else {
                                             s.add_tab(structure, filename.clone());
