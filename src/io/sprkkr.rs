@@ -890,13 +890,57 @@ enum Writer {
     BuiltIn { why: String },
 }
 
-/// Pythons to try, best first. `CVIEW_PYTHON` names the interpreter that has
-/// ase2sprkkr (a virtualenv or conda environment); without it, `python3`.
+/// The Python to hand the potential to: only the one `CVIEW_PYTHON` names
+/// (a virtualenv or conda environment with ase2sprkkr). ase2sprkkr is opt-in:
+/// CView never needs Python, and without the variable no interpreter is
+/// probed, so saving stays fast and identical on every machine.
 fn python_candidates() -> Vec<String> {
     match std::env::var("CVIEW_PYTHON") {
         Ok(p) if !p.trim().is_empty() => vec![p],
-        _ => vec!["python3".to_string(), "python".to_string()],
+        _ => Vec::new(),
     }
+}
+
+/// How long ase2sprkkr may take before CView gives up and uses its own writer.
+const ASE2SPRKKR_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Wait for `child` with a timeout, draining its output on threads so a full
+/// pipe cannot stall it. `Ok(None)` if it timed out (and was killed).
+fn wait_with_timeout(mut child: std::process::Child, timeout: std::time::Duration) -> io::Result<Option<std::process::Output>> {
+    use std::io::Read as _;
+    let mut out = child.stdout.take();
+    let mut err = child.stderr.take();
+    let t_out = std::thread::spawn(move || {
+        let mut b = Vec::new();
+        if let Some(o) = out.as_mut() {
+            let _ = o.read_to_end(&mut b);
+        }
+        b
+    });
+    let t_err = std::thread::spawn(move || {
+        let mut b = Vec::new();
+        if let Some(e) = err.as_mut() {
+            let _ = e.read_to_end(&mut b);
+        }
+        b
+    });
+    let start = std::time::Instant::now();
+    let status = loop {
+        if let Some(s) = child.try_wait()? {
+            break s;
+        }
+        if start.elapsed() > timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Ok(None);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    Ok(Some(std::process::Output {
+        status,
+        stdout: t_out.join().unwrap_or_default(),
+        stderr: t_err.join().unwrap_or_default(),
+    }))
 }
 
 /// The request the helper reads: the model's cell and sites.
@@ -932,12 +976,19 @@ fn try_ase2sprkkr(
     let request = helper_request(&abs, model).to_string();
 
     for py in pythons {
-        let child = Command::new(py)
-            .args(["-c", ASE2SPRKKR_HELPER])
+        let mut cmd = Command::new(py);
+        cmd.args(["-c", ASE2SPRKKR_HELPER])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn();
+            .stderr(Stdio::piped());
+        // A GUI app spawning a console program would flash a console window.
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+        let child = cmd.spawn();
         let mut child = match child {
             Ok(c) => c,
             Err(_) => continue, // no such interpreter
@@ -945,8 +996,9 @@ fn try_ase2sprkkr(
         if let Some(mut stdin) = child.stdin.take() {
             let _ = stdin.write_all(request.as_bytes());
         }
-        let out = match child.wait_with_output() {
-            Ok(o) => o,
+        let out = match wait_with_timeout(child, ASE2SPRKKR_TIMEOUT) {
+            Ok(Some(o)) => o,
+            Ok(None) => return Err(format!("{py} did not finish within {} s", ASE2SPRKKR_TIMEOUT.as_secs())),
             Err(e) => return Err(format!("could not run {py}: {e}")),
         };
         match out.status.code() {
@@ -968,20 +1020,23 @@ fn try_ase2sprkkr(
     Ok(None)
 }
 
-/// Write the potential: with ase2sprkkr when an interpreter that has it can be
-/// found (it is the reference writer, and tracks the SPR-KKR file format), else
-/// with CView's own. Returns which one was used. `pythons` is explicit so tests
-/// do not depend on the environment.
+/// Write the potential with CView's own writer, or with ase2sprkkr when it was
+/// asked for (`pythons` non-empty) and works. Returns which one was used.
+/// `pythons` is explicit so tests do not depend on the environment.
 fn write_with(path: &str, structure: &Structure, pythons: &[String]) -> io::Result<Writer> {
     let model = build_model(structure);
     for w in &model.warnings {
         crate::utils::console::log_warn(&format!("SPR-KKR export: {w}"));
     }
 
-    let why = match try_ase2sprkkr(path, &model, pythons) {
-        Ok(Some(version)) => return Ok(Writer::Ase2Sprkkr(version)),
-        Ok(None) => "ase2sprkkr was not found".to_string(),
-        Err(e) => format!("ase2sprkkr failed: {e}"),
+    let why = if pythons.is_empty() {
+        String::new()
+    } else {
+        match try_ase2sprkkr(path, &model, pythons) {
+            Ok(Some(version)) => return Ok(Writer::Ase2Sprkkr(version)),
+            Ok(None) => format!("ase2sprkkr was not found (CVIEW_PYTHON = {})", pythons.join(", ")),
+            Err(e) => format!("ase2sprkkr failed: {e}"),
+        }
     };
 
     let (text, _) = render(structure);
@@ -996,10 +1051,13 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
             "SPR-KKR export: written by ase2sprkkr {v}{}",
             if mixed > 0 { format!(", {mixed} mixed site(s) as CPA occupations") } else { String::new() }
         )),
+        Writer::BuiltIn { why } if why.is_empty() => crate::utils::console::log_info(
+            "SPR-KKR export: written by CView (FORMAT 7). To write with ase2sprkkr instead, \
+             set CVIEW_PYTHON to a Python that has it installed.",
+        ),
+        // ase2sprkkr was asked for but could not be used: say why.
         Writer::BuiltIn { why } => crate::utils::console::log_warn(&format!(
-            "SPR-KKR export: {why}; wrote CView's built-in potential (FORMAT 7, checked against an \
-             ase2sprkkr file but not run in SPR-KKR). Install ase2sprkkr (pip install ase2sprkkr), or \
-             set CVIEW_PYTHON to the Python that has it, to use the reference writer."
+            "SPR-KKR export: {why}; wrote CView's own potential (FORMAT 7) instead"
         )),
     }
     Ok(())
@@ -1498,8 +1556,17 @@ POTENTIAL
         assert_eq!(sites_of(&back), sites_of(&s));
     }
 
-    /// Needs a Python with ase2sprkkr (`python3` here, or CVIEW_PYTHON); skipped
-    /// where there is none, so the suite does not depend on it.
+    #[test]
+    fn without_cview_python_no_python_is_run() {
+        let s = alloy_from_reference();
+        let out = tmp("builtin.pot", "");
+        let w = write_with(&out, &s, &[]).unwrap();
+        assert_eq!(w, Writer::BuiltIn { why: String::new() });
+        assert!(std::fs::read_to_string(&out).unwrap().contains(" 7 (21.05.2007)"));
+    }
+
+    /// Runs only with CVIEW_PYTHON set to a Python that has ase2sprkkr (the
+    /// hand-off is opt-in), so the suite does not depend on it.
     #[test]
     fn ase2sprkkr_writes_the_alloy_when_it_is_installed() {
         let s = alloy_from_reference();
@@ -1509,7 +1576,7 @@ POTENTIAL
         let version = match w {
             Writer::Ase2Sprkkr(v) => v,
             Writer::BuiltIn { why } => {
-                eprintln!("skipped: {why}");
+                eprintln!("skipped: {}", if why.is_empty() { "CVIEW_PYTHON not set" } else { &why });
                 return;
             }
         };
