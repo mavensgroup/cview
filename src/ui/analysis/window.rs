@@ -58,6 +58,15 @@ pub fn show_analysis_window(
 /// Opens a standalone Charge Density window (CHGCAR only, no notebook).
 /// Accepts AppState so export settings (font sizes, colormap) are read from config.
 pub fn show_charge_density_window(parent: &ApplicationWindow, state: Rc<RefCell<AppState>>) {
+    show_charge_density_window_with(parent, state, None);
+}
+
+/// Charge Density window with `path` already loaded.
+pub fn show_charge_density_window_with(
+    parent: &ApplicationWindow,
+    state: Rc<RefCell<AppState>>,
+    path: Option<&std::path::Path>,
+) {
     let window = Window::builder()
         .title("Charge Density Visualization")
         .transient_for(parent)
@@ -66,7 +75,7 @@ pub fn show_charge_density_window(parent: &ApplicationWindow, state: Rc<RefCell<
         .modal(false)
         .build();
 
-    let cd_page = charge_density_tab::build(Some(state));
+    let cd_page = charge_density_tab::build_with(Some(state), path);
     window.set_child(Some(&cd_page));
     window.present();
 }

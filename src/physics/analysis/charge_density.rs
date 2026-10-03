@@ -111,7 +111,7 @@ pub enum ThresholdMode {
 
 /// Get the density data for a given channel.
 /// Returns `Cow::Borrowed` for Total (zero-copy), `Cow::Owned` for derived channels.
-fn get_channel_data<'a>(
+pub fn get_channel_data<'a>(
     chgcar: &'a ChgcarData,
     channel: DensityChannel,
     normalize: bool,

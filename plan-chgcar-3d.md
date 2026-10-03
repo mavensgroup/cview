@@ -117,11 +117,73 @@ The preview is drawn at the final aspect ratio, so what you frame is what you ge
 - **Off-screen targets:** an MSAA FBO resolved to a texture, tiled rendering, and `read_pixels` of float or 8-bit data.
 - **Timer queries** (`GL_TIME_ELAPSED`, core in 3.3) to keep the interactive view within its frame budget. Export ignores the budget.
 
+## Status
+
+**Phase A done.** It lives in `src/physics/analysis/isosurface.rs`.
+- **Method:** marching *tetrahedra* (Freudenthal split) instead of marching cubes. There are no ambiguous cases, so the surface is watertight by construction, which the tests check.
+- **Crossings on grid points:** a crossing that lands exactly on a grid point is shared, so there are no coincident vertices and no zero-area triangles.
+- **Accuracy:**
+  - sphere volume and area within 1% (orthorhombic and triclinic cells);
+  - normals outward;
+  - seamless across cell faces;
+  - the saddle-heavy cos+cos+cos field gives a closed surface with area 2.345 a².
+- **Speed:**
+  - BaTiO3 60³: 3–10 ms;
+  - 200³ synthetic with 2.5M triangles: 155 ms;
+  - 300³ synthetic with 5.6M triangles: 0.4 s (18 threads).
+
+**Phase B done.** "3D Isosurface" page in the Charge Density window, in `src/ui/analysis/charge_density_3d.rs`.
+- **Data:** it follows the files, difference mode and channel chosen on the right pane. The page polls a fingerprint of those settings, so "Update Plot" applies to both pages.
+- **Isovalue:** a logarithmic slider plus an exact spin box in e/Å³. The default is the 95th percentile of |ρ|.
+- **Lobes:** +, − or ±, picked automatically from the sign range.
+- **Appearance:** opacity, two lobe colours, atoms (with face images) and cell.
+- **Views:** true lattice directions along a/b/c (correct for triclinic cells), plus Fit.
+- **Meshing:** on a worker; each slider move replaces the running job.
+- **GL backend:** gained indexed meshes and an offscreen pipeline: 4× MSAA, two-pass weighted blended OIT (GL 3.3 has no per-target blend functions), then a composite into GTK's framebuffer. The trajectory player still draws directly, as before.
+- **New entry point:** `window::show_charge_density_window_with(parent, state, Some(path))` opens the window with a file already loaded. It is not yet wired to File → Open.
+
+**Phases C, D and E done.**
+
+C — export:
+- **Figure dialog:** journal width presets, size in mm, 300/450/600/1200 dpi, 2–4× supersampling, white or transparent background, font and line sizes in pt, panel letter, and checkboxes for title, isovalue key, colour bar, axes, scale bar and atom labels.
+- **Live readout:** pixel size, plus warnings against Nature's 170 mm height and 5–7 pt text limits.
+- **Framing:** the 3D view shows the picture frame and the dialog fits the structure into it. Annotations go in reserved bands above and below, so they never cover the structure.
+- **Rendering** (`gl/export.rs`): tiled (any size on any GPU; 183 mm at 1200 dpi is 8646 × 6052 px in 4.3 s), supersampled with box filtering in linear light, dithered, with depth-peeled exact transparency.
+- **Output** (`rendering/figure.rs`): PDF/SVG at the exact page size (pdfinfo: 89 × 70 mm → 252.283 × 198.425 pt) with the raster embedded losslessly at the chosen ppi and vector text in embedded fonts; PNG with pHYs and sRGB; TIFF with X/YResolution.
+- **Scene file:** written next to every figure.
+
+D — quality:
+- **Ambient occlusion:** field-based, from rays marched through the density, with atoms as occluders. It is computed per vertex on the meshing worker.
+- **Exact transparency for exports:** depth peeling.
+- **Section plane by (hkl) and position:** coloured by density from a 3D texture, using log-viridis for densities and a diverging map saturating at ±iso for difference/spin densities. Contours sit at the isovalue.
+- **Cut-away:** a clip plane removes surfaces, bonds and whole atoms beyond the plane; the section plane then serves as the filled, density-coloured cut face.
+
+E — ease of use:
+- **Histogram** of |ρ| under the canvas; click it to set the isovalue.
+- **"Enclosed charge" mode:** the isovalue enclosing X% of the charge. Checked: 50% gives 19.0014 of 38 e.
+- **Enclosed charge in the HUD and Report:** electrons and volume per lobe, and the net ∫ρ dV (38.0000 e for BaTiO3).
+- **Presets:** total, bonding/difference ±, and spin density (which switches the channel to magnetisation).
+- **Scene save/load:** with a data hash, warning on mismatch.
+- **Mesh export:** OBJ+MTL and PLY.
+
+Differs from the plan / not done:
+- **No stencil caps:** the cut face is the density section plane.
+- **AO:** field-based rather than ray/triangle.
+- **Not done:**
+  - glTF export;
+  - 16-bit output;
+  - "match main view" orientation;
+  - atom labels hidden by lobes (only atoms hide labels);
+  - volume ray-marching;
+  - a displayed range beyond one cell;
+  - CHGCAR parsing on a worker and as f32 (large-grid item).
+- **Science width presets** still need checking against Science's own guide.
+
 ## Phases
 
 | # | Work | Done when |
 |---|---|---|
-| A | Marching cubes (periodic, shared vertices, gradient normals) + tests | Enclosed volume of a sphere-like analytic field matches voxel count within 1%; seamless across cell faces |
+| A | Isosurface extraction (periodic, shared vertices, gradient normals) + tests | Enclosed volume of a sphere-like analytic field matches voxel count within 1%; seamless across cell faces |
 | B | 3D page: mesh + atoms + cell, isovalue slider, ± lobes, transparency (WBOIT), worker remeshing | `BaTiO3_O-def − pure` shows ± lobes around the vacancy; slider responsive on a 200³ grid |
 | C | Figure dialog: physical size presets, off-screen SSAA + tiling, PDF/SVG with vector annotations, TIFF/PNG with dpi | A 183 mm / 600 dpi PDF passes Nature's size/dpi/font rules; text is selectable vector |
 | D | Quality: baked AO, depth peeling for export, clip plane with filled caps, slice plane in 3D | Side-by-side with VESTA at the same isovalue: clearer depth and cut faces |

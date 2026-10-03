@@ -144,7 +144,7 @@ impl ChargeDensityState {
         self.cached_slice = Some(slice);
     }
 
-    fn active_chgcar(&self) -> Option<ChgcarData> {
+    pub fn active_chgcar(&self) -> Option<ChgcarData> {
         if self.difference_mode {
             let a = self.chgcar_a.as_ref()?;
             let b = self.chgcar_b.as_ref()?;
@@ -915,6 +915,11 @@ fn show_error_dialog(parent: Option<&gtk4::Window>, title: &str, message: &str) 
 // ---------------------------------------------------------------------------
 
 pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
+    build_with(app_state, None)
+}
+
+/// As `build`, with `initial` (a CHGCAR path) loaded as the primary file.
+pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initial: Option<&std::path::Path>) -> Box {
     let state = Rc::new(RefCell::new(ChargeDensityState::default()));
 
     // Capture export_plot config for use in export closure
@@ -953,7 +958,23 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
     drawing_area.set_content_width(600);
     drawing_area.set_content_height(500);
     frame_plot.set_child(Some(&drawing_area));
-    left_pane.append(&frame_plot);
+
+    // 2D slice and 3D isosurface views of the same data, chosen by a switcher.
+    let scheme = app_state
+        .as_ref()
+        .map(|s| s.borrow().config.color_scheme)
+        .unwrap_or_default();
+    let stack = gtk4::Stack::new();
+    stack.set_vexpand(true);
+    stack.set_transition_type(gtk4::StackTransitionType::Crossfade);
+    stack.add_titled(&frame_plot, Some("slice"), "Slice (2D)");
+    let parts3d = super::charge_density_3d::build(state.clone(), scheme);
+    stack.add_titled(&parts3d.page, Some("iso3d"), "3D Isosurface");
+    let switcher = gtk4::StackSwitcher::new();
+    switcher.set_stack(Some(&stack));
+    switcher.set_halign(Align::Center);
+    left_pane.append(&switcher);
+    left_pane.append(&stack);
 
     let status_label = Label::new(Some("No CHGCAR loaded."));
     status_label.set_halign(Align::Start);
@@ -1001,7 +1022,7 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
     right_pane.append(&Separator::new(Orientation::Horizontal));
 
     // ── 3D Preview controls ──
-    let lbl_3d = Label::new(Some("3D Preview"));
+    let lbl_3d = Label::new(Some("Slice: 3D inset"));
     lbl_3d.add_css_class("title-4");
     lbl_3d.set_halign(Align::Start);
     right_pane.append(&lbl_3d);
@@ -1894,6 +1915,48 @@ pub fn build(app_state: Option<Rc<RefCell<crate::state::AppState>>>) -> Box {
             });
             native.show();
         });
+    }
+
+    // In 3D mode the right pane keeps the shared sections (files, channel,
+    // Update Plot) and swaps the slice controls for the 3D ones.
+    {
+        let shared: Vec<gtk4::Widget> = vec![
+            lbl_files.clone().upcast(),
+            btn_load_a.clone().upcast(),
+            label_file_a.clone().upcast(),
+            check_diff.clone().upcast(),
+            btn_load_b.clone().upcast(),
+            label_file_b.clone().upcast(),
+            lbl_ch.clone().upcast(),
+            ch_box.clone().upcast(),
+            btn_update.clone().upcast(),
+        ];
+        let controls = parts3d.controls.clone();
+        right_pane.insert_child_after(&controls, Some(&ch_box));
+        controls.set_visible(false);
+        let mut only_2d: Vec<gtk4::Widget> = Vec::new();
+        let mut child = right_pane.first_child();
+        while let Some(w) = child {
+            if !shared.contains(&w) && w != controls.clone().upcast::<gtk4::Widget>() {
+                only_2d.push(w.clone());
+            }
+            child = w.next_sibling();
+        }
+        stack.connect_visible_child_name_notify(move |s| {
+            let is_3d = s.visible_child_name().is_some_and(|n| n == "iso3d");
+            for w in &only_2d {
+                w.set_visible(!is_3d);
+            }
+            controls.set_visible(is_3d);
+        });
+    }
+
+    if let Some(path) = initial {
+        let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+        match chgcar::parse(&path.to_string_lossy()) {
+            Ok(data) => inject_primary(data, name),
+            Err(e) => crate::utils::console::log_error(&format!("Could not read {}: {e}", path.display())),
+        }
     }
 
     root

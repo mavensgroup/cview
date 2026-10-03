@@ -1,3 +1,4 @@
+pub mod charge_density_3d;
 pub mod charge_density_tab;
 pub mod kpath_tab;
 pub mod symmetry_tab;
