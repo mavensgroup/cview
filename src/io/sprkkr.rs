@@ -1205,7 +1205,12 @@ POTENTIAL
 ";
 
     fn tmp(name: &str, text: &str) -> String {
-        let p = std::env::temp_dir().join(format!("cview_sprkkr_{}_{name}", std::process::id()));
+        // Unique per call: tests run in parallel, and several write the same
+        // fixture name (one truncating it while another reads it failed
+        // intermittently).
+        static SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let p = std::env::temp_dir().join(format!("cview_sprkkr_{}_{n}_{name}", std::process::id()));
         std::fs::write(&p, text).unwrap();
         p.to_string_lossy().into_owned()
     }
