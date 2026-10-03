@@ -371,6 +371,23 @@ fn draw_hud(cr: &gtk4::cairo::Context, player: &Player) {
     }
 }
 
+/// Top of the energy axis. A relaxation can have a wild trial step hundreds
+/// of eV above the rest (a VASP overshoot at large ISIF steps), which would
+/// flatten the curve that matters. The range is taken from the bulk of the
+/// frames; anything far above it is pinned to the top edge and labelled.
+fn robust_top(energies: &[f64]) -> f64 {
+    let mut v: Vec<f64> = energies.iter().copied().filter(|e| e.is_finite()).collect();
+    if v.is_empty() {
+        return 0.0;
+    }
+    v.sort_by(f64::total_cmp);
+    let lo = v[0];
+    let hi = v[v.len() - 1];
+    let p90 = v[((v.len() - 1) as f64 * 0.9).round() as usize];
+    let limit = p90 + 2.0 * (p90 - lo);
+    v.iter().copied().filter(|&e| e <= limit).fold(lo, f64::max).min(hi)
+}
+
 /// Energy (relative to the lowest) per frame, with the current frame marked.
 fn draw_strip(cr: &gtk4::cairo::Context, w: f64, h: f64, player: &Player) {
     let pts: Vec<(usize, f64)> = player
@@ -383,12 +400,14 @@ fn draw_strip(cr: &gtk4::cairo::Context, w: f64, h: f64, player: &Player) {
     if pts.is_empty() {
         return;
     }
-    let (lo, hi) = pts.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), p| (a.min(p.1), b.max(p.1)));
+    let lo = pts.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
+    let hi = robust_top(&pts.iter().map(|p| p.1).collect::<Vec<_>>());
     let span = (hi - lo).max(1e-9);
     let n = player.traj.len().max(2) as f64;
     let (l, r, t, b) = (60.0, w - 14.0, 10.0, h - 18.0);
     let xf = |i: usize| l + (r - l) * i as f64 / (n - 1.0);
-    let yf = |e: f64| b - (b - t) * (e - lo) / span;
+    // Values above the robust range sit on the top edge.
+    let yf = |e: f64| b - (b - t) * ((e - lo) / span).min(1.0);
 
     cr.set_source_rgb(0.98, 0.98, 0.99);
     cr.paint().ok();
@@ -408,6 +427,22 @@ fn draw_strip(cr: &gtk4::cairo::Context, w: f64, h: f64, player: &Player) {
         }
     }
     cr.stroke().ok();
+
+    // Off-scale frames: a small triangle at the top and the true value.
+    cr.select_font_face("Sans", gtk4::cairo::FontSlant::Normal, gtk4::cairo::FontWeight::Normal);
+    cr.set_font_size(9.0);
+    for &(i, e) in pts.iter().filter(|p| p.1 > hi + 1e-9) {
+        let x = xf(i);
+        cr.set_source_rgb(0.20, 0.42, 0.85);
+        cr.move_to(x - 4.0, t + 5.0);
+        cr.line_to(x + 4.0, t + 5.0);
+        cr.line_to(x, t - 1.0);
+        cr.close_path();
+        cr.fill().ok();
+        cr.set_source_rgba(0.0, 0.0, 0.0, 0.65);
+        cr.move_to(x + 6.0, t + 7.0);
+        let _ = cr.show_text(&format!("+{:.0} eV", e - lo));
+    }
 
     let x = xf(player.idx);
     cr.set_source_rgba(0.85, 0.25, 0.20, 0.8);
@@ -924,6 +959,16 @@ mod tests {
             bond_color: [0.5; 3],
             background: [1.0; 3],
         }
+    }
+
+    #[test]
+    fn energy_axis_ignores_a_wild_step_but_not_a_normal_curve() {
+        // The overshoot at step 5 of a real ISIF=3 relaxation.
+        let e = [-58.08, -71.64, -72.54, -84.10, 455.26, -58.67, -67.38, -77.61, -90.73];
+        assert_eq!(robust_top(&e), -58.08);
+        let smooth = [-80.0, -85.0, -88.0, -89.5, -90.0];
+        assert_eq!(robust_top(&smooth), -80.0);
+        assert_eq!(robust_top(&[-1.0]), -1.0);
     }
 
     #[test]
