@@ -198,8 +198,15 @@ jobs:
               @rpath/*)
                 local base
                 base=$(basename "${dep#@rpath/}")
-                find "$BREW_PREFIX/lib" "$BREW_PREFIX/opt" \
-                     -name "$base" -type f 2>/dev/null | head -n1
+                # Homebrew's lib/ and opt/ entries are symlinks into the
+                # Cellar, which `find -type f` never matches (librsvg and
+                # libsharpyuv went unresolved). Take the lib/ symlink (cp -L
+                # follows it), else search the Cellar for the real file.
+                if [ -e "$BREW_PREFIX/lib/$base" ]; then
+                  echo "$BREW_PREFIX/lib/$base"
+                else
+                  find "$BREW_PREFIX/Cellar" -name "$base" \( -type f -o -type l \) 2>/dev/null | head -n1
+                fi
                 ;;
               *)
                 echo "$dep"
