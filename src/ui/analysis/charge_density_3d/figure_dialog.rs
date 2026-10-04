@@ -407,9 +407,20 @@ pub(super) fn show(parent: &gtk4::Window, view: Rc<RefCell<View>>, ui: Ui) {
             refresh();
         });
     }
-    for spin in [&width, &height, &font, &line] {
+    // A new page size or font changes the picture area's shape: re-fit, so a
+    // wider page adds margin beside the structure instead of magnifying it
+    // (the window keeps its Å-per-pixel scale while the frame narrows).
+    for spin in [&width, &height, &font] {
         let r = refresh.clone();
-        spin.connect_value_changed(move |_| r());
+        let (view, ui, read) = (view.clone(), ui.clone(), read.clone());
+        spin.connect_value_changed(move |_| {
+            r();
+            fit(&view, &ui, &read());
+        });
+    }
+    {
+        let r = refresh.clone();
+        line.connect_value_changed(move |_| r());
     }
     {
         let preset = preset.clone();
