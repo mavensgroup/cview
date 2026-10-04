@@ -263,17 +263,34 @@ jobs:
             fi
           done
 
-          # GDK pixbuf loaders + regenerated cache
+          # GDK pixbuf loaders. The SVG loader (from librsvg) needs librsvg and
+          # its dependencies, so each loader goes through the same recursive
+          # bundling as the binary. The cache is generated from Homebrew's own
+          # (working) loaders with their directory replaced by a placeholder;
+          # the launcher substitutes the bundle's real location at start-up,
+          # as an absolute path from the CI machine would not exist on users'.
           PIXBUF_SRC=$(find "$BREW_PREFIX/lib/gdk-pixbuf-2.0" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | head -n1)
           if [ -n "$PIXBUF_SRC" ]; then
             PIXBUF_VER=$(basename "$PIXBUF_SRC")
             PIXBUF_DEST="$APP_DIR/Contents/Resources/lib/gdk-pixbuf-2.0/$PIXBUF_VER"
-            mkdir -p "$PIXBUF_DEST"
-            cp -r "$PIXBUF_SRC/"* "$PIXBUF_DEST/"
-            if command -v gdk-pixbuf-query-loaders >/dev/null 2>&1; then
-              GDK_PIXBUF_MODULEDIR="$PIXBUF_DEST/loaders" \
-                gdk-pixbuf-query-loaders > "$PIXBUF_DEST/loaders.cache" || true
+            mkdir -p "$PIXBUF_DEST/loaders"
+            cp -L "$PIXBUF_SRC"/loaders/*.so "$PIXBUF_DEST/loaders/" 2>/dev/null || true
+            cp -L "$PIXBUF_SRC"/loaders/*.dylib "$PIXBUF_DEST/loaders/" 2>/dev/null || true
+            for loader in "$PIXBUF_DEST"/loaders/*; do
+              [ -f "$loader" ] || continue
+              chmod 755 "$loader"
+              echo "Bundling dependencies of $(basename "$loader")"
+              bundle_libs "$loader"
+            done
+            if [ ! -f "$APP_DIR/Contents/Libs/librsvg-2.2.dylib" ]; then
+              echo "ERROR: librsvg was not bundled; SVG images would not load" >&2
+              exit 1
             fi
+            LOADER_FILES=$(ls "$PIXBUF_SRC"/loaders/*.so "$PIXBUF_SRC"/loaders/*.dylib 2>/dev/null || true)
+            # shellcheck disable=SC2086
+            gdk-pixbuf-query-loaders $LOADER_FILES \
+              | sed "s|$PIXBUF_SRC/loaders|@LOADER_DIR@|g" > "$PIXBUF_DEST/loaders.cache.in"
+            grep -q "svg" "$PIXBUF_DEST/loaders.cache.in" || { echo "ERROR: no SVG loader in the cache" >&2; exit 1; }
           fi
 
           # Launcher script
@@ -284,9 +301,15 @@ jobs:
           export GSETTINGS_SCHEMA_DIR="$RES/share/glib-2.0/schemas"
           export XDG_DATA_DIRS="$RES/share"
           export GTK_DATA_PREFIX="$RES"
-          CACHE=$(ls "$RES"/lib/gdk-pixbuf-2.0/*/loaders.cache 2>/dev/null | head -n1)
-          if [ -n "$CACHE" ]; then
-            export GDK_PIXBUF_MODULE_FILE="$CACHE"
+          # Point the pixbuf loader cache at this bundle's loaders, wherever
+          # the app was copied to.
+          TEMPLATE=$(ls "$RES"/lib/gdk-pixbuf-2.0/*/loaders.cache.in 2>/dev/null | head -n1)
+          if [ -n "$TEMPLATE" ]; then
+            LOADER_DIR="$(dirname "$TEMPLATE")/loaders"
+            CACHE_DIR="${TMPDIR:-/tmp}/cview-$(id -u)"
+            mkdir -p "$CACHE_DIR"
+            sed "s|@LOADER_DIR@|$LOADER_DIR|g" "$TEMPLATE" > "$CACHE_DIR/loaders.cache"
+            export GDK_PIXBUF_MODULE_FILE="$CACHE_DIR/loaders.cache"
           fi
           exec "$DIR/cview-bin" "$@"
           EOF
@@ -324,7 +347,19 @@ jobs:
           codesign --verify --verbose "$APP_DIR" || true
 
           DMG="cview-macos-${{ matrix.arch }}.dmg"
-          hdiutil create -volname CView -srcfolder "$APP_DIR" -ov -format UDZO "$DMG"
+          # hdiutil intermittently fails with "Resource busy" on hosted runners
+          # (something still scanning the fresh bundle); retry before failing.
+          for attempt in 1 2 3 4 5; do
+            if hdiutil create -volname CView -srcfolder "$APP_DIR" -ov -format UDZO "$DMG"; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "hdiutil failed 5 times" >&2
+              exit 1
+            fi
+            echo "hdiutil busy (attempt $attempt); retrying in $((attempt * 10)) s"
+            sleep $((attempt * 10))
+          done
           shasum -a 256 "$DMG" > "$DMG.sha256"
 
       - name: Upload macOS DMG
