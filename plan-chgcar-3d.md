@@ -133,7 +133,7 @@ The preview is drawn at the final aspect ratio, so what you frame is what you ge
   - 300³ synthetic with 5.6M triangles: 0.4 s (18 threads).
 
 **Phase B done.** "3D Isosurface" page in the Charge Density window, in `src/ui/analysis/charge_density_3d.rs`.
-- **Data:** it follows the files, difference mode and channel chosen on the right pane. The page polls a fingerprint of those settings, so "Update Plot" applies to both pages.
+- **Data:** it follows the files, difference mode and channel chosen on the right pane. The page polls a fingerprint of those settings. Every control applies immediately; the sliders that shape the picture live in a bottom bar that switches with the page.
 - **Isovalue:** a logarithmic slider plus an exact spin box in e/Å³. The default is the 95th percentile of |ρ|.
 - **Lobes:** +, − or ±, picked automatically from the sign range.
 - **Appearance:** opacity, two lobe colours, atoms (with face images) and cell.

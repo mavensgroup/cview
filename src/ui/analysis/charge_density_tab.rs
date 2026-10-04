@@ -976,6 +976,14 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
     left_pane.append(&switcher);
     left_pane.append(&stack);
 
+    // Bottom bar: the sliders that shape the picture, for whichever page is
+    // shown (homogeneous, so both bars have the same height). The settings
+    // chosen once stay in the right pane.
+    let bottom_stack = gtk4::Stack::new();
+    bottom_stack.set_transition_type(gtk4::StackTransitionType::Crossfade);
+    bottom_stack.add_named(&parts3d.bottom, Some("iso3d"));
+    left_pane.append(&bottom_stack);
+
     let status_label = Label::new(Some("No CHGCAR loaded."));
     status_label.set_halign(Align::Start);
     status_label.add_css_class("dim-label");
@@ -1072,12 +1080,10 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
 
     let pos_label = Label::new(Some("Position: 0.50"));
     pos_label.set_halign(Align::Start);
-    frac_box.append(&pos_label);
     let pos_adj = gtk4::Adjustment::new(0.5, 0.0, 1.0, 0.005, 0.1, 0.0);
     let pos_scale = Scale::new(Orientation::Horizontal, Some(&pos_adj));
     pos_scale.set_draw_value(false);
     pos_scale.set_hexpand(true);
-    frac_box.append(&pos_scale);
     right_pane.append(&frac_box);
 
     // HKL controls
@@ -1103,12 +1109,10 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
 
     let off_label = Label::new(Some("Offset: 0.50"));
     off_label.set_halign(Align::Start);
-    hkl_box.append(&off_label);
     let off_adj = gtk4::Adjustment::new(0.5, 0.0, 1.0, 0.005, 0.1, 0.0);
     let off_scale = Scale::new(Orientation::Horizontal, Some(&off_adj));
     off_scale.set_draw_value(false);
     off_scale.set_hexpand(true);
-    hkl_box.append(&off_scale);
     right_pane.append(&hkl_box);
 
     {
@@ -1157,12 +1161,49 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
 
     let iso_count_label = Label::new(Some("Levels: 8"));
     iso_count_label.set_halign(Align::Start);
-    right_pane.append(&iso_count_label);
     let adj_iso = gtk4::Adjustment::new(8.0, 0.0, 30.0, 1.0, 5.0, 0.0);
     let iso_scale = Scale::new(Orientation::Horizontal, Some(&adj_iso));
     iso_scale.set_draw_value(false);
     iso_scale.set_hexpand(true);
-    right_pane.append(&iso_scale);
+
+    // 2D bottom bar: slice position (hkl offset in hkl mode) and isoline count.
+    {
+        let bar = Box::new(Orientation::Vertical, 4);
+        bar.set_valign(Align::Center);
+        let row = || {
+            let r = Box::new(Orientation::Horizontal, 8);
+            r.set_margin_start(6);
+            r.set_margin_end(6);
+            r
+        };
+        for l in [&pos_label, &off_label, &iso_count_label] {
+            l.set_width_chars(14);
+            l.set_xalign(0.0);
+        }
+        let r1 = row();
+        r1.append(&pos_label);
+        r1.append(&pos_scale);
+        r1.append(&off_label);
+        r1.append(&off_scale);
+        off_label.set_visible(false);
+        off_scale.set_visible(false);
+        let r2 = row();
+        r2.append(&iso_count_label);
+        r2.append(&iso_scale);
+        bar.append(&r1);
+        bar.append(&r2);
+        bottom_stack.add_named(&bar, Some("slice"));
+        bottom_stack.set_visible_child_name("slice");
+
+        let widgets = (pos_label.clone(), pos_scale.clone(), off_label.clone(), off_scale.clone());
+        radio_hkl.connect_toggled(move |r| {
+            let hkl = r.is_active();
+            widgets.0.set_visible(!hkl);
+            widgets.1.set_visible(!hkl);
+            widgets.2.set_visible(hkl);
+            widgets.3.set_visible(hkl);
+        });
+    }
 
     let spin_iso = SpinButton::new(Some(&adj_iso), 1.0, 0);
     spin_iso.set_visible(false);
@@ -1419,6 +1460,7 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
         let lbl = label_file_b.clone();
         let status = status_label.clone();
         let da = drawing_area.clone();
+        let (update, diff) = (btn_update.clone(), check_diff.clone());
 
         btn_load_b.connect_clicked(move |btn| {
             let native = chgcar_chooser(
@@ -1430,6 +1472,7 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
             let lbl2 = lbl.clone();
             let status2 = status.clone();
             let da2 = da.clone();
+            let (update2, diff2) = (update.clone(), diff.clone());
             let btn_weak = btn.downgrade();
 
             native.connect_response(move |d, resp| {
@@ -1440,8 +1483,12 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
                                 lbl2.set_text(
                                     &path.file_name().unwrap_or_default().to_string_lossy(),
                                 );
-                                status2.set_text("Secondary CHGCAR loaded. Click 'Update Plot'.");
+                                status2.set_text("Secondary CHGCAR loaded.");
                                 st2.borrow_mut().chgcar_b = Some(data);
+                                // Show the difference straight away.
+                                if diff2.is_active() {
+                                    update2.emit_clicked();
+                                }
                             }
                             Err(e) => {
                                 let parent_win = btn_weak
@@ -1743,6 +1790,56 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
         });
     }
 
+    // Every setting applies as soon as it changes: re-run the (now hidden)
+    // Update Plot logic, which reads all controls. The 3D page follows the
+    // same state by itself.
+    btn_update.set_visible(false);
+    {
+        let apply = {
+            let b = btn_update.clone();
+            Rc::new(move || b.emit_clicked())
+        };
+        let on_active = |c: &CheckButton| {
+            let apply = apply.clone();
+            c.connect_toggled(move |c| {
+                if c.is_active() {
+                    apply();
+                }
+            });
+        };
+        for c in [&radio_frac, &radio_hkl, &radio_total, &radio_up, &radio_down, &radio_mag, &radio_linear, &radio_log] {
+            on_active(c);
+        }
+        for c in [&check_normalize, &check_atoms] {
+            let apply = apply.clone();
+            c.connect_toggled(move |_| apply());
+        }
+        for s in [&spin_h, &spin_k, &spin_l] {
+            let apply = apply.clone();
+            s.connect_value_changed(move |_| apply());
+        }
+        for c in [&plane_combo, &cmap_combo] {
+            let apply = apply.clone();
+            c.connect_changed(move |_| apply());
+        }
+        {
+            let apply = apply.clone();
+            iso_entry.connect_changed(move |_| apply());
+        }
+        // Difference mode needs the second file: apply when it is there (or
+        // when switching back), otherwise say what is missing.
+        {
+            let (apply, st, status) = (apply.clone(), state.clone(), status_label.clone());
+            check_diff.connect_toggled(move |c| {
+                if !c.is_active() || st.borrow().chgcar_b.is_some() {
+                    apply();
+                } else {
+                    status.set_text("Load the secondary CHGCAR to show ρ_A − ρ_B.");
+                }
+            });
+        }
+    }
+
     // Export PNG / PDF
     {
         let st = state.clone();
@@ -1942,8 +2039,10 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
             }
             child = w.next_sibling();
         }
+        let bottom_stack = bottom_stack.clone();
         stack.connect_visible_child_name_notify(move |s| {
             let is_3d = s.visible_child_name().is_some_and(|n| n == "iso3d");
+            bottom_stack.set_visible_child_name(if is_3d { "iso3d" } else { "slice" });
             for w in &only_2d {
                 w.set_visible(!is_3d);
             }

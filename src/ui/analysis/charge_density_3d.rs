@@ -5,8 +5,8 @@
 // density-coloured section plane, on the GPU.
 //
 // The page shares `ChargeDensityState` with the 2D slice page: files,
-// difference mode and channel are chosen on the right-hand pane and applied
-// with "Update Plot"; this page follows by polling a fingerprint. Its own
+// difference mode and channel are chosen on the right-hand pane (they apply
+// immediately); this page follows by polling a fingerprint. Its own
 // controls (surface, section, display, report/export) go into the right
 // pane in place of the slice controls while the 3D page is shown.
 //
@@ -606,8 +606,10 @@ pub use figure_dialog::FigureSettings;
 
 /// Widgets the 3D page contributes to the window.
 pub struct Parts {
-    /// Canvas, histogram and isovalue row (the left side).
+    /// The 3D canvas.
     pub page: gtk4::Box,
+    /// Histogram, isovalue and opacity: the window's bottom bar in 3D mode.
+    pub bottom: gtk4::Box,
     /// Surface, section, display and export controls (the right pane).
     pub controls: gtk4::Box,
     /// Programmatic access (scripting, tests).
@@ -745,10 +747,12 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
     }
     iso_row.set_margin_bottom(4);
 
-    let page = gtk4::Box::new(Orientation::Vertical, 4);
+    let page = gtk4::Box::new(Orientation::Vertical, 0);
     page.append(&overlay);
-    page.append(&hist);
-    page.append(&iso_row);
+    // The sliders shaping the picture live in the bottom bar.
+    let bottom = gtk4::Box::new(Orientation::Vertical, 4);
+    bottom.append(&hist);
+    bottom.append(&iso_row);
 
     // ================= right: controls =================
     let controls = gtk4::Box::new(Orientation::Vertical, 8);
@@ -773,7 +777,10 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
     opacity.set_value(view.borrow().opacity as f64);
     opacity.set_draw_value(false);
     opacity.set_size_request(120, -1);
-    b_surf.append(&row("Opacity", &opacity));
+    opacity.set_tooltip_text(Some("Surface opacity"));
+    iso_row.append(&gtk4::Separator::new(Orientation::Vertical));
+    iso_row.append(&gtk4::Label::new(Some("Opacity")));
+    iso_row.append(&opacity);
     let to_rgba = |c: [f32; 3]| gtk4::gdk::RGBA::new(c[0], c[1], c[2], 1.0);
     let col_pos = gtk4::ColorButton::with_rgba(&to_rgba(view.borrow().color_pos));
     let col_neg = gtk4::ColorButton::with_rgba(&to_rgba(view.borrow().color_neg));
@@ -1439,7 +1446,7 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
     }
 
     let handle = Handle { view: view.clone(), ui: ui.clone() };
-    Parts { page, controls, handle }
+    Parts { page, bottom, controls, handle }
 }
 
 impl View {
