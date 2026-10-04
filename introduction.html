@@ -56,7 +56,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3b451d78.js";
+            window.path_to_searchindex_js = "searchindex-73fdb25c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-6b4ea5f4.js"></script>
@@ -229,10 +229,10 @@ The largest molecule we have tested is of $6000$ atoms core shell polymer.</p>
 <tr><th style="text-align: left">Feature</th><th style="text-align: left">Description</th></tr>
 </thead>
 <tbody>
-<tr><td style="text-align: left"><strong>Fast &amp; Lightweight</strong></td><td style="text-align: left">Built on Rust/GTK4. No GPU drivers required. Runs on any laptop.</td></tr>
+<tr><td style="text-align: left"><strong>Fast &amp; Lightweight</strong></td><td style="text-align: left">Built on Rust/GTK4. The main viewer needs no GPU; the 3D charge density view and the trajectory player use OpenGL 3.3, which any laptop from the last decade provides.</td></tr>
 <tr><td style="text-align: left"><strong>Analysis First</strong></td><td style="text-align: left">Dedicated tools for <a href="guide/kpath.html">K-Paths</a>, <a href="guide/slabs.html">Slabs</a>, and <a href="guide/voids.html">Void Analysis</a>.</td></tr>
-<tr><td style="text-align: left"><strong>DFT Ready</strong></td><td style="text-align: left">Native support for VASP, Quantum Espresso, and SPRKKR formats.</td></tr>
-<tr><td style="text-align: left"><strong>Publication Quality</strong></td><td style="text-align: left">Export high-resolution PNG, PDF, and SVG figures with Cairo-based rendering.</td></tr>
+<tr><td style="text-align: left"><strong>DFT Ready</strong></td><td style="text-align: left">Native support for VASP (including every step of a <code>vasprun.xml</code>), Quantum Espresso and SPRKKR. LAMMPS dumps are read too — a dump is the same box-plus-coordinates trajectory data as the others, just from a classical-MD code, so it reuses the same reader rather than widening CView’s scope. Relaxations and MD runs play back in the <a href="guide/visualization.html#trajectories-relaxation-and-md">Trajectory Player</a>.</td></tr>
+<tr><td style="text-align: left"><strong>Publication Quality</strong></td><td style="text-align: left">Export high-resolution PNG, PDF, and SVG figures with Cairo-based rendering, and journal-ready <a href="guide/charge_density.html#3d-isosurfaces">3D charge density figures</a> at a physical size and dpi.</td></tr>
 </tbody>
 </table>
 </div>
@@ -265,11 +265,11 @@ cargo run --release
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th style="text-align: left">Format</th><th style="text-align: center">VASP</th><th style="text-align: center">Quantum Espresso</th><th style="text-align: center">SPRKKR</th><th style="text-align: center">CIF / XYZ</th><th style="text-align: center">PDB</th></tr>
+<tr><th style="text-align: left">Format</th><th style="text-align: center">VASP</th><th style="text-align: center">Quantum Espresso</th><th style="text-align: center">SPRKKR</th><th style="text-align: center">CIF / XYZ</th><th style="text-align: center">PDB</th><th style="text-align: center">LAMMPS dump</th></tr>
 </thead>
 <tbody>
-<tr><td style="text-align: left"><strong>Read</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td></tr>
-<tr><td style="text-align: left"><strong>Write</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟠</td><td style="text-align: center">🟠</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td></tr>
+<tr><td style="text-align: left"><strong>Read</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td></tr>
+<tr><td style="text-align: left"><strong>Write</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟠</td><td style="text-align: center">🟠</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">—</td></tr>
 </tbody>
 </table>
 </div>

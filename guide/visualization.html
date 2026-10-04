@@ -56,7 +56,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3b451d78.js";
+            window.path_to_searchindex_js = "../searchindex-73fdb25c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6b4ea5f4.js"></script>
@@ -213,13 +213,28 @@ CView automatically detects the file type based on extension and content. You ca
 <tbody>
 <tr><td style="text-align: left"><strong>CIF</strong></td><td style="text-align: left"><code>.cif</code></td><td style="text-align: left">Standard Crystallographic Information Files.</td></tr>
 <tr><td style="text-align: left"><strong>VASP</strong></td><td style="text-align: left"><code>POSCAR</code>, <code>CONTCAR</code>, <code>.vasp</code></td><td style="text-align: left">Standard VASP structure inputs and outputs.</td></tr>
-<tr><td style="text-align: left"><strong>Quantum Espresso</strong></td><td style="text-align: left"><code>.in</code>, <code>.out</code>, <code>.pwi</code>, <code>.qe</code></td><td style="text-align: left">Reads atomic positions and cell parameters from input/output logs.</td></tr>
-<tr><td style="text-align: left"><strong>SPR-KKR</strong></td><td style="text-align: left"><code>.pot</code>, <code>.sys</code></td><td style="text-align: left">Munich SPR-KKR potential and system files.</td></tr>
+<tr><td style="text-align: left"><strong>VASP run</strong></td><td style="text-align: left"><code>vasprun.xml</code> (any name; recognised by content)</td><td style="text-align: left">Every ionic step of a relaxation or MD run, with its energy and largest force.</td></tr>
+<tr><td style="text-align: left"><strong>Quantum Espresso</strong></td><td style="text-align: left"><code>.in</code>, <code>.out</code>, <code>.pwi</code>, <code>.qe</code></td><td style="text-align: left">Inputs, and every geometry of a relax, vc-relax or MD output (starting with the input structure), with energies and forces.</td></tr>
+<tr><td style="text-align: left"><strong>LAMMPS</strong></td><td style="text-align: left"><code>.dump</code>, <code>.lammpstrj</code>, <code>.dat</code>, any name starting with <code>ITEM: TIMESTEP</code></td><td style="text-align: left">Text dumps: wrapped, scaled or unwrapped positions; orthogonal or triclinic boxes; every frame. Species come from an <code>element</code> or <code>mass</code> column, otherwise atoms are shown as <code>Type n</code>.</td></tr>
+<tr><td style="text-align: left"><strong>SPR-KKR</strong></td><td style="text-align: left"><code>.pot</code>, <code>.pot_new</code>, <code>.sys</code></td><td style="text-align: left">Munich SPR-KKR potential and system files. Chemical disorder (CPA sites with several occupants) is read as mixed sites and written back as CPA sites. Reading needs nothing extra (<code>.pot</code>, <code>.pot_new</code>, <code>.pot_out</code>). Writing uses CView’s own writer by default; set the environment variable <code>CVIEW_PYTHON</code> to a Python that has ase2sprkkr to write with ase2sprkkr instead — an optional improvement, never a requirement (see <a href="building.html#exporting-a-disordered-alloy-to-spr-kkr">Building Structures</a>).</td></tr>
 <tr><td style="text-align: left"><strong>XYZ</strong></td><td style="text-align: left"><code>.xyz</code></td><td style="text-align: left">Cartesian coordinates (Standard and Extended XYZ).</td></tr>
 <tr><td style="text-align: left"><strong>PDB</strong></td><td style="text-align: left"><code>.pdb</code>, <code>.ent</code></td><td style="text-align: left">Protein Data Bank records. Reads the <code>CRYST1</code> cell, <code>ATOM</code>/<code>HETATM</code> sites, occupancies and formal charges; the first <code>MODEL</code> only. Files without a real cell load as non-periodic molecules.</td></tr>
 </tbody>
 </table>
 </div>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><strong>Why LAMMPS, in a DFT-oriented tool?</strong> A LAMMPS dump is, at its core, the same data CView already parses for every other trajectory: a box plus a per-atom coordinate list, one frame after another — structurally the same problem as an Extended XYZ trajectory or a QE <code>vc-relax</code> log, just with LAMMPS’s own column layout. Reading it slots into the trajectory machinery built for <code>vasprun.xml</code>/QE/MD output rather than opening a new area of the code. CView does not run LAMMPS, does not know about force fields, and writes no LAMMPS input — it is a geometry viewer for a dump file someone already produced, exactly as it is for a VASP or QE run.</p>
+</blockquote>
+<h3 id="trajectories-relaxation-and-md"><a class="header" href="#trajectories-relaxation-and-md">Trajectories (Relaxation and MD)</a></h3>
+<p>Files with several frames — <code>vasprun.xml</code>, Quantum Espresso relax/MD output, LAMMPS dumps — open as one structure in the main view: the <strong>first</strong> or <strong>last</strong> frame, set in <code>Preferences → General → Relaxation / MD files open at</code>. All frames are kept.</p>
+<p><code>Structure → Trajectory Player… (Ctrl + Shift + P)</code> plays them in a separate window drawn on the GPU:</p>
+<ul>
+<li>Play, step and jump with the buttons or <strong>Space</strong>, <strong>, / .</strong> (or <strong>← / →</strong>), <strong>Home / End</strong>; set the speed in frames per second.</li>
+<li>For relaxations, the energy of every step is plotted under the view (click to jump), with the energy, ΔE and largest force of the current step on screen.</li>
+<li><strong>Show in Main View</strong> copies the current frame into the main window for measurements, analysis and vector export; <strong>Undo</strong> restores the previous structure.</li>
+<li><strong>Save Image…</strong> writes the 3D view as a PNG.</li>
+</ul>
 <h3 id="tab-management"><a class="header" href="#tab-management">Tab Management</a></h3>
 <p>CView uses a tabbed interface to handle multiple structures simultaneously. The application employs a <strong>smart loading strategy</strong> to keep the workspace clean:</p>
 <ul>
@@ -340,16 +355,30 @@ where $r_{\text{cov}}$ are the covalent radii from the internal database.</p>
 <li>Checkbox labels show the average CN (e.g., “Ti (CN 6)”)</li>
 </ul>
 </li>
-<li><strong>Poly Transparency</strong> slider: Adjust polyhedra opacity (5–95%)</li>
-<li><strong>Poly Color</strong> control: Use the central element colour or choose a custom colour</li>
+<li><strong>Poly Opacity</strong> slider: Adjust polyhedra opacity (5–95%; higher is more opaque). This sets the value for the current structure; the default for new tabs is in Preferences → Polyhedra.</li>
+<li><strong>Color by</strong> dropdown: what colours the polyhedra
+<ul>
+<li><strong>Element</strong> (the central atom’s colour) or <strong>Custom color</strong></li>
+<li><strong>A computed property</strong>: coordination number, mean bond length, Baur distortion Δ, quadratic elongation ⟨λ⟩, bond-angle variance σ², or volume. A colour scale is drawn in the bottom-right of the viewport and in exported images. The scale follows the range of the polyhedra on screen; if they all share one value, the legend states it instead of drawing a gradient. Where a property is undefined for a polyhedron (⟨λ⟩ and σ² need a reference shape for that coordination number), it is drawn grey.</li>
+</ul>
+</li>
+<li><strong>Polyhedra report</strong> button: writes a summary to <em>Structure Info</em>: per polyhedron type, the count, mean metrics, and how the polyhedra link (the mean number of other polyhedra each shares one vertex = corner, two = edge, three or more = face). Linkage is computed from the structure’s own periodic images, so polyhedra on the cell boundary are counted correctly.</li>
 </ol>
+<p><strong>Inspecting one polyhedron</strong>: click the central atom of a polyhedron in the viewport. Besides the usual selection report, <em>Structure Info</em> lists its coordination number, mean and range of bond lengths, Δ, ⟨λ⟩, σ² and volume.</p>
+<h3 id="appearance-preferences--polyhedra"><a class="header" href="#appearance-preferences--polyhedra">Appearance (Preferences → Polyhedra)</a></h3>
+<p>How polyhedra are drawn is a saved preference, separate from what is shown:</p>
+<ul>
+<li><strong>Edges</strong>: None, Subtle (default) or Strong. Only real polyhedron edges are drawn, not the diagonals across flat faces.</li>
+<li><strong>Default opacity</strong>, <strong>Back-face opacity</strong> (faces turned away from you are drawn fainter, which keeps overlapping polyhedra readable), <strong>Shading strength</strong> (0 is flat), <strong>Mute element colors</strong>, and the <strong>Colormap</strong> used for property colouring.</li>
+</ul>
+<p>Changes apply to the current structure immediately and are used for new tabs. Which elements are shown, the colour-by choice and the bond range belong to the structure and are not saved.</p>
 <h3 id="how-polyhedra-are-computed"><a class="header" href="#how-polyhedra-are-computed">How Polyhedra are Computed</a></h3>
 <p><strong>Algorithm</strong> (implemented in <code>rendering/polyhedra.rs</code>):</p>
 <ol>
 <li>Identify cation centers (user-selected or auto-detected)</li>
 <li>Find nearest anion neighbors within the bond cutoff distance</li>
 <li>Compute the <strong>convex hull</strong> of the anion positions</li>
-<li>Filter degenerate faces (coplanar vertices)</li>
+<li>Merge coplanar vertices into single flat faces (a square face is one polygon, triangulated once)</li>
 <li>Render with proper depth sorting (Polyhedra → Bonds → Atoms)</li>
 </ol>
 <p><strong>Critical detail</strong>: Polyhedra vertices are restricted to <strong>anions only</strong>. This prevents chemically meaningless polyhedra (e.g., around O in oxides).</p>
@@ -358,7 +387,7 @@ where $r_{\text{cov}}$ are the covalent radii from the internal database.</p>
 <p>The two-tier ghost system ensures polyhedra are correctly computed across periodic boundaries — ghost atoms used for coordination detection are different from those rendered visually.</p>
 </blockquote>
 <h3 id="settings"><a class="header" href="#settings">Settings</a></h3>
-<p>Polyhedra use the configured bond tolerance, a maximum bond-distance cap, and an internal coordination range of 4–12. The current UI exposes element selection, auto-detection, transparency, and element/custom colour controls; it does not expose coordination-number filters in Preferences.</p>
+<p>Polyhedra use the configured bond tolerance, a maximum bond-distance cap, and an internal coordination range of 4–12. The sidebar exposes element selection, auto-detection, opacity, colour-by and the bond range; Preferences exposes how polyhedra are drawn. Coordination-number filters are not exposed.</p>
 <h3 id="practical-example-batio₃"><a class="header" href="#practical-example-batio₃">Practical Example: BaTiO₃</a></h3>
 <p>In the cubic perovskite BaTiO₃:</p>
 <ul>
@@ -384,10 +413,15 @@ where $r_{\text{cov}}$ are the covalent radii from the internal database.</p>
 <tr><td style="text-align: left"><code>Ctrl + O</code></td><td style="text-align: left">Open file</td></tr>
 <tr><td style="text-align: left"><code>Shift + Ctrl + S</code></td><td style="text-align: left">Save structure as…</td></tr>
 <tr><td style="text-align: left"><code>Ctrl + E</code></td><td style="text-align: left">Export image (PNG/PDF/SVG)</td></tr>
-<tr><td style="text-align: left"><code>Ctrl + T</code></td><td style="text-align: left">Toggle Primitive ↔ Conventional cell</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + ,</code></td><td style="text-align: left">Preferences</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + W</code></td><td style="text-align: left">Close tab</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + Z</code></td><td style="text-align: left">Undo (e.g. atom deletion)</td></tr>
+<tr><td style="text-align: left"><code>T</code></td><td style="text-align: left">Toggle Primitive ↔ Conventional cell (canvas focused)</td></tr>
 <tr><td style="text-align: left"><code>Ctrl + Shift + C</code></td><td style="text-align: left">Matrix transformation tool</td></tr>
 <tr><td style="text-align: left"><code>Ctrl + M</code></td><td style="text-align: left">Add Miller plane</td></tr>
-<tr><td style="text-align: left"><code>Ctrl + B</code></td><td style="text-align: left">Toggle full-unit-cell/ghost display</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + B</code></td><td style="text-align: left">Toggle bonds</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + Shift + B</code></td><td style="text-align: left">Toggle full-unit-cell/ghost display</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + Shift + P</code></td><td style="text-align: left">Trajectory Player (relaxation / MD files)</td></tr>
 <tr><td style="text-align: left"><strong>Mouse scroll</strong></td><td style="text-align: left">Zoom in/out</td></tr>
 <tr><td style="text-align: left"><strong>Left-click drag</strong></td><td style="text-align: left">Rotate structure</td></tr>
 <tr><td style="text-align: left"><strong>Shift + click</strong></td><td style="text-align: left">Multi-select atoms</td></tr>
@@ -396,13 +430,14 @@ where $r_{\text{cov}}$ are the covalent radii from the internal database.</p>
 </div>
 <hr>
 <h2 id="performance-notes"><a class="header" href="#performance-notes">Performance Notes</a></h2>
-<p>CView is optimized for <strong>CPU-based rendering</strong> using GTK4/Cairo:</p>
+<p>The <strong>main viewer</strong> — structure loading, all analysis, Supercell/Basis/Slab, and PNG/PDF/SVG export — is CPU-based rendering using GTK4/Cairo:</p>
 <ul>
 <li>Smooth interaction up to ~5000 atoms</li>
 <li>Real-time rotation and zoom</li>
 <li>No GPU drivers required (runs on any laptop)</li>
 </ul>
-<p>For larger systems (e.g., nanoparticles, proteins), consider specialized GPU-accelerated tools like OVITO.</p>
+<p>Two <strong>optional</strong> windows use OpenGL 3.3 instead, because Cairo cannot do what they need: the <a href="charge_density.html#3d-isosurfaces">3D Isosurface</a> page has to depth-sort and alpha-blend overlapping translucent lobes in real time as you drag a slider, and the <a href="#trajectories-relaxation-and-md">Trajectory Player</a> has to redraw every atom at interactive frame rates while scrubbing through hundreds of MD/relaxation steps — both are workloads Cairo’s CPU rasterizer is not built for. Neither window is required for normal use, and the GPU floor is low (OpenGL 3.3, any laptop from the last decade). If you never open them, CView never touches your GPU.</p>
+<p>For nanoparticles or proteins with tens of thousands of atoms in the main view, consider specialized GPU-accelerated tools like OVITO or VMD.</p>
 
                     </main>
 

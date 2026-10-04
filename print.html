@@ -57,7 +57,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3b451d78.js";
+            window.path_to_searchindex_js = "searchindex-73fdb25c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-6b4ea5f4.js"></script>
@@ -213,7 +213,7 @@
 
 <p><a href="https://mavens-group.github.io/">The Mavens Group</a></p>
 
-<p class="version">v1.1.0 (2026)</p>
+<p class="version">v1.2.1 (2026)</p>
 
 </div>
 
@@ -252,10 +252,10 @@ The largest molecule we have tested is of $6000$ atoms core shell polymer.</p>
 <tr><th style="text-align: left">Feature</th><th style="text-align: left">Description</th></tr>
 </thead>
 <tbody>
-<tr><td style="text-align: left"><strong>Fast &amp; Lightweight</strong></td><td style="text-align: left">Built on Rust/GTK4. No GPU drivers required. Runs on any laptop.</td></tr>
+<tr><td style="text-align: left"><strong>Fast &amp; Lightweight</strong></td><td style="text-align: left">Built on Rust/GTK4. The main viewer needs no GPU; the 3D charge density view and the trajectory player use OpenGL 3.3, which any laptop from the last decade provides.</td></tr>
 <tr><td style="text-align: left"><strong>Analysis First</strong></td><td style="text-align: left">Dedicated tools for <a href="#high-symmetry-k-points-and-k-path">K-Paths</a>, <a href="#surface-slabs-building">Slabs</a>, and <a href="#voids-analysis">Void Analysis</a>.</td></tr>
-<tr><td style="text-align: left"><strong>DFT Ready</strong></td><td style="text-align: left">Native support for VASP, Quantum Espresso, and SPRKKR formats.</td></tr>
-<tr><td style="text-align: left"><strong>Publication Quality</strong></td><td style="text-align: left">Export high-resolution PNG, PDF, and SVG figures with Cairo-based rendering.</td></tr>
+<tr><td style="text-align: left"><strong>DFT Ready</strong></td><td style="text-align: left">Native support for VASP (including every step of a <code>vasprun.xml</code>), Quantum Espresso and SPRKKR. LAMMPS dumps are read too — a dump is the same box-plus-coordinates trajectory data as the others, just from a classical-MD code, so it reuses the same reader rather than widening CView’s scope. Relaxations and MD runs play back in the <a href="#trajectories-relaxation-and-md">Trajectory Player</a>.</td></tr>
+<tr><td style="text-align: left"><strong>Publication Quality</strong></td><td style="text-align: left">Export high-resolution PNG, PDF, and SVG figures with Cairo-based rendering, and journal-ready <a href="#3d-isosurfaces">3D charge density figures</a> at a physical size and dpi.</td></tr>
 </tbody>
 </table>
 </div>
@@ -288,11 +288,11 @@ cargo run --release
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th style="text-align: left">Format</th><th style="text-align: center">VASP</th><th style="text-align: center">Quantum Espresso</th><th style="text-align: center">SPRKKR</th><th style="text-align: center">CIF / XYZ</th><th style="text-align: center">PDB</th></tr>
+<tr><th style="text-align: left">Format</th><th style="text-align: center">VASP</th><th style="text-align: center">Quantum Espresso</th><th style="text-align: center">SPRKKR</th><th style="text-align: center">CIF / XYZ</th><th style="text-align: center">PDB</th><th style="text-align: center">LAMMPS dump</th></tr>
 </thead>
 <tbody>
-<tr><td style="text-align: left"><strong>Read</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td></tr>
-<tr><td style="text-align: left"><strong>Write</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟠</td><td style="text-align: center">🟠</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td></tr>
+<tr><td style="text-align: left"><strong>Read</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td></tr>
+<tr><td style="text-align: left"><strong>Write</strong></td><td style="text-align: center">🟢</td><td style="text-align: center">🟠</td><td style="text-align: center">🟠</td><td style="text-align: center">🟢</td><td style="text-align: center">🟢</td><td style="text-align: center">—</td></tr>
 </tbody>
 </table>
 </div>
@@ -677,13 +677,28 @@ CView automatically detects the file type based on extension and content. You ca
 <tbody>
 <tr><td style="text-align: left"><strong>CIF</strong></td><td style="text-align: left"><code>.cif</code></td><td style="text-align: left">Standard Crystallographic Information Files.</td></tr>
 <tr><td style="text-align: left"><strong>VASP</strong></td><td style="text-align: left"><code>POSCAR</code>, <code>CONTCAR</code>, <code>.vasp</code></td><td style="text-align: left">Standard VASP structure inputs and outputs.</td></tr>
-<tr><td style="text-align: left"><strong>Quantum Espresso</strong></td><td style="text-align: left"><code>.in</code>, <code>.out</code>, <code>.pwi</code>, <code>.qe</code></td><td style="text-align: left">Reads atomic positions and cell parameters from input/output logs.</td></tr>
-<tr><td style="text-align: left"><strong>SPR-KKR</strong></td><td style="text-align: left"><code>.pot</code>, <code>.sys</code></td><td style="text-align: left">Munich SPR-KKR potential and system files.</td></tr>
+<tr><td style="text-align: left"><strong>VASP run</strong></td><td style="text-align: left"><code>vasprun.xml</code> (any name; recognised by content)</td><td style="text-align: left">Every ionic step of a relaxation or MD run, with its energy and largest force.</td></tr>
+<tr><td style="text-align: left"><strong>Quantum Espresso</strong></td><td style="text-align: left"><code>.in</code>, <code>.out</code>, <code>.pwi</code>, <code>.qe</code></td><td style="text-align: left">Inputs, and every geometry of a relax, vc-relax or MD output (starting with the input structure), with energies and forces.</td></tr>
+<tr><td style="text-align: left"><strong>LAMMPS</strong></td><td style="text-align: left"><code>.dump</code>, <code>.lammpstrj</code>, <code>.dat</code>, any name starting with <code>ITEM: TIMESTEP</code></td><td style="text-align: left">Text dumps: wrapped, scaled or unwrapped positions; orthogonal or triclinic boxes; every frame. Species come from an <code>element</code> or <code>mass</code> column, otherwise atoms are shown as <code>Type n</code>.</td></tr>
+<tr><td style="text-align: left"><strong>SPR-KKR</strong></td><td style="text-align: left"><code>.pot</code>, <code>.pot_new</code>, <code>.sys</code></td><td style="text-align: left">Munich SPR-KKR potential and system files. Chemical disorder (CPA sites with several occupants) is read as mixed sites and written back as CPA sites. Reading needs nothing extra (<code>.pot</code>, <code>.pot_new</code>, <code>.pot_out</code>). Writing uses CView’s own writer by default; set the environment variable <code>CVIEW_PYTHON</code> to a Python that has ase2sprkkr to write with ase2sprkkr instead — an optional improvement, never a requirement (see <a href="#exporting-a-disordered-alloy-to-spr-kkr">Building Structures</a>).</td></tr>
 <tr><td style="text-align: left"><strong>XYZ</strong></td><td style="text-align: left"><code>.xyz</code></td><td style="text-align: left">Cartesian coordinates (Standard and Extended XYZ).</td></tr>
 <tr><td style="text-align: left"><strong>PDB</strong></td><td style="text-align: left"><code>.pdb</code>, <code>.ent</code></td><td style="text-align: left">Protein Data Bank records. Reads the <code>CRYST1</code> cell, <code>ATOM</code>/<code>HETATM</code> sites, occupancies and formal charges; the first <code>MODEL</code> only. Files without a real cell load as non-periodic molecules.</td></tr>
 </tbody>
 </table>
 </div>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><strong>Why LAMMPS, in a DFT-oriented tool?</strong> A LAMMPS dump is, at its core, the same data CView already parses for every other trajectory: a box plus a per-atom coordinate list, one frame after another — structurally the same problem as an Extended XYZ trajectory or a QE <code>vc-relax</code> log, just with LAMMPS’s own column layout. Reading it slots into the trajectory machinery built for <code>vasprun.xml</code>/QE/MD output rather than opening a new area of the code. CView does not run LAMMPS, does not know about force fields, and writes no LAMMPS input — it is a geometry viewer for a dump file someone already produced, exactly as it is for a VASP or QE run.</p>
+</blockquote>
+<h3 id="trajectories-relaxation-and-md"><a class="header" href="#trajectories-relaxation-and-md">Trajectories (Relaxation and MD)</a></h3>
+<p>Files with several frames — <code>vasprun.xml</code>, Quantum Espresso relax/MD output, LAMMPS dumps — open as one structure in the main view: the <strong>first</strong> or <strong>last</strong> frame, set in <code>Preferences → General → Relaxation / MD files open at</code>. All frames are kept.</p>
+<p><code>Structure → Trajectory Player… (Ctrl + Shift + P)</code> plays them in a separate window drawn on the GPU:</p>
+<ul>
+<li>Play, step and jump with the buttons or <strong>Space</strong>, <strong>, / .</strong> (or <strong>← / →</strong>), <strong>Home / End</strong>; set the speed in frames per second.</li>
+<li>For relaxations, the energy of every step is plotted under the view (click to jump), with the energy, ΔE and largest force of the current step on screen.</li>
+<li><strong>Show in Main View</strong> copies the current frame into the main window for measurements, analysis and vector export; <strong>Undo</strong> restores the previous structure.</li>
+<li><strong>Save Image…</strong> writes the 3D view as a PNG.</li>
+</ul>
 <h3 id="tab-management"><a class="header" href="#tab-management">Tab Management</a></h3>
 <p>CView uses a tabbed interface to handle multiple structures simultaneously. The application employs a <strong>smart loading strategy</strong> to keep the workspace clean:</p>
 <ul>
@@ -804,16 +819,30 @@ where $r_{\text{cov}}$ are the covalent radii from the internal database.</p>
 <li>Checkbox labels show the average CN (e.g., “Ti (CN 6)”)</li>
 </ul>
 </li>
-<li><strong>Poly Transparency</strong> slider: Adjust polyhedra opacity (5–95%)</li>
-<li><strong>Poly Color</strong> control: Use the central element colour or choose a custom colour</li>
+<li><strong>Poly Opacity</strong> slider: Adjust polyhedra opacity (5–95%; higher is more opaque). This sets the value for the current structure; the default for new tabs is in Preferences → Polyhedra.</li>
+<li><strong>Color by</strong> dropdown: what colours the polyhedra
+<ul>
+<li><strong>Element</strong> (the central atom’s colour) or <strong>Custom color</strong></li>
+<li><strong>A computed property</strong>: coordination number, mean bond length, Baur distortion Δ, quadratic elongation ⟨λ⟩, bond-angle variance σ², or volume. A colour scale is drawn in the bottom-right of the viewport and in exported images. The scale follows the range of the polyhedra on screen; if they all share one value, the legend states it instead of drawing a gradient. Where a property is undefined for a polyhedron (⟨λ⟩ and σ² need a reference shape for that coordination number), it is drawn grey.</li>
+</ul>
+</li>
+<li><strong>Polyhedra report</strong> button: writes a summary to <em>Structure Info</em>: per polyhedron type, the count, mean metrics, and how the polyhedra link (the mean number of other polyhedra each shares one vertex = corner, two = edge, three or more = face). Linkage is computed from the structure’s own periodic images, so polyhedra on the cell boundary are counted correctly.</li>
 </ol>
+<p><strong>Inspecting one polyhedron</strong>: click the central atom of a polyhedron in the viewport. Besides the usual selection report, <em>Structure Info</em> lists its coordination number, mean and range of bond lengths, Δ, ⟨λ⟩, σ² and volume.</p>
+<h3 id="appearance-preferences--polyhedra"><a class="header" href="#appearance-preferences--polyhedra">Appearance (Preferences → Polyhedra)</a></h3>
+<p>How polyhedra are drawn is a saved preference, separate from what is shown:</p>
+<ul>
+<li><strong>Edges</strong>: None, Subtle (default) or Strong. Only real polyhedron edges are drawn, not the diagonals across flat faces.</li>
+<li><strong>Default opacity</strong>, <strong>Back-face opacity</strong> (faces turned away from you are drawn fainter, which keeps overlapping polyhedra readable), <strong>Shading strength</strong> (0 is flat), <strong>Mute element colors</strong>, and the <strong>Colormap</strong> used for property colouring.</li>
+</ul>
+<p>Changes apply to the current structure immediately and are used for new tabs. Which elements are shown, the colour-by choice and the bond range belong to the structure and are not saved.</p>
 <h3 id="how-polyhedra-are-computed"><a class="header" href="#how-polyhedra-are-computed">How Polyhedra are Computed</a></h3>
 <p><strong>Algorithm</strong> (implemented in <code>rendering/polyhedra.rs</code>):</p>
 <ol>
 <li>Identify cation centers (user-selected or auto-detected)</li>
 <li>Find nearest anion neighbors within the bond cutoff distance</li>
 <li>Compute the <strong>convex hull</strong> of the anion positions</li>
-<li>Filter degenerate faces (coplanar vertices)</li>
+<li>Merge coplanar vertices into single flat faces (a square face is one polygon, triangulated once)</li>
 <li>Render with proper depth sorting (Polyhedra → Bonds → Atoms)</li>
 </ol>
 <p><strong>Critical detail</strong>: Polyhedra vertices are restricted to <strong>anions only</strong>. This prevents chemically meaningless polyhedra (e.g., around O in oxides).</p>
@@ -822,7 +851,7 @@ where $r_{\text{cov}}$ are the covalent radii from the internal database.</p>
 <p>The two-tier ghost system ensures polyhedra are correctly computed across periodic boundaries — ghost atoms used for coordination detection are different from those rendered visually.</p>
 </blockquote>
 <h3 id="settings"><a class="header" href="#settings">Settings</a></h3>
-<p>Polyhedra use the configured bond tolerance, a maximum bond-distance cap, and an internal coordination range of 4–12. The current UI exposes element selection, auto-detection, transparency, and element/custom colour controls; it does not expose coordination-number filters in Preferences.</p>
+<p>Polyhedra use the configured bond tolerance, a maximum bond-distance cap, and an internal coordination range of 4–12. The sidebar exposes element selection, auto-detection, opacity, colour-by and the bond range; Preferences exposes how polyhedra are drawn. Coordination-number filters are not exposed.</p>
 <h3 id="practical-example-batio₃"><a class="header" href="#practical-example-batio₃">Practical Example: BaTiO₃</a></h3>
 <p>In the cubic perovskite BaTiO₃:</p>
 <ul>
@@ -848,10 +877,15 @@ where $r_{\text{cov}}$ are the covalent radii from the internal database.</p>
 <tr><td style="text-align: left"><code>Ctrl + O</code></td><td style="text-align: left">Open file</td></tr>
 <tr><td style="text-align: left"><code>Shift + Ctrl + S</code></td><td style="text-align: left">Save structure as…</td></tr>
 <tr><td style="text-align: left"><code>Ctrl + E</code></td><td style="text-align: left">Export image (PNG/PDF/SVG)</td></tr>
-<tr><td style="text-align: left"><code>Ctrl + T</code></td><td style="text-align: left">Toggle Primitive ↔ Conventional cell</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + ,</code></td><td style="text-align: left">Preferences</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + W</code></td><td style="text-align: left">Close tab</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + Z</code></td><td style="text-align: left">Undo (e.g. atom deletion)</td></tr>
+<tr><td style="text-align: left"><code>T</code></td><td style="text-align: left">Toggle Primitive ↔ Conventional cell (canvas focused)</td></tr>
 <tr><td style="text-align: left"><code>Ctrl + Shift + C</code></td><td style="text-align: left">Matrix transformation tool</td></tr>
 <tr><td style="text-align: left"><code>Ctrl + M</code></td><td style="text-align: left">Add Miller plane</td></tr>
-<tr><td style="text-align: left"><code>Ctrl + B</code></td><td style="text-align: left">Toggle full-unit-cell/ghost display</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + B</code></td><td style="text-align: left">Toggle bonds</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + Shift + B</code></td><td style="text-align: left">Toggle full-unit-cell/ghost display</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + Shift + P</code></td><td style="text-align: left">Trajectory Player (relaxation / MD files)</td></tr>
 <tr><td style="text-align: left"><strong>Mouse scroll</strong></td><td style="text-align: left">Zoom in/out</td></tr>
 <tr><td style="text-align: left"><strong>Left-click drag</strong></td><td style="text-align: left">Rotate structure</td></tr>
 <tr><td style="text-align: left"><strong>Shift + click</strong></td><td style="text-align: left">Multi-select atoms</td></tr>
@@ -860,26 +894,27 @@ where $r_{\text{cov}}$ are the covalent radii from the internal database.</p>
 </div>
 <hr>
 <h2 id="performance-notes"><a class="header" href="#performance-notes">Performance Notes</a></h2>
-<p>CView is optimized for <strong>CPU-based rendering</strong> using GTK4/Cairo:</p>
+<p>The <strong>main viewer</strong> — structure loading, all analysis, Supercell/Basis/Slab, and PNG/PDF/SVG export — is CPU-based rendering using GTK4/Cairo:</p>
 <ul>
 <li>Smooth interaction up to ~5000 atoms</li>
 <li>Real-time rotation and zoom</li>
 <li>No GPU drivers required (runs on any laptop)</li>
 </ul>
-<p>For larger systems (e.g., nanoparticles, proteins), consider specialized GPU-accelerated tools like OVITO.</p>
+<p>Two <strong>optional</strong> windows use OpenGL 3.3 instead, because Cairo cannot do what they need: the <a href="#3d-isosurfaces">3D Isosurface</a> page has to depth-sort and alpha-blend overlapping translucent lobes in real time as you drag a slider, and the <a href="#trajectories-relaxation-and-md">Trajectory Player</a> has to redraw every atom at interactive frame rates while scrubbing through hundreds of MD/relaxation steps — both are workloads Cairo’s CPU rasterizer is not built for. Neither window is required for normal use, and the GPU floor is low (OpenGL 3.3, any laptop from the last decade). If you never open them, CView never touches your GPU.</p>
+<p>For nanoparticles or proteins with tens of thousands of atoms in the main view, consider specialized GPU-accelerated tools like OVITO or VMD.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="analysis-tools"><a class="header" href="#analysis-tools">Analysis Tools</a></h1>
 <p>The Analysis module in CView aggregates tools designed to characterize the geometric, symmetric, and diffraction properties of the loaded crystal structure. Unlike simple visualization, these tools perform computational tasks to extract physical descriptors suitable for comparison with experimental data or preparation for <em>ab initio</em> calculations.</p>
 <h2 id="accessing-analysis-tools"><a class="header" href="#accessing-analysis-tools">Accessing Analysis Tools</a></h2>
-<p>The analysis suite is accessible via the <strong>Analysis</strong> menu in the main application window. This triggers the centralized Analysis Window (<code>actions_analysis.rs</code>), which provides tabbed access to the following modules:</p>
+<p>The analysis suite is accessible via the <strong>Analysis</strong> menu in the main application window. Each menu entry opens the Analysis window (<code>actions_analysis.rs</code>) directly on its own tab, and you can switch between tabs from within the window:</p>
 <ol>
-<li><strong>Symmetry</strong>: Space group determination and symmetry operation analysis.</li>
-<li><strong>XRD</strong>: X-Ray Diffraction pattern simulation.</li>
-<li><strong>Voids</strong>: Porosity and intercalation site analysis.</li>
-<li><strong>K-Path</strong>: Reciprocal space path generation for band structures.</li>
-<li><strong>Slab</strong>: Surface-slab generation from Miller indices, thickness, and vacuum.</li>
+<li><strong>Symmetry</strong> (<code>Analysis → Symmetry...</code>): Space group determination and symmetry operation analysis.</li>
+<li><strong>XRD</strong> (<code>Analysis → Diffraction (XRD)...</code>): X-Ray Diffraction pattern simulation.</li>
+<li><strong>Band Path</strong> (<code>Analysis → Band Path...</code>): Reciprocal space path generation for band structures.</li>
+<li><strong>Void Analysis</strong> (<code>Analysis → Void Analysis...</code>): Porosity and intercalation site analysis.</li>
 </ol>
-<p><strong>Charge Density</strong> is opened separately from <strong>Analysis → Charge Density</strong>; it is not a tab in the Analysis Tools window.</p>
+<p><strong>Charge Density</strong> is opened separately from <strong>Analysis → Charge Density</strong>; it is not a tab in the Analysis window.</p>
+<p><strong>Slab generation</strong> changes the structure, so it is not part of the read-only Analysis window. It has its own window under <strong>Structure → Slab…</strong>; see <a href="#surface-slabs-building">Surface Slabs</a>.</p>
 <h2 id="documentation-modules"><a class="header" href="#documentation-modules">Documentation Modules</a></h2>
 <p>Detailed physical derivation and algorithmic implementation for each tool are provided below:</p>
 <ul>
@@ -1075,7 +1110,7 @@ $$\phi = \frac{N_{void}}{N_{total}} \times 100%$$</p>
 <p>In cubic systems, $(100)$, $(010)$, and $(001)$ are equivalent by symmetry. In lower-symmetry systems (e.g., orthorhombic, hexagonal), they are distinct.</p>
 <hr>
 <h2 id="visualizing-miller-planes"><a class="header" href="#visualizing-miller-planes">Visualizing Miller Planes</a></h2>
-<p><strong>Access</strong>: <code>Tools → Miller Planes</code></p>
+<p><strong>Access</strong>: <code>View → Miller Indices...</code> (<code>Ctrl + M</code>)</p>
 <h3 id="how-to-use"><a class="header" href="#how-to-use">How to Use</a></h3>
 <ol>
 <li>Open the Miller Planes dialog</li>
@@ -1126,7 +1161,7 @@ $$\phi = \frac{N_{void}}{N_{total}} \times 100%$$</p>
 <p>Miller planes are the primary input for creating surface structures:</p>
 <ol>
 <li><strong>Select a plane</strong>: Use the Miller Planes tool to visualize candidates</li>
-<li><strong>Generate slab</strong>: <code>Analysis → Slab</code> (uses the same $(hkl)$ indices)</li>
+<li><strong>Generate slab</strong>: <code>Structure → Slab...</code> (uses the same $(hkl)$ indices)</li>
 <li><strong>Add vacuum</strong>: Specified in Ångströms</li>
 <li><strong>Repeat layers</strong>: Control slab thickness</li>
 </ol>
@@ -1138,7 +1173,7 @@ $$\phi = \frac{N_{void}}{N_{total}} \times 100%$$</p>
 <p><strong>Workflow</strong>:</p>
 <ol>
 <li>Load rutile TiO₂ structure</li>
-<li>Open <code>Tools → Miller Planes</code></li>
+<li>Open <code>View → Miller Indices...</code></li>
 <li>Enter <code>1</code>, <code>1</code>, <code>0</code></li>
 <li>Observe the plane cutting through rows of oxygen atoms</li>
 </ol>
@@ -1153,7 +1188,7 @@ $$\phi = \frac{N_{void}}{N_{total}} \times 100%$$</p>
 <hr>
 <h2 id="keyboard-shortcuts-1"><a class="header" href="#keyboard-shortcuts-1">Keyboard Shortcuts</a></h2>
 <ul>
-<li><strong>Add Plane</strong>: No dedicated shortcut — use <code>Tools → Miller Indices</code></li>
+<li><strong>Add Plane</strong>: <code>Ctrl + M</code>, or <code>View → Miller Indices...</code></li>
 <li><strong>Clear Plane</strong>: Use <strong>Clear All</strong> in the dialog. Closing or cancelling the dialog leaves existing planes visible.</li>
 </ul>
 <hr>
@@ -1220,9 +1255,10 @@ Where:</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="charge-density-visualization"><a class="header" href="#charge-density-visualization">Charge Density Visualization</a></h1>
 <p>The Charge Density module allows for the visual analysis of 3D volumetric data generated by <em>ab-initio</em> codes, specifically targeting VASP <code>CHGCAR</code> formats. This tool bridges the gap between raw electronic structure outputs and qualitative chemical bonding analysis.</p>
+<p>The window has two pages, chosen at the top: <strong>Slice (2D)</strong> and <strong>3D Isosurface</strong>. Both use the files, difference mode and density channel selected on the right; every change applies immediately to both. The sliders you drag to shape the picture sit in a bar under the view and change with the page: slice position (or hkl offset) and number of isolines for the slice; the |ρ| histogram, isovalue and opacity for 3D.</p>
 <h2 id="core-features"><a class="header" href="#core-features">Core Features</a></h2>
 <h3 id="2d-slice-extraction"><a class="header" href="#2d-slice-extraction">2D Slice Extraction</a></h3>
-<p>Rather than volume rendering, CView employs a high-precision 2D slice extraction technique coupled with a <strong>marching squares</strong> algorithm for isoline generation.</p>
+<p>The Slice page uses a high-precision 2D slice extraction technique coupled with a <strong>marching squares</strong> algorithm for isoline generation.</p>
 <p>Slices can be defined in two ways:</p>
 <ol>
 <li><strong>Crystallographic Planes</strong>: Fast slicing perpendicular to the primary lattice vectors (XY, XZ, YZ planes) at a specific fractional coordinate.</li>
@@ -1247,6 +1283,31 @@ Where:</p>
 <p>The <strong>Export Data (NumPy .npy)</strong> action also saves the raw 2D slice as a float64 NumPy array with a JSON sidecar containing the axis extents and labels.</p>
 <p><strong>Export Configuration</strong>: Settings (font sizes, colorbar tick labels, line thickness) are read <strong>live</strong> from the Preferences dialog at the moment you click export — not when the window opens. This ensures your exports always match your current preferences.</p>
 <hr>
+<h2 id="3d-isosurfaces"><a class="header" href="#3d-isosurfaces">3D Isosurfaces</a></h2>
+<p>The <strong>3D Isosurface</strong> page draws isosurfaces of the density together with the atoms and cell, on the GPU (OpenGL 3.3). In this mode the right-hand pane shows the 3D controls.</p>
+<h3 id="surfaces"><a class="header" href="#surfaces">Surfaces</a></h3>
+<ul>
+<li><strong>Isovalue</strong> in e/Å³: the logarithmic slider for exploring, the box for an exact value, or a click on the |ρ| histogram under the view.</li>
+<li><strong>Set by enclosed charge</strong>: choose the fraction of the electrons the surface should enclose (e.g. 50%) and CView finds the isovalue. This compares across systems in a way an absolute isovalue does not.</li>
+<li><strong>Lobes</strong>: +, − or ± (difference and spin densities are detected and shown as ± automatically), with opacity and a colour for each sign.</li>
+<li><strong>Ambient occlusion</strong> darkens crevices and contacts between lobes and atoms, which makes the shape readable in print.</li>
+<li><strong>Presets</strong> set lobes, colours and an enclosed-charge isovalue for total density, bonding/difference maps and spin density.</li>
+</ul>
+<p>Surfaces are watertight (no pinholes) and continue seamlessly across cell faces. They are recomputed in the background as you move the slider.</p>
+<h3 id="section-plane-and-cut-away"><a class="header" href="#section-plane-and-cut-away">Section plane and cut-away</a></h3>
+<p><strong>Section plane</strong> draws the density on any $(hkl)$ plane, coloured on a logarithmic scale (or blue–white–red for difference and spin densities) with a contour at the isovalue. <strong>Cut away beyond the plane</strong> removes surfaces and atoms on one side, so the section becomes the cut face.</p>
+<h3 id="numbers"><a class="header" href="#numbers">Numbers</a></h3>
+<p>The view lists the electrons and volume inside each lobe. <strong>Report Enclosed Charge</strong> writes them, the isovalue and ∫ρ dV over the cell to Structure Info.</p>
+<h3 id="figures-for-publication"><a class="header" href="#figures-for-publication">Figures for publication</a></h3>
+<p><strong>Export Figure…</strong> produces a journal-ready image:</p>
+<ul>
+<li>Pick a journal width (Nature 89/183 mm, Science, ACS) or any size in mm, and 300–1200 dpi (600 dpi is recommended for figures with text). A red frame on the view shows the exported area; <strong>Fit to Frame</strong> fills it.</li>
+<li>Fonts and lines are set in points at final size (Nature asks for 5–7 pt); the dialog warns if a Nature figure is taller than 170 mm.</li>
+<li><strong>PDF / SVG</strong> contain the picture at full resolution with the title, isovalue key, colour bar, axes, scale bar and panel letter as vector text, editable in Illustrator or Inkscape. <strong>PNG / TIFF</strong> carry the dpi, so they open at print size.</li>
+<li>Transparency is rendered exactly, edges are supersampled, and the background can be transparent for assembling multi-panel figures.</li>
+<li>A scene file (<code>.cview.json</code>) is saved next to every figure. <strong>Load Scene…</strong> restores the view, isovalue and all settings, so a requested change is quick to make.</li>
+</ul>
+<p><strong>Export Mesh</strong> writes the surfaces as OBJ (with colours) or PLY for Blender or ParaView.</p>
 <h2 id="advanced-features"><a class="header" href="#advanced-features">Advanced Features</a></h2>
 <h3 id="picture-in-picture-3d-preview"><a class="header" href="#picture-in-picture-3d-preview">Picture-in-Picture 3D Preview</a></h3>
 <p>When viewing a 2D slice, CView displays a <strong>3D miniature</strong> of the full crystal structure in the corner of the canvas. This preview shows:</p>
@@ -1270,37 +1331,95 @@ Where:</p>
 <p><strong>Visual cue</strong>: The slice boundary polygon is drawn in a contrasting color (e.g., white on dark background).</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="building-structures"><a class="header" href="#building-structures">Building Structures</a></h1>
-<p>CView provides several tools to manipulate and construct crystal structures. These operations are accessible via the <strong>Tools</strong> menu and enable you to prepare input geometries for <em>ab-initio</em> calculations.</p>
+<p>CView provides several tools to manipulate and construct crystal structures. These operations are accessible via the <strong>Structure</strong> menu and enable you to prepare input geometries for <em>ab-initio</em> calculations.</p>
+<p>Supercell, Basis, Atom Instances and Slab are the four tabs of one <strong>Structure</strong> window. Each menu entry opens the window on its own tab. The first three share a <strong>Preview</strong> pane: a flat schematic of the cell in the same style as the Slab cutting-plane view (white canvas, element-coloured dots, wireframe cell, the same fixed isometric orientation). It is a preview, not the 3D viewport, so it has no shading or bonds. Highlighted atoms get a dark ring:</p>
+<ul>
+<li><strong>Supercell</strong> previews the structure the current matrix would produce, before you press Transform.</li>
+<li><strong>Basis</strong> highlights the atoms an action would touch: the atoms selected in the main view, and every atom of the element typed into <em>Find</em>.</li>
+<li><strong>Atom Instances</strong> highlights the rows selected in the list.</li>
+</ul>
+<p>The window is not modal, so you can keep it open next to the main view.</p>
 <hr>
 <h2 id="basis-operations"><a class="header" href="#basis-operations">Basis Operations</a></h2>
-<p>The <strong>Basis</strong> dialog (<code>Tools → Basis</code>) allows you to perform chemical modifications to your structure.</p>
+<p>The <strong>Basis</strong> tab (<code>Structure → Basis...</code>) allows you to perform chemical modifications to your structure.</p>
 <h3 id="element-substitution"><a class="header" href="#element-substitution">Element Substitution</a></h3>
-<p><strong>Global Replacement</strong>: Replace all instances of one element with another throughout the entire structure.</p>
+<p><strong>Replace an element</strong>: replace all instances of one element with another, or only some of them.</p>
 <p><strong>Use Cases</strong>:</p>
 <ul>
 <li>Alloying studies (e.g., replacing Ni with Co in Ni₂MnGa)</li>
 <li>Doping simulations (e.g., substituting Ca with Sr in perovskites)</li>
+<li><strong>Partial substitution and disordered models</strong> (e.g., one O of the three in BaTiO₃ replaced by N, or a random 25% of the O sites in a supercell)</li>
 <li>Creating hypothetical structures for screening</li>
 </ul>
 <p><strong>How to use</strong>:</p>
 <ol>
-<li>Open <code>Tools → Basis</code></li>
-<li>Select the <strong>Global</strong> tab</li>
-<li>Enter the source and replacement element symbols</li>
-<li>Click <strong>Replace All</strong></li>
+<li>Open <code>Structure → Basis...</code></li>
+<li>In <strong>Replace an element</strong>, enter the source element in <em>Find</em> and the new element in <em>Replace with</em>. The <em>Atoms to replace</em> count starts at all of them (“of 3” in BaTiO₃).</li>
+<li>To replace only some, lower the count. The atoms that will change are ringed in the preview.
+<ul>
+<li>By default these are the first atoms of that element, in the order of the atom list.</li>
+<li>Tick <strong>Choose at random</strong> to draw them at random instead, and <strong>Pick again</strong> for another draw. A random draw is reproducible within a session (it is not drawn from the system clock), so repeating a step gives the same atoms.</li>
+</ul>
+</li>
+<li>Click <strong>Replace</strong>. Replacing fewer than all is logged as a partial substitution (for example “1 of 3 O → N”).</li>
 </ol>
+<p>For a disordered model you usually want a supercell first (<code>Structure → Supercell...</code>), so that the replaced fraction can be something other than 1/3 or 2/3. To choose specific atoms by hand, select them in the main view and use <strong>Selected atoms</strong> below.</p>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>This operation preserves all atomic positions and lattice parameters — only the element identity changes.</p>
+<p>This operation preserves all atomic positions and lattice parameters — only the element identity changes. The structure’s formula is updated to match.</p>
 </blockquote>
+<h3 id="mixed-occupancy-disordered-sites"><a class="header" href="#mixed-occupancy-disordered-sites">Mixed Occupancy (Disordered Sites)</a></h3>
+<p>For a disordered alloy or solid solution you want each site to hold <em>both</em> elements at fractional occupancies (for example Fe₀.₅Ni₀.₅, or O₀.₆₇N₀.₃₃), not a fixed pattern of swapped atoms.</p>
+<p><strong>In the Basis tab</strong></p>
+<ol>
+<li>In <strong>Replace an element</strong>, enter <em>Find</em> and <em>Replace with</em> as usual and choose how many sites to affect (all by default; the count and <strong>Choose at random</strong> work as above).</li>
+<li>Tick <strong>Mix in as a partial occupancy</strong>, set the <strong>Fraction of Replace-with on each site</strong>, and click <strong>Mix in</strong>.</li>
+</ol>
+<p>Each chosen site keeps its element at <code>1 − fraction</code> of its occupancy, and the new element takes <code>fraction</code>, at the same position. For example, mixing N into every O of BaTiO₃ at 0.33 leaves three sites of O 0.67 / N 0.33.</p>
+<p>To mix specific sites by hand, select them in the main view and use <strong>Mix in</strong> under <strong>Selected atoms</strong>.</p>
+<p><strong>What you will see</strong>: the main view and the Structure preview draw a mixed site as a sphere split into sectors by occupancy. Structure Info gains an <code>Occ</code> column and the formula carries the fractions (for example <code>BaN0.33O2.67Ti</code>).</p>
+<p><strong>What uses the occupancies</strong>: XRD and bond-valence sums weight each species by its occupancy (a virtual-crystal approximation). Supercells copy mixed sites unchanged.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p><strong>Slab generation and primitive/conventional conversion do not support mixed sites</strong> and will refuse with a message rather than return a wrong structure. Build the slab or convert the cell first, then set the mixed occupancies.</p>
+<p><strong>Saving mixed sites</strong>:</p>
+<ul>
+<li><strong>SPR-KKR (<code>.pot</code>)</strong> is the format built for this: a mixed site is written as a CPA site with several occupants and concentrations (see below).</li>
+<li><strong>CIF (<code>.cif</code>)</strong> writes the occupancy of every atom, with a mixed site as one row per species at the same position (the standard split-site form).</li>
+<li><strong>POSCAR, Quantum Espresso, XYZ and PDB</strong> have no way to hold a mixture here, so a mixed site is written as overlapping atoms and a warning is logged.</li>
+</ul>
+</blockquote>
+<h3 id="exporting-a-disordered-alloy-to-spr-kkr"><a class="header" href="#exporting-a-disordered-alloy-to-spr-kkr">Exporting a Disordered Alloy to SPR-KKR</a></h3>
+<p>SPR-KKR treats a disordered alloy with the coherent-potential approximation (CPA). Its files describe it as:</p>
+<ul>
+<li>a <strong>site</strong> (<code>IQ</code>) is a crystallographic position, listed once;</li>
+<li>the <strong>OCCUPATION</strong> section gives each site <code>NOQ</code> occupants, each a <strong>type</strong> (<code>ITOQ</code>) with a concentration (<code>CONC</code>); the concentrations on a site add up to 1;</li>
+<li>every (site, element) pair is its <strong>own type</strong>, with its own potential, so Fe on site 1 and Fe on site 2 are different types.</li>
+</ul>
+<p><strong>Reading</strong> SPR-KKR potentials needs nothing extra: CView opens <code>.pot</code>, and the files an SCF run writes (<code>.pot_new</code>, <code>.pot_out</code>, any <code>.pot_*</code>), including their CPA sites. Positions and concentrations are read; the potential itself and the SCF results are not.</p>
+<p><strong>Writing</strong> (<code>Save As → .pot</code>) uses CView’s own writer by default — Python is never required, and a save is identical on every machine. <strong>ase2sprkkr</strong> is an optional improvement, not a requirement: point CView at a Python that has it and writing switches to the reference implementation, which follows whatever SPR-KKR file format that ase2sprkkr produces.</p>
+<ol>
+<li>Install it with <code>pip install ase2sprkkr</code>, then set the <code>CVIEW_PYTHON</code> environment variable to that interpreter (a virtualenv or conda environment works) before starting CView. Without <code>CVIEW_PYTHON</code>, CView never probes for a <code>python3</code>/<code>python</code> on the <code>PATH</code> — saving a <code>.pot</code> touches no interpreter at all unless you asked it to.</li>
+<li>CView hands over the cell and the sites with their occupants; atoms that share a position and are partly occupied become one site with several occupants. Each site stays its own site (ase2sprkkr’s symmetry merging is switched off), so Fe₀.₄Cr₀.₃Al₀.₃ on four sites gives <code>NQ 4</code>, <code>NT 12</code>, <code>NOQ 3</code> on every site, as in a file ase2sprkkr writes for the same alloy.</li>
+<li>The log says which writer produced the file (“written by ase2sprkkr 3.5.1”). ase2sprkkr runs with a 60 s timeout; if it hangs or fails, CView falls back to its own writer and logs why.</li>
+</ol>
+<p><strong>Without <code>CVIEW_PYTHON</code></strong> (the default), CView writes the file itself and logs that it did, with a reminder of the environment variable that switches to ase2sprkkr — no warning, since this is the expected path for most users. That built-in writer produces a FORMAT 7 start potential. It was checked against an ase2sprkkr file for a four-site Cr/Fe/Al alloy (the global parameters, SCF-INFO, occupation, reference system, magnetisation, mesh and types match) and its Bravais table against xband’s, but it has not been run in SPR-KKR itself. Prefer the ase2sprkkr route for real calculations. In the built-in file:</p>
+<ul>
+<li><code>ALAT</code> is in bohr, the vectors and site positions are in units of <code>ALAT</code>, and the cell is rotated to the standard setting (first vector along x, second in the xy plane). This changes no distance or angle.</li>
+<li><code>BRAVAIS</code> is detected from the cell (one of SPR-KKR’s 14 lattices).</li>
+<li><strong>Core and valence electrons</strong> (<code>NCORT</code>, <code>NVALT</code>) follow the noble-gas core below each element (Cr 18/6, Fe 18/8, Al 10/3, Cu 18/11). Check them for elements with shallow semicore states (for example Ga 3d, Sn 4d, rare-earth 4f).</li>
+<li>Everything else is the SPR-KKR default (reference potentials, mesh, a non-magnetic direction). Set SCF options in your SPR-KKR input file.</li>
+</ul>
+<p><strong>Both writers</strong>: concentrations that do not add to 1 on a site are normalised and a warning is logged; vacancies are not written.</p>
+<p>CView also reads these files, including potentials written by an SCF run (<code>ALAT 9.85E+00</code> style numbers), and shows each CPA site as a pie.</p>
 <h3 id="selection-based-editing"><a class="header" href="#selection-based-editing">Selection-Based Editing</a></h3>
 <p><strong>Selective Modification</strong>: Change the element type of specific atoms rather than all instances.</p>
 <p><strong>Workflow</strong>:</p>
 <ol>
 <li>Select atoms in the viewport (click + Shift to multi-select)</li>
-<li>Open the <strong>Selection</strong> tab in the Basis dialog</li>
+<li>Open <code>Structure → Basis...</code>; the <strong>Selected atoms</strong> card shows how many atoms are selected, and the preview highlights them</li>
 <li>Enter the replacement element symbol</li>
-<li>Click <strong>Change Element</strong></li>
+<li>Click <strong>Change element</strong></li>
 </ol>
 <p><strong>Atom Removal</strong>: Press <code>Delete</code> after selecting atoms to create vacancies or remove unwanted species.</p>
 <hr>
@@ -1325,7 +1444,7 @@ Where:</p>
 </ul>
 <h3 id="toggling-cell-type"><a class="header" href="#toggling-cell-type">Toggling Cell Type</a></h3>
 <p><strong>Keyboard Shortcut</strong>: Press <code>Ctrl + T</code> to toggle between primitive and conventional representations.</p>
-<p><strong>Menu Access</strong>: <code>Tools → Toggle Primitive/Conventional</code></p>
+<p><strong>Menu Access</strong>: <code>Structure → Toggle Primitive/Conventional</code></p>
 <p><strong>What happens</strong>:</p>
 <ul>
 <li>CView uses the <code>moyo</code> library (spglib wrapper) to detect space group symmetry</li>
@@ -1337,14 +1456,14 @@ Where:</p>
 <p>Use <strong>primitive cells</strong> for DFT calculations to minimize computational cost. Use <strong>conventional cells</strong> for visualizing crystallographic relationships and comparing to literature structures.</p>
 </blockquote>
 <h3 id="standardization"><a class="header" href="#standardization">Standardization</a></h3>
-<p>The <strong>Tools</strong> tab of the Basis dialog provides <strong>Standardize Positions [0, 1)</strong>, which wraps atomic fractional coordinates into the unit cell. It does not perform crystallographic IUCr standardization; use primitive/conventional conversion for Moyo-based standard cells.</p>
+<p>The <strong>Positions</strong> card of the Basis tab provides <strong>Standardize positions [0, 1)</strong>, which wraps atomic fractional coordinates into the unit cell. It does not perform crystallographic IUCr standardization; use primitive/conventional conversion for Moyo-based standard cells.</p>
 <hr>
 <h2 id="atom-instance-management"><a class="header" href="#atom-instance-management">Atom Instance Management</a></h2>
-<p>The <strong>Atom Instances</strong> dialog provides session-only cosmetic overrides for individual atoms. It lets you filter the atom list and apply or reset a display label and colour for selected sites.</p>
-<p><strong>Access</strong>: <code>Tools → Atom Instances</code></p>
+<p>The <strong>Atom Instances</strong> tab provides session-only cosmetic overrides for individual atoms. It lets you filter the atom list and apply or reset a display label and colour for selected sites.</p>
+<p><strong>Access</strong>: <code>Structure → Atom Instances...</code></p>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>These overrides are not written to structure files. Use <code>View → Hide Symmetric Basis</code> or <code>Ctrl + B</code> to toggle visible periodic images.</p>
+<p>These overrides are not written to structure files. Use <code>View → Hide Symmetric Basis</code> or <code>Ctrl + Shift + B</code> to toggle visible periodic images.</p>
 </blockquote>
 <hr>
 <h2 id="related-operations"><a class="header" href="#related-operations">Related Operations</a></h2>
@@ -1398,20 +1517,21 @@ where $n_a \in [0, N_a-1]$, $n_b \in [0, N_b-1]$, $n_c \in [0, N_c-1]$.</p>
 <p>Phonon calculations (via DFPT or frozen phonons) often require supercells to sample specific q-points or to avoid interactions between atomic displacements.</p>
 <hr>
 <h2 id="using-the-supercell-tool"><a class="header" href="#using-the-supercell-tool">Using the Supercell Tool</a></h2>
-<p><strong>Access</strong>: <code>Tools → Supercell</code> (or from the application menu)</p>
+<p><strong>Access</strong>: <code>Structure → Supercell...</code> (<code>Ctrl + Shift + C</code>)</p>
 <h3 id="interface"><a class="header" href="#interface">Interface</a></h3>
-<p>The dialog is titled <strong>Matrix Transformation</strong> and presents a 3×3 integer matrix. Its default is the identity matrix, which leaves the structure unchanged.</p>
+<p>The <strong>Supercell</strong> tab of the Structure window presents a 3×3 integer matrix, with a live <strong>Preview</strong> of the resulting structure and its atom count. Past about 4000 atoms the preview is skipped and only the count is shown. Its default is the identity matrix, which leaves the structure unchanged.</p>
 <ul>
 <li>In the default diagonal mode, use diagonal values such as <code>2, 2, 3</code> for a 2×2×3 replication.</li>
 <li>Enable <strong>General Matrix (Shear/Swap)</strong> to edit off-diagonal entries for non-diagonal cell transformations.</li>
-<li>The matrix must be non-singular; a singular matrix leaves the original structure unchanged.</li>
+<li>The matrix must be non-singular; with a singular matrix (determinant 0) the <strong>Transform</strong> button is disabled.</li>
+<li>After <strong>Transform</strong> the matrix returns to the identity, so the preview shows the structure as it now is. <strong>Reset to as-loaded</strong> goes back to the originally loaded cell.</li>
 </ul>
 <h3 id="workflow"><a class="header" href="#workflow">Workflow</a></h3>
 <ol>
 <li>Load your structure (e.g., a primitive cell)</li>
-<li>Open <code>Tools → Supercell</code></li>
+<li>Open <code>Structure → Supercell...</code></li>
 <li>Enter the desired diagonal values (for example, <code>2</code>, <code>2</code>, <code>3</code>)</li>
-<li>Click <strong>Transform</strong></li>
+<li>Check the preview, then click <strong>Transform</strong></li>
 <li>The new structure replaces the current tab</li>
 </ol>
 <blockquote class="blockquote-tag blockquote-tag-tip">
@@ -1444,7 +1564,7 @@ where $n_a \in [0, N_a-1]$, $n_b \in [0, N_b-1]$, $n_c \in [0, N_c-1]$.</p>
 </div>
 <blockquote class="blockquote-tag blockquote-tag-caution">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M4.47.22A.749.749 0 0 1 5 0h6c.199 0 .389.079.53.22l4.25 4.25c.141.14.22.331.22.53v6a.749.749 0 0 1-.22.53l-4.25 4.25A.749.749 0 0 1 11 16H5a.749.749 0 0 1-.53-.22L.22 11.53A.749.749 0 0 1 0 11V5c0-.199.079-.389.22-.53Zm.84 1.28L1.5 5.31v5.38l3.81 3.81h5.38l3.81-3.81V5.31L10.69 1.5ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Caution</p>
-<p>CView uses CPU-based rendering. For molecular dynamics trajectories or nanoparticles with &gt;10,000 atoms, consider specialized tools like OVITO or VMD.</p>
+<p>The main viewer uses CPU-based (Cairo) rendering, so very large supercells get sluggish past ~5000 atoms. MD trajectories have their own GPU-accelerated <a href="#trajectories-relaxation-and-md">Trajectory Player</a> and don’t need a supercell for playback. For nanoparticles with &gt;10,000 atoms, consider specialized tools like OVITO or VMD.</p>
 </blockquote>
 <h3 id="dft-calculation-cost"><a class="header" href="#dft-calculation-cost">DFT Calculation Cost</a></h3>
 <p>Remember that DFT cost scales as $O(N^3)$ with atom count. A 2×2×2 supercell (8× atoms) will be <strong>~500× slower</strong> than the primitive cell.</p>

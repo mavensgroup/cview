@@ -56,7 +56,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3b451d78.js";
+            window.path_to_searchindex_js = "../searchindex-73fdb25c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6b4ea5f4.js"></script>
@@ -242,20 +242,21 @@ where $n_a \in [0, N_a-1]$, $n_b \in [0, N_b-1]$, $n_c \in [0, N_c-1]$.</p>
 <p>Phonon calculations (via DFPT or frozen phonons) often require supercells to sample specific q-points or to avoid interactions between atomic displacements.</p>
 <hr>
 <h2 id="using-the-supercell-tool"><a class="header" href="#using-the-supercell-tool">Using the Supercell Tool</a></h2>
-<p><strong>Access</strong>: <code>Tools → Supercell</code> (or from the application menu)</p>
+<p><strong>Access</strong>: <code>Structure → Supercell...</code> (<code>Ctrl + Shift + C</code>)</p>
 <h3 id="interface"><a class="header" href="#interface">Interface</a></h3>
-<p>The dialog is titled <strong>Matrix Transformation</strong> and presents a 3×3 integer matrix. Its default is the identity matrix, which leaves the structure unchanged.</p>
+<p>The <strong>Supercell</strong> tab of the Structure window presents a 3×3 integer matrix, with a live <strong>Preview</strong> of the resulting structure and its atom count. Past about 4000 atoms the preview is skipped and only the count is shown. Its default is the identity matrix, which leaves the structure unchanged.</p>
 <ul>
 <li>In the default diagonal mode, use diagonal values such as <code>2, 2, 3</code> for a 2×2×3 replication.</li>
 <li>Enable <strong>General Matrix (Shear/Swap)</strong> to edit off-diagonal entries for non-diagonal cell transformations.</li>
-<li>The matrix must be non-singular; a singular matrix leaves the original structure unchanged.</li>
+<li>The matrix must be non-singular; with a singular matrix (determinant 0) the <strong>Transform</strong> button is disabled.</li>
+<li>After <strong>Transform</strong> the matrix returns to the identity, so the preview shows the structure as it now is. <strong>Reset to as-loaded</strong> goes back to the originally loaded cell.</li>
 </ul>
 <h3 id="workflow"><a class="header" href="#workflow">Workflow</a></h3>
 <ol>
 <li>Load your structure (e.g., a primitive cell)</li>
-<li>Open <code>Tools → Supercell</code></li>
+<li>Open <code>Structure → Supercell...</code></li>
 <li>Enter the desired diagonal values (for example, <code>2</code>, <code>2</code>, <code>3</code>)</li>
-<li>Click <strong>Transform</strong></li>
+<li>Check the preview, then click <strong>Transform</strong></li>
 <li>The new structure replaces the current tab</li>
 </ol>
 <blockquote class="blockquote-tag blockquote-tag-tip">
@@ -288,7 +289,7 @@ where $n_a \in [0, N_a-1]$, $n_b \in [0, N_b-1]$, $n_c \in [0, N_c-1]$.</p>
 </div>
 <blockquote class="blockquote-tag blockquote-tag-caution">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M4.47.22A.749.749 0 0 1 5 0h6c.199 0 .389.079.53.22l4.25 4.25c.141.14.22.331.22.53v6a.749.749 0 0 1-.22.53l-4.25 4.25A.749.749 0 0 1 11 16H5a.749.749 0 0 1-.53-.22L.22 11.53A.749.749 0 0 1 0 11V5c0-.199.079-.389.22-.53Zm.84 1.28L1.5 5.31v5.38l3.81 3.81h5.38l3.81-3.81V5.31L10.69 1.5ZM8 4a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4Zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Caution</p>
-<p>CView uses CPU-based rendering. For molecular dynamics trajectories or nanoparticles with &gt;10,000 atoms, consider specialized tools like OVITO or VMD.</p>
+<p>The main viewer uses CPU-based (Cairo) rendering, so very large supercells get sluggish past ~5000 atoms. MD trajectories have their own GPU-accelerated <a href="visualization.html#trajectories-relaxation-and-md">Trajectory Player</a> and don’t need a supercell for playback. For nanoparticles with &gt;10,000 atoms, consider specialized tools like OVITO or VMD.</p>
 </blockquote>
 <h3 id="dft-calculation-cost"><a class="header" href="#dft-calculation-cost">DFT Calculation Cost</a></h3>
 <p>Remember that DFT cost scales as $O(N^3)$ with atom count. A 2×2×2 supercell (8× atoms) will be <strong>~500× slower</strong> than the primitive cell.</p>

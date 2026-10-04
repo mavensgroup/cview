@@ -56,7 +56,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3b451d78.js";
+            window.path_to_searchindex_js = "../searchindex-73fdb25c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6b4ea5f4.js"></script>
@@ -199,37 +199,95 @@
                 <div id="mdbook-content" class="content">
                     <main>
                         <h1 id="building-structures"><a class="header" href="#building-structures">Building Structures</a></h1>
-<p>CView provides several tools to manipulate and construct crystal structures. These operations are accessible via the <strong>Tools</strong> menu and enable you to prepare input geometries for <em>ab-initio</em> calculations.</p>
+<p>CView provides several tools to manipulate and construct crystal structures. These operations are accessible via the <strong>Structure</strong> menu and enable you to prepare input geometries for <em>ab-initio</em> calculations.</p>
+<p>Supercell, Basis, Atom Instances and Slab are the four tabs of one <strong>Structure</strong> window. Each menu entry opens the window on its own tab. The first three share a <strong>Preview</strong> pane: a flat schematic of the cell in the same style as the Slab cutting-plane view (white canvas, element-coloured dots, wireframe cell, the same fixed isometric orientation). It is a preview, not the 3D viewport, so it has no shading or bonds. Highlighted atoms get a dark ring:</p>
+<ul>
+<li><strong>Supercell</strong> previews the structure the current matrix would produce, before you press Transform.</li>
+<li><strong>Basis</strong> highlights the atoms an action would touch: the atoms selected in the main view, and every atom of the element typed into <em>Find</em>.</li>
+<li><strong>Atom Instances</strong> highlights the rows selected in the list.</li>
+</ul>
+<p>The window is not modal, so you can keep it open next to the main view.</p>
 <hr>
 <h2 id="basis-operations"><a class="header" href="#basis-operations">Basis Operations</a></h2>
-<p>The <strong>Basis</strong> dialog (<code>Tools → Basis</code>) allows you to perform chemical modifications to your structure.</p>
+<p>The <strong>Basis</strong> tab (<code>Structure → Basis...</code>) allows you to perform chemical modifications to your structure.</p>
 <h3 id="element-substitution"><a class="header" href="#element-substitution">Element Substitution</a></h3>
-<p><strong>Global Replacement</strong>: Replace all instances of one element with another throughout the entire structure.</p>
+<p><strong>Replace an element</strong>: replace all instances of one element with another, or only some of them.</p>
 <p><strong>Use Cases</strong>:</p>
 <ul>
 <li>Alloying studies (e.g., replacing Ni with Co in Ni₂MnGa)</li>
 <li>Doping simulations (e.g., substituting Ca with Sr in perovskites)</li>
+<li><strong>Partial substitution and disordered models</strong> (e.g., one O of the three in BaTiO₃ replaced by N, or a random 25% of the O sites in a supercell)</li>
 <li>Creating hypothetical structures for screening</li>
 </ul>
 <p><strong>How to use</strong>:</p>
 <ol>
-<li>Open <code>Tools → Basis</code></li>
-<li>Select the <strong>Global</strong> tab</li>
-<li>Enter the source and replacement element symbols</li>
-<li>Click <strong>Replace All</strong></li>
+<li>Open <code>Structure → Basis...</code></li>
+<li>In <strong>Replace an element</strong>, enter the source element in <em>Find</em> and the new element in <em>Replace with</em>. The <em>Atoms to replace</em> count starts at all of them (“of 3” in BaTiO₃).</li>
+<li>To replace only some, lower the count. The atoms that will change are ringed in the preview.
+<ul>
+<li>By default these are the first atoms of that element, in the order of the atom list.</li>
+<li>Tick <strong>Choose at random</strong> to draw them at random instead, and <strong>Pick again</strong> for another draw. A random draw is reproducible within a session (it is not drawn from the system clock), so repeating a step gives the same atoms.</li>
+</ul>
+</li>
+<li>Click <strong>Replace</strong>. Replacing fewer than all is logged as a partial substitution (for example “1 of 3 O → N”).</li>
 </ol>
+<p>For a disordered model you usually want a supercell first (<code>Structure → Supercell...</code>), so that the replaced fraction can be something other than 1/3 or 2/3. To choose specific atoms by hand, select them in the main view and use <strong>Selected atoms</strong> below.</p>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>This operation preserves all atomic positions and lattice parameters — only the element identity changes.</p>
+<p>This operation preserves all atomic positions and lattice parameters — only the element identity changes. The structure’s formula is updated to match.</p>
 </blockquote>
+<h3 id="mixed-occupancy-disordered-sites"><a class="header" href="#mixed-occupancy-disordered-sites">Mixed Occupancy (Disordered Sites)</a></h3>
+<p>For a disordered alloy or solid solution you want each site to hold <em>both</em> elements at fractional occupancies (for example Fe₀.₅Ni₀.₅, or O₀.₆₇N₀.₃₃), not a fixed pattern of swapped atoms.</p>
+<p><strong>In the Basis tab</strong></p>
+<ol>
+<li>In <strong>Replace an element</strong>, enter <em>Find</em> and <em>Replace with</em> as usual and choose how many sites to affect (all by default; the count and <strong>Choose at random</strong> work as above).</li>
+<li>Tick <strong>Mix in as a partial occupancy</strong>, set the <strong>Fraction of Replace-with on each site</strong>, and click <strong>Mix in</strong>.</li>
+</ol>
+<p>Each chosen site keeps its element at <code>1 − fraction</code> of its occupancy, and the new element takes <code>fraction</code>, at the same position. For example, mixing N into every O of BaTiO₃ at 0.33 leaves three sites of O 0.67 / N 0.33.</p>
+<p>To mix specific sites by hand, select them in the main view and use <strong>Mix in</strong> under <strong>Selected atoms</strong>.</p>
+<p><strong>What you will see</strong>: the main view and the Structure preview draw a mixed site as a sphere split into sectors by occupancy. Structure Info gains an <code>Occ</code> column and the formula carries the fractions (for example <code>BaN0.33O2.67Ti</code>).</p>
+<p><strong>What uses the occupancies</strong>: XRD and bond-valence sums weight each species by its occupancy (a virtual-crystal approximation). Supercells copy mixed sites unchanged.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p><strong>Slab generation and primitive/conventional conversion do not support mixed sites</strong> and will refuse with a message rather than return a wrong structure. Build the slab or convert the cell first, then set the mixed occupancies.</p>
+<p><strong>Saving mixed sites</strong>:</p>
+<ul>
+<li><strong>SPR-KKR (<code>.pot</code>)</strong> is the format built for this: a mixed site is written as a CPA site with several occupants and concentrations (see below).</li>
+<li><strong>CIF (<code>.cif</code>)</strong> writes the occupancy of every atom, with a mixed site as one row per species at the same position (the standard split-site form).</li>
+<li><strong>POSCAR, Quantum Espresso, XYZ and PDB</strong> have no way to hold a mixture here, so a mixed site is written as overlapping atoms and a warning is logged.</li>
+</ul>
+</blockquote>
+<h3 id="exporting-a-disordered-alloy-to-spr-kkr"><a class="header" href="#exporting-a-disordered-alloy-to-spr-kkr">Exporting a Disordered Alloy to SPR-KKR</a></h3>
+<p>SPR-KKR treats a disordered alloy with the coherent-potential approximation (CPA). Its files describe it as:</p>
+<ul>
+<li>a <strong>site</strong> (<code>IQ</code>) is a crystallographic position, listed once;</li>
+<li>the <strong>OCCUPATION</strong> section gives each site <code>NOQ</code> occupants, each a <strong>type</strong> (<code>ITOQ</code>) with a concentration (<code>CONC</code>); the concentrations on a site add up to 1;</li>
+<li>every (site, element) pair is its <strong>own type</strong>, with its own potential, so Fe on site 1 and Fe on site 2 are different types.</li>
+</ul>
+<p><strong>Reading</strong> SPR-KKR potentials needs nothing extra: CView opens <code>.pot</code>, and the files an SCF run writes (<code>.pot_new</code>, <code>.pot_out</code>, any <code>.pot_*</code>), including their CPA sites. Positions and concentrations are read; the potential itself and the SCF results are not.</p>
+<p><strong>Writing</strong> (<code>Save As → .pot</code>) uses CView’s own writer by default — Python is never required, and a save is identical on every machine. <strong>ase2sprkkr</strong> is an optional improvement, not a requirement: point CView at a Python that has it and writing switches to the reference implementation, which follows whatever SPR-KKR file format that ase2sprkkr produces.</p>
+<ol>
+<li>Install it with <code>pip install ase2sprkkr</code>, then set the <code>CVIEW_PYTHON</code> environment variable to that interpreter (a virtualenv or conda environment works) before starting CView. Without <code>CVIEW_PYTHON</code>, CView never probes for a <code>python3</code>/<code>python</code> on the <code>PATH</code> — saving a <code>.pot</code> touches no interpreter at all unless you asked it to.</li>
+<li>CView hands over the cell and the sites with their occupants; atoms that share a position and are partly occupied become one site with several occupants. Each site stays its own site (ase2sprkkr’s symmetry merging is switched off), so Fe₀.₄Cr₀.₃Al₀.₃ on four sites gives <code>NQ 4</code>, <code>NT 12</code>, <code>NOQ 3</code> on every site, as in a file ase2sprkkr writes for the same alloy.</li>
+<li>The log says which writer produced the file (“written by ase2sprkkr 3.5.1”). ase2sprkkr runs with a 60 s timeout; if it hangs or fails, CView falls back to its own writer and logs why.</li>
+</ol>
+<p><strong>Without <code>CVIEW_PYTHON</code></strong> (the default), CView writes the file itself and logs that it did, with a reminder of the environment variable that switches to ase2sprkkr — no warning, since this is the expected path for most users. That built-in writer produces a FORMAT 7 start potential. It was checked against an ase2sprkkr file for a four-site Cr/Fe/Al alloy (the global parameters, SCF-INFO, occupation, reference system, magnetisation, mesh and types match) and its Bravais table against xband’s, but it has not been run in SPR-KKR itself. Prefer the ase2sprkkr route for real calculations. In the built-in file:</p>
+<ul>
+<li><code>ALAT</code> is in bohr, the vectors and site positions are in units of <code>ALAT</code>, and the cell is rotated to the standard setting (first vector along x, second in the xy plane). This changes no distance or angle.</li>
+<li><code>BRAVAIS</code> is detected from the cell (one of SPR-KKR’s 14 lattices).</li>
+<li><strong>Core and valence electrons</strong> (<code>NCORT</code>, <code>NVALT</code>) follow the noble-gas core below each element (Cr 18/6, Fe 18/8, Al 10/3, Cu 18/11). Check them for elements with shallow semicore states (for example Ga 3d, Sn 4d, rare-earth 4f).</li>
+<li>Everything else is the SPR-KKR default (reference potentials, mesh, a non-magnetic direction). Set SCF options in your SPR-KKR input file.</li>
+</ul>
+<p><strong>Both writers</strong>: concentrations that do not add to 1 on a site are normalised and a warning is logged; vacancies are not written.</p>
+<p>CView also reads these files, including potentials written by an SCF run (<code>ALAT 9.85E+00</code> style numbers), and shows each CPA site as a pie.</p>
 <h3 id="selection-based-editing"><a class="header" href="#selection-based-editing">Selection-Based Editing</a></h3>
 <p><strong>Selective Modification</strong>: Change the element type of specific atoms rather than all instances.</p>
 <p><strong>Workflow</strong>:</p>
 <ol>
 <li>Select atoms in the viewport (click + Shift to multi-select)</li>
-<li>Open the <strong>Selection</strong> tab in the Basis dialog</li>
+<li>Open <code>Structure → Basis...</code>; the <strong>Selected atoms</strong> card shows how many atoms are selected, and the preview highlights them</li>
 <li>Enter the replacement element symbol</li>
-<li>Click <strong>Change Element</strong></li>
+<li>Click <strong>Change element</strong></li>
 </ol>
 <p><strong>Atom Removal</strong>: Press <code>Delete</code> after selecting atoms to create vacancies or remove unwanted species.</p>
 <hr>
@@ -254,7 +312,7 @@
 </ul>
 <h3 id="toggling-cell-type"><a class="header" href="#toggling-cell-type">Toggling Cell Type</a></h3>
 <p><strong>Keyboard Shortcut</strong>: Press <code>Ctrl + T</code> to toggle between primitive and conventional representations.</p>
-<p><strong>Menu Access</strong>: <code>Tools → Toggle Primitive/Conventional</code></p>
+<p><strong>Menu Access</strong>: <code>Structure → Toggle Primitive/Conventional</code></p>
 <p><strong>What happens</strong>:</p>
 <ul>
 <li>CView uses the <code>moyo</code> library (spglib wrapper) to detect space group symmetry</li>
@@ -266,14 +324,14 @@
 <p>Use <strong>primitive cells</strong> for DFT calculations to minimize computational cost. Use <strong>conventional cells</strong> for visualizing crystallographic relationships and comparing to literature structures.</p>
 </blockquote>
 <h3 id="standardization"><a class="header" href="#standardization">Standardization</a></h3>
-<p>The <strong>Tools</strong> tab of the Basis dialog provides <strong>Standardize Positions [0, 1)</strong>, which wraps atomic fractional coordinates into the unit cell. It does not perform crystallographic IUCr standardization; use primitive/conventional conversion for Moyo-based standard cells.</p>
+<p>The <strong>Positions</strong> card of the Basis tab provides <strong>Standardize positions [0, 1)</strong>, which wraps atomic fractional coordinates into the unit cell. It does not perform crystallographic IUCr standardization; use primitive/conventional conversion for Moyo-based standard cells.</p>
 <hr>
 <h2 id="atom-instance-management"><a class="header" href="#atom-instance-management">Atom Instance Management</a></h2>
-<p>The <strong>Atom Instances</strong> dialog provides session-only cosmetic overrides for individual atoms. It lets you filter the atom list and apply or reset a display label and colour for selected sites.</p>
-<p><strong>Access</strong>: <code>Tools → Atom Instances</code></p>
+<p>The <strong>Atom Instances</strong> tab provides session-only cosmetic overrides for individual atoms. It lets you filter the atom list and apply or reset a display label and colour for selected sites.</p>
+<p><strong>Access</strong>: <code>Structure → Atom Instances...</code></p>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>These overrides are not written to structure files. Use <code>View → Hide Symmetric Basis</code> or <code>Ctrl + B</code> to toggle visible periodic images.</p>
+<p>These overrides are not written to structure files. Use <code>View → Hide Symmetric Basis</code> or <code>Ctrl + Shift + B</code> to toggle visible periodic images.</p>
 </blockquote>
 <hr>
 <h2 id="related-operations"><a class="header" href="#related-operations">Related Operations</a></h2>
