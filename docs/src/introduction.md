@@ -30,7 +30,7 @@
 | :--- | :--- |
 | **Fast & Lightweight** | Built on Rust/GTK4. The main viewer needs no GPU; the 3D charge density view and the trajectory player use OpenGL 3.3, which any laptop from the last decade provides. |
 | **Analysis First** | Dedicated tools for [K-Paths](guide/kpath.md), [Slabs](guide/slabs.md), and [Void Analysis](guide/voids.md). |
-| **DFT Ready** | Native support for VASP (including every step of a `vasprun.xml`), Quantum Espresso, SPRKKR and LAMMPS formats. Relaxations and MD runs play back in the [Trajectory Player](guide/visualization.md#trajectories-relaxation-and-md). |
+| **DFT Ready** | Native support for VASP (including every step of a `vasprun.xml`), Quantum Espresso and SPRKKR. LAMMPS dumps are read too — a dump is the same box-plus-coordinates trajectory data as the others, just from a classical-MD code, so it reuses the same reader rather than widening CView's scope. Relaxations and MD runs play back in the [Trajectory Player](guide/visualization.md#trajectories-relaxation-and-md). |
 | **Publication Quality** | Export high-resolution PNG, PDF, and SVG figures with Cairo-based rendering, and journal-ready [3D charge density figures](guide/charge_density.md#3d-isosurfaces) at a physical size and dpi. |
 
 ---

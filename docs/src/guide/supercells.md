@@ -106,7 +106,7 @@ CView is optimized for structures up to **~5000 atoms**. Beyond this, rendering 
 | 20×20×20 | 40000 | Not recommended |
 
 >[!CAUTION]
->CView uses CPU-based rendering. For molecular dynamics trajectories or nanoparticles with >10,000 atoms, consider specialized tools like OVITO or VMD.
+>The main viewer uses CPU-based (Cairo) rendering, so very large supercells get sluggish past ~5000 atoms. MD trajectories have their own GPU-accelerated [Trajectory Player](visualization.md#trajectories-relaxation-and-md) and don't need a supercell for playback. For nanoparticles with >10,000 atoms, consider specialized tools like OVITO or VMD.
 
 ### DFT Calculation Cost
 

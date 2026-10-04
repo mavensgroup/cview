@@ -18,9 +18,12 @@ CView automatically detects the file type based on extension and content. You ca
 | **VASP run** | `vasprun.xml` (any name; recognised by content) | Every ionic step of a relaxation or MD run, with its energy and largest force. |
 | **Quantum Espresso** | `.in`, `.out`, `.pwi`, `.qe` | Inputs, and every geometry of a relax, vc-relax or MD output (starting with the input structure), with energies and forces. |
 | **LAMMPS** | `.dump`, `.lammpstrj`, `.dat`, any name starting with `ITEM: TIMESTEP` | Text dumps: wrapped, scaled or unwrapped positions; orthogonal or triclinic boxes; every frame. Species come from an `element` or `mass` column, otherwise atoms are shown as `Type n`. |
-| **SPR-KKR** | `.pot`, `.pot_new`, `.sys` | Munich SPR-KKR potential and system files. Chemical disorder (CPA sites with several occupants) is read as mixed sites and written back as CPA sites. Reading needs nothing extra (`.pot`, `.pot_new`, `.pot_out`). Writing uses CView's own writer; set the environment variable `CVIEW_PYTHON` to a Python that has ase2sprkkr to write with ase2sprkkr instead. |
+| **SPR-KKR** | `.pot`, `.pot_new`, `.sys` | Munich SPR-KKR potential and system files. Chemical disorder (CPA sites with several occupants) is read as mixed sites and written back as CPA sites. Reading needs nothing extra (`.pot`, `.pot_new`, `.pot_out`). Writing uses CView's own writer by default; set the environment variable `CVIEW_PYTHON` to a Python that has ase2sprkkr to write with ase2sprkkr instead — an optional improvement, never a requirement (see [Building Structures](building.md#exporting-a-disordered-alloy-to-spr-kkr)). |
 | **XYZ** | `.xyz` | Cartesian coordinates (Standard and Extended XYZ). |
 | **PDB** | `.pdb`, `.ent` | Protein Data Bank records. Reads the `CRYST1` cell, `ATOM`/`HETATM` sites, occupancies and formal charges; the first `MODEL` only. Files without a real cell load as non-periodic molecules. |
+
+>[!NOTE]
+>**Why LAMMPS, in a DFT-oriented tool?** A LAMMPS dump is, at its core, the same data CView already parses for every other trajectory: a box plus a per-atom coordinate list, one frame after another — structurally the same problem as an Extended XYZ trajectory or a QE `vc-relax` log, just with LAMMPS's own column layout. Reading it slots into the trajectory machinery built for `vasprun.xml`/QE/MD output rather than opening a new area of the code. CView does not run LAMMPS, does not know about force fields, and writes no LAMMPS input — it is a geometry viewer for a dump file someone already produced, exactly as it is for a VASP or QE run.
 
 ### Trajectories (Relaxation and MD)
 
@@ -236,9 +239,11 @@ This visualization immediately reveals the corner-sharing connectivity character
 
 ## Performance Notes
 
-CView is optimized for **CPU-based rendering** using GTK4/Cairo:
+The **main viewer** — structure loading, all analysis, Supercell/Basis/Slab, and PNG/PDF/SVG export — is CPU-based rendering using GTK4/Cairo:
 - Smooth interaction up to ~5000 atoms
 - Real-time rotation and zoom
 - No GPU drivers required (runs on any laptop)
 
-For larger systems (e.g., nanoparticles, proteins), consider specialized GPU-accelerated tools like OVITO.
+Two **optional** windows use OpenGL 3.3 instead, because Cairo cannot do what they need: the [3D Isosurface](charge_density.md#3d-isosurfaces) page has to depth-sort and alpha-blend overlapping translucent lobes in real time as you drag a slider, and the [Trajectory Player](#trajectories-relaxation-and-md) has to redraw every atom at interactive frame rates while scrubbing through hundreds of MD/relaxation steps — both are workloads Cairo's CPU rasterizer is not built for. Neither window is required for normal use, and the GPU floor is low (OpenGL 3.3, any laptop from the last decade). If you never open them, CView never touches your GPU.
+
+For nanoparticles or proteins with tens of thousands of atoms in the main view, consider specialized GPU-accelerated tools like OVITO or VMD.

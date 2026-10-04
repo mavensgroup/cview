@@ -60,7 +60,7 @@ CView implements rigorous algorithms to ensure physical accuracy for computation
 ### 1. True Cross-Platform Portability
 * **Run Anywhere:** Built on the **Rust** toolchain and **GTK4**, CView is strictly cross-platform.
 * **No Proprietary Drivers:** It runs natively on **Linux, Windows, macOS, and BSD** systems—anywhere `cargo` and `gtk4` can be installed.
-* **Lightweight:** Uses CPU-based Cairo rendering, meaning it runs efficiently on standard laptops without requiring dedicated GPU drivers.
+* **Lightweight:** The main viewer uses CPU-based Cairo rendering, so it runs efficiently on standard laptops without requiring dedicated GPU drivers. Two optional windows — the 3D CHGCAR isosurface view and the MD/relaxation Trajectory Player — use OpenGL 3.3 for workloads Cairo can't do in real time; any laptop from the last decade has it, and CView never touches the GPU unless you open one of those two windows.
 
 ### 2. Robust Symmetry Handling
 * **Spglib/Moyo Integration:** Robust space group detection (International & Hall symbols).
@@ -85,10 +85,11 @@ CView automatically detects file types based on extension and content.
 | **VASP** | `POSCAR`, `CONTCAR`, `.vasp` | Standard VASP structure files. |
 | **Quantum Espresso** | `.in`, `.pwi`, `.qe` | Reads `CELL_PARAMETERS` and `ATOMIC_POSITIONS`. |
 | **QE Output** | `.out`, `.log` | **Relaxation Aware:** Automatically extracts the *final* relaxed structure from `vc-relax` logs. |
-| **SPRKKR** | `.inp`, `.sys`, `.pot` | Support for Munich SPR-KKR input formats. |
+| **SPRKKR** | `.inp`, `.sys`, `.pot` | Support for Munich SPR-KKR input formats. Writing uses CView's own writer by default; [ase2sprkkr](https://mavensgroup.github.io/cview/guide/building.html#exporting-a-disordered-alloy-to-spr-kkr) is an optional, opt-in improvement (`CVIEW_PYTHON`), never a requirement. |
 | **CIF** | `.cif` | Standard Crystallographic Information File. |
 | **XYZ** | `.xyz` | Supports standard XYZ and **Extended XYZ** (Lattice line in comment). |
 | **PDB** | `.pdb`, `.ent` | Reads `CRYST1` cells, `ATOM`/`HETATM` sites, occupancies and formal charges. Files with no cell (or the placeholder `1 1 1 90 90 90`) load as non-periodic molecules. |
+| **LAMMPS dump** | `.dump`, `.lammpstrj`, `.dat`, any file starting with `ITEM: TIMESTEP` | Reads classical-MD trajectories (wrapped/scaled/unwrapped positions, orthogonal or triclinic boxes). It's the same box-plus-coordinates data CView already reads from `vasprun.xml`/QE relaxations, just from a non-DFT code — read-only, no force fields, no scope change. |
 
 ---
 
