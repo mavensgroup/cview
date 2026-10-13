@@ -43,8 +43,9 @@ spinbutton {
 scale.thin-slider slider {
     min-width: 6px;
     min-height: 18px;
-    margin-top: -7px;
-    margin-bottom: -7px;
+    /* Explicit zero horizontal margin: Adwaita's -8px would make the min
+       width negative (6px - 16px) and GTK warns on every layout. */
+    margin: -7px 0;
     border-radius: 2px;
     background-color: mix(@window_bg_color, @window_fg_color, 0.55);
     box-shadow: none;

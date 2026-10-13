@@ -117,6 +117,11 @@ jobs:
           mkdir -p dist/share/icons
           cp -r /ucrt64/share/icons/Adwaita dist/share/icons/
           cp -r /ucrt64/share/icons/hicolor dist/share/icons/
+          # The app's own icon, found by name for the window/taskbar icon
+          mkdir -p dist/share/icons/hicolor/scalable/apps dist/share/icons/hicolor/128x128/apps
+          cp assets/org.mavensgroup.cview.svg dist/share/icons/hicolor/scalable/apps/
+          cp assets/org.mavensgroup.cview.png dist/share/icons/hicolor/128x128/apps/
+          cp assets/cview.ico dist/
 
           # GDK pixbuf loaders (PNG/SVG icons fail silently without these)
           if [ -d /ucrt64/lib/gdk-pixbuf-2.0 ]; then

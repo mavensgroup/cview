@@ -53,6 +53,8 @@ fn build_ui(app: &Application) {
     // the theme's named colors exist; before any widget is built.
     ui::style::load();
 
+    gtk4::Window::set_default_icon_name("org.mavensgroup.cview");
+
     // 1. Initialize State
     let (initial_state, _startup_log) = AppState::new_with_log();
     let state = Rc::new(RefCell::new(initial_state));
