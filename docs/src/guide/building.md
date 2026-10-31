@@ -12,6 +12,21 @@ The window is not modal, so you can keep it open next to the main view.
 
 ---
 
+## Building from a Space Group
+
+**File → New from Space Group…** (Ctrl+N) builds a crystal the way it is tabulated: a space group, the cell parameters and the unique sites (the asymmetric unit). **Structure → Space Group & Sites…** opens the same window on the current structure, so you can change the cell, swap an element or move a site and apply the result to the tab (Ctrl+Z undoes it).
+
+- **Space group.** Type a number or a symbol into *Find* (`225`, `Fm-3m`, `P21/c`), or pick from the list. Groups with more than one setting (monoclinic unique axis and cell choice, origin choice 1 or 2, hexagonal or rhombohedral axes for R groups) list them under *Setting*; the ITA standard setting is chosen first.
+- **Unit cell.** Only the free parameters can be edited: for a cubic group b and c follow a and the angles stay at 90°, for hexagonal axes γ is 120°, and so on.
+- **Wyckoff positions.** Under the group, every Wyckoff position of the chosen setting is listed with its multiplicity and letter (e.g. `4a`), site symmetry and coordinates, from the most special position down to the general one. You don't need to remember them: click a position to add a site there.
+- **Sites.** One row per unique site: label, element, Wyckoff position, its free parameters and occupancy. Only the parameters the position leaves free can be typed (x for `24e (x, 0, 0)`, z for `6c (0, 0, z)`); the other coordinates are greyed and show the values the position fixes. Fractions such as `1/3` are accepted. The *Site* column shows the position the site actually ends up on: if the parameters land it on a more special position (x = 0 on 24e is 4a), it is shown in yellow with an explanation. A site within 0.05 Å of a special position is moved onto it. Sites that land on top of each other are reported under the table.
+
+The preview shows the conventional cell as you type. **Create** opens it in a new tab; **Apply** (when editing) replaces the current structure.
+
+When editing, the structure is first standardized: you get its space group in the standard setting, the conventional cell and one site per symmetry orbit, each on its Wyckoff position (Bi₂Se₃ reads as R-3m with Bi on 6c and Se on 3a and 6c). A structure with partially occupied sites, or a molecule, is listed in P1 with every atom as its own site.
+
+---
+
 ## Basis Operations
 
 The **Basis** tab (`Structure → Basis...`) allows you to perform chemical modifications to your structure.

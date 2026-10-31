@@ -386,21 +386,13 @@ pub fn build(
         }),
     ));
 
-    // Bond Tolerance ← RESTORED
-    let s_tol = state.clone();
-    let nb_tol = nb_weak.clone();
-    let cb_tol = queue_active_draw;
-    vbox_bonds.append(&create_slider(
-        "Tolerance",
-        0.6,
-        1.6,
-        0.05,
-        state.borrow().active_tab().view.bond_cutoff,
-        Box::new(move |v| {
-            s_tol.borrow_mut().active_tab_mut().view.bond_cutoff = v;
-            cb_tol(&nb_tol);
-        }),
+    // Which pairs bond: per element pair, in the Bond Rules window.
+    let btn_rules = Button::with_label("Bond Rules…");
+    btn_rules.set_tooltip_text(Some(
+        "Bond lengths per element pair (VESTA's defaults; edit, switch pairs on or off)",
     ));
+    btn_rules.set_action_name(Some("app.bond_rules"));
+    vbox_bonds.append(&btn_rules);
 
     // Bond Color
     let box_bcol = GtkBox::new(Orientation::Horizontal, 10);
@@ -633,10 +625,10 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
     // Gather scene atoms for CN computation (need rendered atoms, not just structure)
     // We use a dummy scene call here — same pattern as the old basis_dlg before our fix,
     // but here it's fine because it's called once on refresh, not on every click.
-    let (scene_atoms, bond_cutoff, poly_max_bond_dist) = {
+    let (scene_atoms, bond_table, poly_max_bond_dist) = {
         let st = state.borrow();
         let tab = st.active_tab();
-        let cutoff = tab.view.bond_cutoff;
+        let bonds = tab.bond_table();
         let max_dist = tab
             .style
             .polyhedra_settings
@@ -646,7 +638,7 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
         let (atoms, _, _) = crate::rendering::scene::calculate_scene(
             tab, &st.config, 800.0, 600.0, false, None, None,
         );
-        (atoms, cutoff, max_dist)
+        (atoms, bonds, max_dist)
     };
 
     let elements = if let Some(structure) = &state.borrow().active_tab().structure {
@@ -677,13 +669,13 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
     let s_auto = state.clone();
     let nb_auto = nb_weak.clone();
     let scene_atoms_auto = scene_atoms.clone();
-    let cutoff_auto = bond_cutoff;
     let max_dist_auto = poly_max_bond_dist;
 
     btn_auto.connect_clicked(move |_| {
         use crate::rendering::polyhedra::auto_detect_polyhedra_elements;
-        let detected =
-            auto_detect_polyhedra_elements(&scene_atoms_auto, cutoff_auto, max_dist_auto);
+        // The rules as they are now, not as they were when the list was built.
+        let bonds = s_auto.borrow().active_tab().bond_table();
+        let detected = auto_detect_polyhedra_elements(&scene_atoms_auto, &bonds, max_dist_auto);
 
         let mut st = s_auto.borrow_mut();
         let tab = st.active_tab_mut();
@@ -1005,7 +997,7 @@ pub fn refresh_atom_list(container: &GtkBox, state: Rc<RefCell<AppState>>, noteb
         // CN label
         let cn_label = {
             use crate::rendering::polyhedra::average_cn_for_element;
-            match average_cn_for_element(&scene_atoms, &elem, bond_cutoff, poly_max_bond_dist) {
+            match average_cn_for_element(&scene_atoms, &elem, &bond_table, poly_max_bond_dist) {
                 Some(avg) => Label::new(Some(&format!("CN≈{:.0}", avg))),
                 None => Label::new(Some("CN=?")),
             }

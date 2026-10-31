@@ -1,12 +1,13 @@
 //src/model/mod.rs
-// pub mod bs_data;
+pub mod bonds;
 pub mod bvs;
 pub mod elements;
 pub mod miller;
 pub mod structure;
 pub mod trajectory;
+pub mod vesta_bonds;
+pub mod wyckoff_table;
 
 // Re-exports for cleaner imports
-// pub use bs_data::BrillouinZoneData;
 pub use elements::{ColorScheme, get_element_color};
 pub use structure::{Atom, Structure};

@@ -107,7 +107,9 @@ fn build_general_tab(state: Rc<RefCell<AppState>>, da: gtk::DrawingArea) -> gtk:
 
     // 3. Bond Tolerance
     vbox.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
-    let tol_label = gtk::Label::new(Some("Default Bond Tolerance:"));
+    let tol_label = gtk::Label::new(Some(
+        "Covalent bond tolerance (pairs without VESTA bond lengths):",
+    ));
     tol_label.set_halign(gtk::Align::Start);
     vbox.append(&tol_label);
 

@@ -50,9 +50,40 @@ pub fn open_path(ctx: &OpenContext, path_str: &str) {
 }
 
 fn show_document(ctx: &OpenContext, filename: &str, doc: io::Document, took: std::time::Duration) {
-    let Some(st_rc) = ctx.state.upgrade() else { return };
     let io::Document { structure, trajectory, frame } = doc;
     let trajectory = trajectory.map(Rc::new);
+    let Some(tab_index) = place_structure(ctx, filename, structure, trajectory.clone(), frame) else {
+        return;
+    };
+
+    console::log_info(&format!("Loaded: {} ({:.2} s)", filename, took.as_secs_f64()));
+    if let Some(t) = &trajectory {
+        console::log_info(&format!(
+            "{}: {} frames ({}); showing frame {}. Structure \u{2192} Trajectory Player to play them.",
+            filename,
+            t.len(),
+            t.format,
+            frame + 1
+        ));
+    }
+    let Some(st_rc) = ctx.state.upgrade() else { return };
+    let s = st_rc.borrow();
+    if let Some(strc) = s.tabs.get(tab_index).and_then(|t| t.structure.as_ref()) {
+        console::info_report(&report::structure_summary(strc, filename));
+    }
+}
+
+/// Put `structure` on screen: in the current tab if that is the empty
+/// placeholder, otherwise in a new tab, which becomes current. Refreshes the
+/// sidebar; logs nothing. Returns the tab index used.
+pub fn place_structure(
+    ctx: &OpenContext,
+    filename: &str,
+    structure: crate::model::Structure,
+    trajectory: Option<Rc<crate::model::trajectory::Trajectory>>,
+    frame: usize,
+) -> Option<usize> {
+    let st_rc = ctx.state.upgrade()?;
     let tab_index: usize;
     let replace_current_tab;
 
@@ -88,7 +119,7 @@ fn show_document(ctx: &OpenContext, filename: &str, doc: io::Document, took: std
             tab_index = s.tabs.len() - 1;
         }
         let tab = &mut s.tabs[tab_index];
-        tab.trajectory = trajectory.clone();
+        tab.trajectory = trajectory;
         tab.trajectory_frame = frame;
     }
 
@@ -126,21 +157,7 @@ fn show_document(ctx: &OpenContext, filename: &str, doc: io::Document, took: std
         crate::panels::sidebar::refresh_atom_list(&ab, st_rc.clone(), &nb);
     }
     crate::menu::actions_trajectory::refresh_enabled(&st_rc.borrow());
-
-    console::log_info(&format!("Loaded: {} ({:.2} s)", filename, took.as_secs_f64()));
-    if let Some(t) = &trajectory {
-        console::log_info(&format!(
-            "{}: {} frames ({}); showing frame {}. Structure \u{2192} Trajectory Player to play them.",
-            filename,
-            t.len(),
-            t.format,
-            frame + 1
-        ));
-    }
-    let s = st_rc.borrow();
-    if let Some(strc) = s.tabs.get(tab_index).and_then(|t| t.structure.as_ref()) {
-        console::info_report(&report::structure_summary(strc, filename));
-    }
+    Some(tab_index)
 }
 
 pub fn setup(
@@ -152,6 +169,27 @@ pub fn setup(
     atom_list_box: &gtk4::Box,
     sidebar_handles: Rc<SidebarHandles>,
 ) {
+    // --- SPACE GROUP BUILDER (new structure / edit the active one) ---
+    for (name, mode) in [
+        ("new_spacegroup", crate::ui::spacegroup_builder::Mode::New),
+        ("edit_spacegroup", crate::ui::spacegroup_builder::Mode::Edit),
+    ] {
+        let action = gtk4::gio::SimpleAction::new(name, None);
+        let ctx = OpenContext {
+            state: Rc::downgrade(&state),
+            notebook: notebook.downgrade(),
+            atom_box: atom_list_box.downgrade(),
+            window: window.downgrade(),
+            handles: sidebar_handles.clone(),
+        };
+        action.connect_activate(move |_, _| {
+            if let Some(win) = ctx.window.upgrade() {
+                crate::ui::spacegroup_builder::show(&win, ctx.clone(), mode);
+            }
+        });
+        app.add_action(&action);
+    }
+
     // --- OPEN ACTION ---
     let open_action = gtk4::gio::SimpleAction::new("open", None);
 

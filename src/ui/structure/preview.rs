@@ -336,7 +336,10 @@ fn draw(st: &AppState, d: &PreviewData, cr: &gtk4::cairo::Context, w: i32, h: i3
     let radius = if drawn.len() > 600 { 3.5 } else { 6.0 };
     for (x, y, _, i) in drawn {
         let el = &structure.atoms[i].element;
-        let (r, g, b) = colors.get(el).copied().unwrap_or((0.0, 0.5, 0.5));
+        // Elements only the candidate has (a builder or substitution
+        // preview) take the colour-scheme default.
+        let fallback = |el: &str| get_element_color(el, st.config.color_scheme);
+        let (r, g, b) = colors.get(el).copied().unwrap_or_else(|| fallback(el));
         match sites.members(i) {
             // A mixed site: flat sectors sized by occupancy, clockwise from
             // 12 o'clock, any vacant share left white.
@@ -347,7 +350,7 @@ fn draw(st: &AppState, d: &PreviewData, cr: &gtk4::cairo::Context, w: i32, h: i3
                     let (sr, sg, sb) = colors
                         .get(&atom.element)
                         .copied()
-                        .unwrap_or((0.0, 0.5, 0.5));
+                        .unwrap_or_else(|| fallback(&atom.element));
                     let end = start + atom.occupancy.clamp(0.0, 1.0) * 2.0 * PI;
                     cr.new_path();
                     cr.move_to(x, y);

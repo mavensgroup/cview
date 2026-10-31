@@ -446,7 +446,7 @@ pub fn polyhedra_summary(tab: &TabState, atoms: &[RenderAtom]) -> Option<String>
     .unwrap_or_default();
   let ctx = polyhedra::ConnectivityContext::new(
     &images,
-    tab.view.bond_cutoff,
+    &tab.bond_table(),
     settings.min_coordination,
     settings.max_bond_dist,
   );

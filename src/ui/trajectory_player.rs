@@ -10,7 +10,7 @@
 //          [ energy-per-frame strip   ]   (when the file has energies)
 //          [ transport and options    ]
 
-use crate::model::elements::{get_atom_cov, get_element_color};
+use crate::model::elements::get_element_color;
 use crate::model::trajectory::Trajectory;
 use crate::rendering::gl::{loader, AtomInstance, BondInstance, Camera, GlBackend, GpuBackend};
 use crate::state::AppState;
@@ -36,8 +36,9 @@ const MAX_ATOMS_FOR_BONDS: usize = 50_000;
 struct Look {
     colors: Vec<[f32; 3]>,
     radii: Vec<f32>,
-    covalent: Vec<f64>,
-    bond_tolerance: f64,
+    /// Bond length range per species pair (row-major, species × species),
+    /// from the tab's bond rules; None = never bonded.
+    bond_range: Vec<Option<(f64, f64)>>,
     bond_radius: f32,
     bond_color: [f32; 3],
     background: [f32; 3],
@@ -137,8 +138,9 @@ fn build_frame(
 
     let mut bond_list = Vec::new();
     if bonds && spheres.len() <= MAX_ATOMS_FOR_BONDS {
-        let max_cov = look.covalent.iter().cloned().fold(0.0, f64::max);
-        let cutoff = (2.0 * max_cov * look.bond_tolerance).max(0.5);
+        let ns = look.radii.len();
+        let longest = look.bond_range.iter().flatten().map(|r| r.1).fold(0.0, f64::max);
+        let cutoff = longest.max(0.5);
         let key = |p: &[f64; 3]| [0, 1, 2].map(|d| (p[d] / cutoff).floor() as i64);
         let mut grid: HashMap<[i64; 3], Vec<usize>> = HashMap::new();
         for (i, (p, _)) in spheres.iter().enumerate() {
@@ -156,8 +158,11 @@ fn build_frame(
                             }
                             let (q, kj) = &spheres[j];
                             let d = ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2) + (p[2] - q[2]).powi(2)).sqrt();
-                            let max = (look.covalent[*ki] + look.covalent[*kj]) * look.bond_tolerance;
-                            if d > 0.4 && d < max {
+                            let bonded = matches!(
+                                look.bond_range[ki * ns + kj],
+                                Some((lo, hi)) if d >= crate::model::bonds::MIN_SEPARATION && d > lo && d <= hi
+                            );
+                            if bonded {
                                 bond_list.push(BondInstance {
                                     a: atoms[i].pos,
                                     b: atoms[j].pos,
@@ -489,8 +494,13 @@ pub fn show(parent: &ApplicationWindow, state: Rc<RefCell<AppState>>, notebook: 
         let look = Look {
             colors,
             radii,
-            covalent: traj.species.iter().map(|el| get_atom_cov(el)).collect(),
-            bond_tolerance: tab.view.bond_cutoff.clamp(0.1, 2.0),
+            bond_range: {
+                let table = tab.bond_table();
+                traj.species
+                    .iter()
+                    .flat_map(|a| traj.species.iter().map(|b| table.range(a, b)))
+                    .collect()
+            },
             bond_radius: tab.style.bond_radius as f32,
             bond_color: rgb(tab.style.bond_color),
             background: rgb(tab.style.background_color),
@@ -953,8 +963,7 @@ mod tests {
         Look {
             colors: vec![[1.0; 3]; n],
             radii: vec![0.5; n],
-            covalent: vec![0.7; n],
-            bond_tolerance: 1.15,
+            bond_range: vec![Some((0.0, 1.61)); n * n],
             bond_radius: 0.1,
             bond_color: [0.5; 3],
             background: [1.0; 3],

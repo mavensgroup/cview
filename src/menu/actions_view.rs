@@ -137,6 +137,18 @@ pub fn setup(
     });
     app.add_action(&act_bonds);
 
+    // 4b. Bond Rules (per element pair)
+    let act_rules = gtk4::gio::SimpleAction::new("bond_rules", None);
+    let s_rules = state.clone();
+    let nb_rules = notebook.downgrade();
+    let win_rules = window.downgrade();
+    act_rules.connect_activate(move |_, _| {
+        if let (Some(win), Some(nb)) = (win_rules.upgrade(), nb_rules.upgrade()) {
+            crate::ui::bond_rules::show(&win, s_rules.clone(), &nb);
+        }
+    });
+    app.add_action(&act_rules);
+
     // 5. Preferences
     let act_pref = gtk4::gio::SimpleAction::new("preferences", None);
     let s_pref = state.clone();

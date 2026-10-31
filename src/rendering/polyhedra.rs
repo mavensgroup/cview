@@ -3,7 +3,7 @@
 // Coordination polyhedra for crystal structures:
 //   - Structure-aware cation/anion classification via Pauling electronegativity
 //     (handles phosphates, sulfates, etc. correctly).
-//   - Neighbor detection: covalent radii × user tolerance, with a hard Å cap.
+//   - Neighbor detection: the tab's per-element-pair bond rules, with a hard Å cap.
 //     Spatial-grid accelerated (O(1) per query). Rayon-parallel across cations.
 //   - Convex hull: brute-force O(n⁴) "all other points on one side" — simple,
 //     correct by construction, numerically robust for n ≤ 20 (the typical
@@ -15,7 +15,8 @@
 // All vector math via nalgebra::Vector3.
 
 use std::cmp::Ordering;
-use crate::model::elements::{get_atom_cov, get_electronegativity};
+use crate::model::bonds::BondTable;
+use crate::model::elements::get_electronegativity;
 use crate::rendering::scene::RenderAtom;
 use crate::utils::spatial_grid::SpatialGrid;
 use nalgebra::Vector3;
@@ -84,7 +85,8 @@ pub struct PolyhedraCache {
 #[derive(PartialEq)]
 struct CacheKey {
     elements: Vec<String>,
-    cutoff_q: u32,
+    /// Fingerprint of the bond rules.
+    rules: u64,
     atom_count: usize,
     min_cn: usize,
     max_cn: usize,
@@ -96,7 +98,7 @@ impl PolyhedraCache {
         &mut self,
         atoms: &[RenderAtom],
         enabled_elements: &[String],
-        bond_cutoff: f64,
+        bonds: &BondTable,
         min_cn: usize,
         max_cn: usize,
         max_bond_dist: f64,
@@ -107,7 +109,7 @@ impl PolyhedraCache {
 
         let new_key = CacheKey {
             elements: sorted_elements,
-            cutoff_q: (bond_cutoff * 1000.0) as u32,
+            rules: bonds.fingerprint(),
             atom_count: atoms.len(),
             min_cn,
             max_cn,
@@ -118,7 +120,7 @@ impl PolyhedraCache {
             self.polyhedra = build_polyhedra_inner(
                 atoms,
                 enabled_elements,
-                bond_cutoff,
+                bonds,
                 min_cn,
                 max_cn,
                 max_bond_dist,
@@ -213,12 +215,12 @@ pub fn classify_anions(atoms: &[RenderAtom]) -> HashSet<String> {
 pub fn find_coordination_neighbors(
     center_idx: usize,
     atoms: &[RenderAtom],
-    tolerance: f64,
+    bonds: &BondTable,
     max_dist: f64,
 ) -> Vec<usize> {
     let anions = classify_anions(atoms);
     let grid = SpatialGrid::build(atoms, max_dist.max(1e-3), |a| anions.contains(&a.element));
-    find_coordination_neighbors_with_grid(center_idx, atoms, &grid, &anions, tolerance, max_dist)
+    find_coordination_neighbors_with_grid(center_idx, atoms, &grid, &anions, bonds, max_dist)
 }
 
 /// Grid-aware variant of `find_coordination_neighbors`. Expects a grid
@@ -229,7 +231,7 @@ pub fn find_coordination_neighbors_with_grid(
     atoms: &[RenderAtom],
     grid: &SpatialGrid,
     anions: &HashSet<String>,
-    tolerance: f64,
+    bonds: &BondTable,
     max_dist: f64,
 ) -> Vec<usize> {
     let r1 = &atoms[center_idx];
@@ -239,7 +241,6 @@ pub fn find_coordination_neighbors_with_grid(
         return Vec::new();
     }
 
-    let rad1 = get_atom_cov(&r1.element);
     let mut candidates = Vec::with_capacity(32);
     grid.query(r1.cart_pos, max_dist, &mut candidates);
 
@@ -258,8 +259,7 @@ pub fn find_coordination_neighbors_with_grid(
         let dz = r2.cart_pos[2] - r1.cart_pos[2];
         let dist = (dx * dx + dy * dy + dz * dz).sqrt();
 
-        let rad2 = get_atom_cov(&r2.element);
-        if dist > 0.4 && dist < (rad1 + rad2) * tolerance {
+        if bonds.bonded(&r1.element, &r2.element, dist) {
             neighbors.push(j);
         }
     }
@@ -273,7 +273,7 @@ pub fn find_coordination_neighbors_with_grid(
 
 pub fn auto_detect_polyhedra_elements(
     atoms: &[RenderAtom],
-    bond_cutoff: f64,
+    bonds: &BondTable,
     max_bond_dist: f64,
 ) -> Vec<String> {
     let mut element_cns: HashMap<String, Vec<usize>> = HashMap::new();
@@ -297,7 +297,7 @@ pub fn auto_detect_polyhedra_elements(
             atoms,
             &grid,
             &anions,
-            bond_cutoff,
+            bonds,
             max_bond_dist,
         )
         .len();
@@ -325,7 +325,7 @@ pub fn auto_detect_polyhedra_elements(
 pub fn average_cn_for_element(
     atoms: &[RenderAtom],
     element: &str,
-    bond_cutoff: f64,
+    bonds: &BondTable,
     max_bond_dist: f64,
 ) -> Option<f64> {
     let anions = classify_anions(atoms);
@@ -346,7 +346,7 @@ pub fn average_cn_for_element(
                 atoms,
                 &grid,
                 &anions,
-                bond_cutoff,
+                bonds,
                 max_bond_dist,
             )
             .len()
@@ -367,7 +367,7 @@ pub fn average_cn_for_element(
 fn build_polyhedra_inner(
     atoms: &[RenderAtom],
     enabled_elements: &[String],
-    tolerance: f64,
+    bonds: &BondTable,
     min_cn: usize,
     max_cn: usize,
     max_bond_dist: f64,
@@ -403,7 +403,7 @@ fn build_polyhedra_inner(
                 atoms,
                 &grid,
                 &anions,
-                tolerance,
+                bonds,
                 max_bond_dist,
             );
             let cn = neighbors.len();
@@ -926,7 +926,7 @@ pub fn build_for_tab(
     Some(build_polyhedra_for_draw(
         atoms,
         &s.enabled_elements,
-        tab.view.bond_cutoff,
+        &tab.bond_table(),
         s.min_coordination,
         s.max_coordination,
         s.max_bond_dist,
@@ -988,18 +988,18 @@ pub struct ConnectivityContext<'a> {
     atoms: &'a [RenderAtom],
     anions: HashSet<String>,
     grid: SpatialGrid,
-    tolerance: f64,
+    bonds: BondTable,
     min_cn: usize,
     max_bond_dist: f64,
 }
 
 impl<'a> ConnectivityContext<'a> {
-    pub fn new(atoms: &'a [RenderAtom], tolerance: f64, min_cn: usize, max_bond_dist: f64) -> Self {
+    pub fn new(atoms: &'a [RenderAtom], bonds: &BondTable, min_cn: usize, max_bond_dist: f64) -> Self {
         let anions = classify_anions(atoms);
         let grid = SpatialGrid::build(atoms, max_bond_dist.max(1e-3), |a| {
             anions.contains(&a.element)
         });
-        Self { atoms, anions, grid, tolerance, min_cn, max_bond_dist }
+        Self { atoms, anions, grid, bonds: bonds.clone(), min_cn, max_bond_dist }
     }
 
     /// How a polyhedron with `centre` and `vertices` (Cartesian positions) links
@@ -1033,7 +1033,7 @@ impl<'a> ConnectivityContext<'a> {
                 self.atoms,
                 &self.grid,
                 &self.anions,
-                self.tolerance,
+                &self.bonds,
                 self.max_bond_dist,
             );
             if nbrs.len() < self.min_cn {
@@ -1110,7 +1110,7 @@ pub fn feature_edge_flags(poly: &Polyhedron, atoms: &[RenderAtom]) -> Vec<[bool;
 pub fn build_polyhedra_for_draw(
     atoms: &[RenderAtom],
     enabled_elements: &[String],
-    bond_cutoff: f64,
+    bonds: &BondTable,
     min_cn: usize,
     max_cn: usize,
     max_bond_dist: f64,
@@ -1119,7 +1119,7 @@ pub fn build_polyhedra_for_draw(
     build_polyhedra_inner(
         atoms,
         enabled_elements,
-        bond_cutoff,
+        bonds,
         min_cn,
         max_cn,
         max_bond_dist,
@@ -1190,14 +1190,18 @@ mod tests {
         }
 
         let enabled = vec!["Ti".to_string()];
-        let polys = build_polyhedra_for_draw(&atoms, &enabled, 1.15, 4, 12, 3.0, true);
+        let bonds = crate::model::bonds::BondTable::from_rules(&crate::model::bonds::default_rules(
+            &["Ti".to_string(), "O".to_string()],
+            1.15,
+        ));
+        let polys = build_polyhedra_for_draw(&atoms, &enabled, &bonds, 4, 12, 3.0, true);
         let ti1 = polys
             .iter()
             .find(|p| p.center_idx == 0)
             .expect("Ti1 octahedron");
         assert_eq!(ti1.coordination_number, 6);
 
-        let ctx = ConnectivityContext::new(&atoms, 1.15, 4, 3.0);
+        let ctx = ConnectivityContext::new(&atoms, &bonds, 4, 3.0);
         let verts: Vec<[f64; 3]> = ti1.neighbor_indices.iter().map(|&i| atoms[i].cart_pos).collect();
         let c = ctx.of(atoms[0].cart_pos, &verts, &enabled);
         assert_eq!(c, Connectivity { corner: 1, edge: 1, face: 0 });

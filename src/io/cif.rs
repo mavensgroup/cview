@@ -290,23 +290,10 @@ pub fn parse(path: &str) -> io::Result<Structure> {
     }
 
     // --- Build lattice matrix and convert to Cartesian ---
-    let to_rad = std::f64::consts::PI / 180.0;
-    let alpha_r = alpha * to_rad;
-    let beta_r = beta * to_rad;
-    let gamma_r = gamma * to_rad;
-    let v = (1.0 - alpha_r.cos().powi(2) - beta_r.cos().powi(2) - gamma_r.cos().powi(2)
-        + 2.0 * alpha_r.cos() * beta_r.cos() * gamma_r.cos())
-    .sqrt();
-
-    let lattice = [
-        [a, 0.0, 0.0],
-        [b * gamma_r.cos(), b * gamma_r.sin(), 0.0],
-        [
-            c * beta_r.cos(),
-            c * (alpha_r.cos() - beta_r.cos() * gamma_r.cos()) / gamma_r.sin(),
-            c * v / gamma_r.sin(),
-        ],
-    ];
+    let lattice = crate::physics::operations::spacegroup_build::lattice_from_params([
+        a, b, c, alpha, beta, gamma,
+    ])
+    .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("CIF cell parameters: {e}")))?;
 
     for atom in &mut final_atoms {
         atom.position = frac_to_cart(atom.position, lattice);

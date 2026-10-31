@@ -133,14 +133,30 @@ Each element in the structure has an individual transparency slider in the **Ato
 The **Bonds** section in the sidebar controls:
 
 - **Bond Radius**: Thickness of bond cylinders (default: 0.12 Å)
-- **Bond Tolerance**: Multiplier on the covalent-radius sum used for drawing bonds (default: 1.15)
+- **Bond Rules…**: Which element pairs bond, and over what distance (also **View → Bond Rules…**)
 - **Bond Color**: RGB picker for custom bond colors
 
-Bonds are drawn between atoms whose distance $d$ satisfies:
+#### Bond rules
+
+Bonds are decided per element pair: atoms A and B are bonded when their distance $d$ satisfies $d_{\min}(A,B) < d \leq d_{\max}(A,B)$ (and $d \geq 0.4$ Å; closer atoms are overlapping or split sites). The same rules decide the bonds in the main view, the coordination polyhedra and coordination numbers, and the Trajectory Player.
+
+The defaults are **VESTA's bond list** (K. Momma & F. Izumi, *J. Appl. Cryst.* **44**, 1272 (2011)), 914 element pairs, as distributed with pymatgen. So a structure shows the bonds a VESTA user expects: Ti–O (≤ 2.354 Å) and Ba–O (≤ 3.148 Å) in BaTiO₃ but no Ba–Ti, Fe–O in an iron oxide but no Fe–Fe. Pairs VESTA does not list are not bonded, with one exception: VESTA lists no metal–metal pairs and so draws metals and intermetallics without bonds, whereas CView bonds elements that have no listed partner in the structure by covalent radii:
 $$
-d \leq \text{cutoff} \times (r_{\text{cov},A} + r_{\text{cov},B})
+d \leq t \times (r_{\text{cov},A} + r_{\text{cov},B})
 $$
-where $r_{\text{cov}}$ are the covalent radii from the internal database.
+with tolerance $t$ (default 1.15, set in Preferences and in the Bond Rules window). A Heusler alloy therefore still shows its bonds.
+
+The **Bond Rules** window lists every element pair in the structure with:
+
+| Column | Meaning |
+|---|---|
+| ✓ | Whether the pair bonds |
+| Min, Max | The distance range (Å) |
+| Default | Where the default comes from: *VESTA*, *covalent*, *—* (no default; the length shown is a covalent suggestion) or *edited* |
+| Shortest | The shortest distance between the two elements in the structure, periodic images included |
+| Bonds/cell | How many bonds the rule draws per cell |
+
+So to bond Ba–Ti in BaTiO₃, tick the pair: the shortest Ba–Ti distance (3.471 Å) is below the suggested 3.841 Å, and the table shows the 8 bonds per cell it adds. Edits apply at once and belong to the structure (tab); only the pairs you change are stored, so substituting an element brings in its default rules. **Reset to Defaults** forgets the changes. The window follows the active tab.
 
 ---
 

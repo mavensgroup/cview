@@ -1,10 +1,12 @@
 // src/ui.rs
 
 pub mod analysis;
+pub mod bond_rules;
 pub mod dialogs;
 pub mod export_dialog;
 pub mod interactions;
 pub mod preferences;
+pub mod spacegroup_builder;
 pub mod structure;
 pub mod style;
 pub mod trajectory_player;

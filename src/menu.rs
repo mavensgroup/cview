@@ -49,6 +49,7 @@ pub fn build_menu_and_actions(
 
     // --- 2. KEYBOARD SHORTCUTS ---
     app.set_accels_for_action("app.open", &["<Primary>o"]);
+    app.set_accels_for_action("app.new_spacegroup", &["<Primary>n"]);
     app.set_accels_for_action("app.save_as", &["<Primary><Shift>s"]);
     app.set_accels_for_action("app.export", &["<Primary>e"]);
     app.set_accels_for_action("app.preferences", &["<Primary>comma"]);
@@ -69,6 +70,7 @@ pub fn build_menu_and_actions(
     // --- FILE MENU ---
     let file_menu = gtk4::gio::Menu::new();
     file_menu.append(Some("Open..."), Some("app.open"));
+    file_menu.append(Some("New from Space Group..."), Some("app.new_spacegroup"));
     file_menu.append(Some("Save Structure As..."), Some("app.save_as"));
     file_menu.append(Some("Export Image/PDF..."), Some("app.export"));
     file_menu.append(Some("Preferences..."), Some("app.preferences"));
@@ -91,6 +93,7 @@ pub fn build_menu_and_actions(
     view_menu.append_submenu(Some("View Along"), &view_along_submenu);
 
     view_menu.append(Some("Show Bonds"), Some("app.toggle_bonds"));
+    view_menu.append(Some("Bond Rules..."), Some("app.bond_rules"));
     view_menu.append(
         Some("Show Interstitial Sites"),
         Some("app.toggle_interstitial_sites"),
@@ -101,6 +104,7 @@ pub fn build_menu_and_actions(
 
     // --- STRUCTURE MENU (operations that change the structure) ---
     let structure_menu = gtk4::gio::Menu::new();
+    structure_menu.append(Some("Space Group & Sites..."), Some("app.edit_spacegroup"));
     structure_menu.append(Some("Supercell..."), Some("app.supercell"));
     structure_menu.append(Some("Basis..."), Some("app.basis"));
     structure_menu.append(Some("Atom Instances..."), Some("app.atom_instances"));

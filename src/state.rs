@@ -214,6 +214,10 @@ pub struct TabState {
     pub trajectory: Option<std::rc::Rc<crate::model::trajectory::Trajectory>>,
     /// Frame of `trajectory` the structure was taken from.
     pub trajectory_frame: usize,
+    /// Bond rules the user changed, by element pair. Every other pair follows
+    /// the defaults (`model::bonds::default_rules`) for the elements present,
+    /// so substituting an element brings in its default rules.
+    pub bond_overrides: HashMap<(String, String), crate::model::bonds::BondRule>,
 }
 
 impl TabState {
@@ -235,7 +239,43 @@ impl TabState {
             species_radius: HashMap::new(),
             trajectory: None,
             trajectory_frame: 0,
+            bond_overrides: HashMap::new(),
         }
+    }
+
+    /// Tolerance on covalent radii for the pairs that use them.
+    pub fn bond_tolerance(&self) -> f64 {
+        if (0.1..=2.0).contains(&self.view.bond_cutoff) {
+            self.view.bond_cutoff
+        } else {
+            1.15
+        }
+    }
+
+    /// The bond rule of every element pair in the structure: the user's
+    /// where they changed one, the default otherwise.
+    pub fn bond_rules(&self) -> Vec<crate::model::bonds::BondRule> {
+        use crate::model::bonds::{default_rules, pair_key};
+        let Some(s) = &self.structure else { return Vec::new() };
+        let mut seen: std::collections::HashSet<&str> = Default::default();
+        let elements: Vec<String> = s
+            .atoms
+            .iter()
+            .filter(|a| seen.insert(a.element.as_str()))
+            .map(|a| a.element.clone())
+            .collect();
+        let mut rules = default_rules(&elements, self.bond_tolerance());
+        for r in &mut rules {
+            if let Some(o) = self.bond_overrides.get(&pair_key(&r.a, &r.b)) {
+                *r = o.clone();
+            }
+        }
+        rules
+    }
+
+    /// Lookup table of the enabled bond rules, for bond searches.
+    pub fn bond_table(&self) -> crate::model::bonds::BondTable {
+        crate::model::bonds::BondTable::from_rules(&self.bond_rules())
     }
 
     /// Base (covalent-equivalent) radius of a species, before atom scale and

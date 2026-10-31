@@ -6,7 +6,7 @@
 use super::primitives::*;
 use super::scene::RenderAtom;
 use crate::config::ColorMode;
-use crate::model::elements::{ColorScheme, get_atom_cov, get_element_color};
+use crate::model::elements::{ColorScheme, get_element_color};
 use crate::physics::bond_valence::get_ideal_oxidation_state;
 use crate::physics::operations::miller_algo::MillerMath;
 use crate::rendering::occupancy::PartialSites;
@@ -385,12 +385,8 @@ pub fn draw_structure(
     is_export: bool,
     color_scheme: ColorScheme,
 ) {
-    // Bond detection tolerance
-    let tolerance = if tab.view.bond_cutoff < 0.1 || tab.view.bond_cutoff > 2.0 {
-        1.15
-    } else {
-        tab.view.bond_cutoff
-    };
+    // Which pairs bond: the tab's per-element-pair rules.
+    let bonds = tab.bond_table();
 
     // Whether to show ghost atoms visually. Ghost atoms are always present in
     // the atoms slice (needed for polyhedra/bond detection at cell boundaries),
@@ -430,14 +426,14 @@ pub fn draw_structure(
     // STEP 2: Collect Bonds (skip bonds involving coord-only or hidden ghosts)
     //
     // Uses a spatial grid to avoid the O(N²) nested scan. Grid cell size =
-    // max bond distance (4 Å), so each query visits a 3×3×3 block at most.
+    // the longest bond any rule allows, so each query visits a 3×3×3 block.
     // Atoms filtered out at grid build time are never returned as neighbors,
     // so the inner loop doesn't need to re-check is_coord_only / is_ghost.
     // ========================================================================
-    if tab.view.show_bonds {
-        const MAX_BOND_DIST: f64 = 4.0;
+    if tab.view.show_bonds && bonds.max_length() > 0.0 {
+        let max_bond_dist = bonds.max_length();
 
-        let grid = SpatialGrid::build(atoms, MAX_BOND_DIST, |a| {
+        let grid = SpatialGrid::build(atoms, max_bond_dist, |a| {
             !a.is_coord_only && !(a.is_ghost && !show_ghosts) && !sites.is_hidden(a.original_index)
         });
         let mut neighbors: Vec<usize> = Vec::with_capacity(64);
@@ -449,10 +445,8 @@ pub fn draw_structure(
             {
                 continue;
             }
-            let rad1 = get_atom_cov(&r1.element);
-
             neighbors.clear();
-            grid.query(r1.cart_pos, MAX_BOND_DIST, &mut neighbors);
+            grid.query(r1.cart_pos, max_bond_dist, &mut neighbors);
 
             for &j in &neighbors {
                 // Enforce unique (i, j) ordering so each pair is emitted once.
@@ -468,14 +462,7 @@ pub fn draw_structure(
                 let dz = r2.cart_pos[2] - r1.cart_pos[2];
                 let dist = (dx * dx + dy * dy + dz * dz).sqrt();
 
-                // Grid query already enforced dist ≤ MAX_BOND_DIST, so no
-                // redundant check needed here.
-
-                let rad2 = get_atom_cov(&r2.element);
-                let max_bond_dist = (rad1 + rad2) * tolerance;
-                let min_bond_dist = 0.4;
-
-                if dist > min_bond_dist && dist < max_bond_dist {
+                if bonds.bonded(&r1.element, &r2.element, dist) {
                     let raw_r1 = tab.base_radius(&r1.element);
                     let raw_r2 = tab.base_radius(&r2.element);
 
