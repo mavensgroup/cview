@@ -83,7 +83,11 @@ pub fn setup(app: &Application, window: &ApplicationWindow) {
             None => return,
         };
 
-        let dialog = adw::AboutDialog::builder()
+        // AboutWindow rather than AboutDialog: the latter needs libadwaita
+        // 1.5, which would raise the minimum above what EL9 ships.
+        let dialog = adw::AboutWindow::builder()
+            .transient_for(&win)
+            .modal(true)
             .application_name("CView")
             .version(env!("CARGO_PKG_VERSION"))
             .copyright("© 2026 Rudra")
@@ -95,7 +99,7 @@ pub fn setup(app: &Application, window: &ApplicationWindow) {
             .license_type(gtk4::License::Gpl30)
             .build();
 
-        dialog.present(&win);
+        dialog.present();
     });
     app.add_action(&about_action);
 }

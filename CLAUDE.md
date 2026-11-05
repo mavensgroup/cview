@@ -26,7 +26,7 @@ cargo check
 cargo clippy
 ```
 
-System dependencies (Fedora): `sudo dnf install gcc gtk4-devel libadwaita-devel`. Test files (`.cif`, `.vasp`, `POSCAR`, etc.) live at the repo root.
+System dependencies (Fedora): `sudo dnf install gcc gtk4-devel libadwaita-devel fontconfig-devel freetype-devel` (EL9: enable CRB first, for `libadwaita-devel`). Minimum system versions are GTK 4.4, libadwaita 1.4, pango 1.46, set by the `v4_4`/`v1_4` features in `Cargo.toml` so the app builds on EL9; don't raise them casually — `adw::AboutWindow` is used instead of `AboutDialog` (1.5) for this reason. Test files (`.cif`, `.vasp`, `POSCAR`, etc.) live at the repo root.
 
 ## Architecture
 

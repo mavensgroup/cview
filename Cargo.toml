@@ -36,8 +36,11 @@ required-features = ["audit"]
 audit = []
 
 [dependencies]
-gtk4 = { version = "0.8", features = ["v4_6"] }
-adw = { package = "libadwaita", version = "0.6", features = ["v1_5"] }
+# The vX_Y features set the minimum system library versions (newer always
+# works): GTK 4.4, libadwaita 1.4, pango 1.46 — what EL9 (Alma/Rocky/RHEL 9)
+# ships. Raise them only when the code needs a newer API.
+gtk4 = { version = "0.8", features = ["v4_4"] }
+adw = { package = "libadwaita", version = "0.6", features = ["v1_4"] }
 cairo-rs = { version = "0.19", features = ["pdf", "png", "svg"] }
 gdk4 = "0.8"
 moyo = "0.7"
