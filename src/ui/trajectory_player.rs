@@ -878,7 +878,7 @@ pub fn show(parent: &ApplicationWindow, state: Rc<RefCell<AppState>>, notebook: 
                 }
                 d.destroy();
             });
-            dialog.show();
+            crate::utils::file_chooser::show(&dialog);
         });
     }
     {

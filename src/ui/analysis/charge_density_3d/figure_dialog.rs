@@ -516,7 +516,7 @@ pub(super) fn show(parent: &gtk4::Window, view: Rc<RefCell<View>>, ui: Ui) {
                 }
                 d.destroy();
             });
-            d.show();
+            crate::utils::file_chooser::show(&d);
         });
     }
     win.present();

@@ -316,7 +316,7 @@ pub fn show_export_dialog(window: &ApplicationWindow, state: Rc<RefCell<AppState
                     chooser.destroy();
                 });
 
-                file_dialog.show();
+                crate::utils::file_chooser::show(&file_dialog);
             }
         }
         dialog_ref.close();

@@ -333,7 +333,7 @@ pub fn setup(
             }
             d.destroy();
         });
-        dialog.show();
+        crate::utils::file_chooser::show(&dialog);
     });
     app.add_action(&open_action);
 
@@ -416,7 +416,7 @@ pub fn setup(
             }
             d.destroy();
         });
-        dialog.show();
+        crate::utils::file_chooser::show(&dialog);
     });
     app.add_action(&act_save);
 

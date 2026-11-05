@@ -312,7 +312,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> gtk4::Box {
             }
         }));
 
-        native.show();
+        crate::utils::file_chooser::show(&native);
     });
 
     // Export PDF
@@ -351,7 +351,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> gtk4::Box {
                     }
                 }
             });
-            native.show();
+            crate::utils::file_chooser::show(&native);
         }
     });
 

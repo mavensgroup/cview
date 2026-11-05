@@ -1444,7 +1444,7 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
                     }
                 }
             });
-            native.show();
+            crate::utils::file_chooser::show(&native);
         });
     }
 
@@ -1506,7 +1506,7 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
                     }
                 }
             });
-            native.show();
+            crate::utils::file_chooser::show(&native);
         });
     }
 
@@ -1951,7 +1951,7 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
                     }
                 }
             });
-            native.show();
+            crate::utils::file_chooser::show(&native);
         });
     }
 
@@ -2010,7 +2010,7 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
                     }
                 }
             });
-            native.show();
+            crate::utils::file_chooser::show(&native);
         });
     }
 

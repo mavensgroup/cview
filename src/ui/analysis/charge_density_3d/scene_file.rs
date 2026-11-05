@@ -219,7 +219,7 @@ pub(super) fn save_dialog(button: &gtk4::Button, view: Rc<RefCell<View>>) {
         }
         d.destroy();
     });
-    d.show();
+    crate::utils::file_chooser::show(&d);
 }
 
 pub(super) fn load_dialog(button: &gtk4::Button, on_loaded: impl Fn(Scene) + 'static) {
@@ -238,7 +238,7 @@ pub(super) fn load_dialog(button: &gtk4::Button, on_loaded: impl Fn(Scene) + 'st
         }
         d.destroy();
     });
-    d.show();
+    crate::utils::file_chooser::show(&d);
 }
 
 pub(super) fn export_mesh_dialog(button: &gtk4::Button, view: Rc<RefCell<View>>) {
@@ -272,7 +272,7 @@ pub(super) fn export_mesh_dialog(button: &gtk4::Button, view: Rc<RefCell<View>>)
         }
         d.destroy();
     });
-    d.show();
+    crate::utils::file_chooser::show(&d);
 }
 
 /// OBJ with normals, one object per lobe, and an MTL with their colours.
