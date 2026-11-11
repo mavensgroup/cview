@@ -88,4 +88,24 @@ Contributions from testers and developers are welcome.
 
 **CView** is open-source software licensed under the **MIT** Licence.
 
-If you use CView in your research, please cite the [repository](https://github.com/mavensgroup/cview).
+If you use CView in your research, please cite the paper:
+
+> Banerjee, R. (2026). *CView*: a Rust-based integrated environment for inorganic crystallographic analysis and high-fidelity visualization. *J. Appl. Cryst.* **59**(6). [https://doi.org/10.1107/S1600576726009003](https://doi.org/10.1107/S1600576726009003)
+
+```bibtex
+@article{Banerjee2026CView,
+  author    = {Banerjee, Rudra},
+  title     = {{CView}: a {Rust}-based integrated environment for inorganic
+               crystallographic analysis and high-fidelity visualization},
+  journal   = {Journal of Applied Crystallography},
+  volume    = {59},
+  number    = {6},
+  year      = {2026},
+  publisher = {International Union of Crystallography (IUCr)},
+  doi       = {10.1107/S1600576726009003}
+}
+```
+
+## Code Signing
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).

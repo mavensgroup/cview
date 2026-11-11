@@ -3,7 +3,7 @@
   <h1>CView: Crystal Structure Visualization & Analysis</h1>
 </div>
 
-![License](https://img.shields.io/badge/license-LGPLv3-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Language](https://img.shields.io/badge/rust-1.70%2B-orange.svg)
 ![GTK4](https://img.shields.io/badge/Toolkit-GTK4-46a946?logo=gtk&logoColor=white)
 ![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)
@@ -96,6 +96,10 @@ CView automatically detects file types based on extension and content.
 ## 🚀 Installation
 Detailed installation is available in [CView Documentation](https://mavensgroup.github.io/cview/installation.html)
 
+Ready-to-install packages are on the [Releases page](https://github.com/mavensgroup/cview/releases/latest).
+
+**Code signing:** Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+
 After the first run, it can be run from anywhere in the system just by using `cview` in your
 terminal.
 
@@ -115,9 +119,24 @@ terminal.
 ---
 
 ## 📚 Citation
-   If you use CView in your research, please cite: [CView](https://github.com/mavensgroup/cview)
-   repo.
+If you use CView in your research, please cite the paper:
+
+> Banerjee, R. (2026). *CView*: a Rust-based integrated environment for inorganic crystallographic analysis and high-fidelity visualization. *J. Appl. Cryst.* **59**(6). [https://doi.org/10.1107/S1600576726009003](https://doi.org/10.1107/S1600576726009003)
+
+```bibtex
+@article{Banerjee2026CView,
+  author    = {Banerjee, Rudra},
+  title     = {{CView}: a {Rust}-based integrated environment for inorganic
+               crystallographic analysis and high-fidelity visualization},
+  journal   = {Journal of Applied Crystallography},
+  volume    = {59},
+  number    = {6},
+  year      = {2026},
+  publisher = {International Union of Crystallography (IUCr)},
+  doi       = {10.1107/S1600576726009003}
+}
+```
 
 ---
 ## 📜 License
-CView is open-source software licensed under the GNU Lesser General Public License v3.0 (LGPLv3).You are free to use, modify, and distribute this software in both academic and commercial settings, provided that modifications to the core library are released under the same license.You should have received a copy of the GNU Lesser General Public License along with this program. If not, see https://www.gnu.org/licenses/.
+CView is open-source software licensed under the [MIT License](LICENSE). You are free to use, copy, modify, merge, publish, distribute, sublicense and sell copies of the software, provided the copyright notice and permission notice are included in all copies or substantial portions of it. The software is provided "as is", without warranty of any kind.

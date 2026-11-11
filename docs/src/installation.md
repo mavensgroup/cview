@@ -9,6 +9,9 @@ CView releases may provide ready-to-install packages. Check the release assets f
 
 ## <i class="fab fa-windows"></i> Windows 10 / 11
 
+>[!NOTE]
+>**Code signing:** Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+
 ### Step-by-Step Installation
 
 1. **Download the installer**
@@ -26,7 +29,7 @@ CView releases may provide ready-to-install packages. Check the release assets f
    - Then click **"Run anyway"**
 
    >[!NOTE]
-   >This warning appears for new software. CView is safe — it's open-source and built from verified code.
+   >Windows SmartScreen can show this for any newly released program until enough people have downloaded it, even when it is signed. The installer is signed through the SignPath Foundation, so you can check it is genuine: right-click `cview-installer.exe` → **Properties** → **Digital Signatures** should show **SignPath Foundation**.
 
 4. **Follow the installation wizard**
    - Click "Next" through the steps
@@ -86,73 +89,9 @@ CView releases may provide ready-to-install packages. Check the release assets f
 
 ## <i class="fab fa-linux"></i> Linux
 
-Choose your distribution below:
-
-### Ubuntu / Debian / Linux Mint / Pop!_OS
-
-**File to download**: `cview.deb` (1.1 MB)
-
-#### Method 1: Graphical Install (Easiest)
-
-1. Go to [**CView Releases**](https://github.com/mavensgroup/cview/releases/latest)
-2. Click on **`cview.deb`** to download
-3. Double-click the downloaded file
-4. Your Software Center will open
-5. Click **"Install"**
-6. Enter your password when prompted
-7. Launch CView from your applications menu (search for "CView")
-
-#### Method 2: Command Line
-
-```bash
-# Download
-wget https://github.com/mavensgroup/cview/releases/latest/download/cview.deb
-
-# Install
-sudo dpkg -i cview.deb
-
-# If you see dependency errors, fix them with:
-sudo apt-get install -f
-
-# Run CView
-cview
-```
-
----
-
-### Fedora / RHEL / CentOS / AlmaLinux
-
-**File to download**: `cview.rpm` (1.19 MB)
-
-#### Method 1: Graphical Install
-
-1. Go to [**CView Releases**](https://github.com/mavensgroup/cview/releases/latest)
-2. Click on **`cview.rpm`** to download
-3. Double-click the downloaded file
-4. Click **"Install"** when prompted
-5. Enter your password
-6. Launch CView from your applications menu
-
-#### Method 2: Command Line
-
-```bash
-# Fedora
-sudo dnf install https://github.com/mavensgroup/cview/releases/latest/download/cview.rpm
-
-# RHEL/CentOS/AlmaLinux
-sudo yum install https://github.com/mavensgroup/cview/releases/latest/download/cview.rpm
-
-# Run CView
-cview
-```
-
----
-
-### Any Linux Distribution (Flatpak)
-
 **File to download**: `cview.flatpak` (1.11 MB)
 
-Flatpak works on **all Linux distributions** — use this if the `.deb` or `.rpm` doesn't work for you.
+CView for Linux ships as a Flatpak, which works on **all Linux distributions**.
 
 **One-time setup** (if you haven't used Flatpak before):
 
@@ -196,9 +135,7 @@ CView will also appear in your applications menu.
 |------------------|------------------|------|---------------------|
 | **Windows 10/11** | `cview-installer.exe` | 19.8 MB | Run installer, click "Next" |
 | **macOS** (Intel/M1/M2/M3) | `cview-macos.dmg` | 15.9 MB | Drag to Applications |
-| **Ubuntu/Debian** | `cview.deb` | 1.1 MB | Double-click or `dpkg -i` |
-| **Fedora/RHEL** | `cview.rpm` | 1.19 MB | Double-click or `dnf install` |
-| **Any Linux** | `cview.flatpak` | 1.11 MB | `flatpak install` |
+| **Linux** (any distribution) | `cview.flatpak` | 1.11 MB | `flatpak install` |
 
 **Download from**: [**https://github.com/mavensgroup/cview/releases/latest**](https://github.com/mavensgroup/cview/releases/latest)
 
@@ -311,20 +248,6 @@ cview
 ---
 
 ## Troubleshooting
-
-### "Package not found" or dependency errors
-
-**Linux (.deb/.rpm)**:
-```bash
-# Ubuntu/Debian
-sudo apt-get update
-sudo apt-get install -f
-
-# Fedora
-sudo dnf install gtk4 libadwaita
-```
-
-The packages require GTK4 runtime libraries. Most modern distributions include these, but you might need to install them.
 
 ### macOS: "CView is damaged and can't be opened"
 

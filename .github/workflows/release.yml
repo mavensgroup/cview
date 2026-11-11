@@ -51,10 +51,10 @@ jobs:
           Download the DMG matching your CPU: `arm64` for Apple Silicon
           (M1/M2/M3/M4), `x86_64` for Intel Macs.
 
-          ### Linux users
+          ### Code signing
 
-          The `.deb` requires Ubuntu 24.04 / Debian 13 or newer (libadwaita 1.5).
-          Older distributions should use the Flatpak.
+          Free code signing provided by [SignPath.io](https://about.signpath.io/),
+          certificate by [SignPath Foundation](https://signpath.org/).
           NOTES
 
           gh release create "${{ github.ref_name }}" \
@@ -434,99 +434,6 @@ jobs:
           gh release upload "${{ github.ref_name }}" cview.flatpak cview.flatpak.sha256
 
   # ---------------------------------------------------------------------------
-  # DEB — must be ubuntu-24.04 or newer. Jammy (22.04) ships libadwaita 1.1,
-  # but the `adw` crate's v1_5 feature requires libadwaita-1 >= 1.5.
-  # Consequence: the resulting .deb needs glibc 2.39+ (Ubuntu 24.04 / Debian 13).
-  # ---------------------------------------------------------------------------
-  build-deb:
-    name: Build DEB
-    needs: create-release
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install System Dependencies
-        run: |
-          set -e
-          sudo apt-get update
-          sudo apt-get install -y libgtk-4-dev libadwaita-1-dev
-          pkg-config --modversion libadwaita-1   # sanity check: must be >= 1.5
-
-      - name: Install cargo-deb
-        run: cargo install cargo-deb --locked
-
-      - name: Build Binary
-        run: cargo build --release --locked
-
-      - name: Build DEB
-        run: |
-          set -e
-          cargo deb --no-build --output target/debian/cview.deb
-          sha256sum target/debian/cview.deb > target/debian/cview.deb.sha256
-
-      - name: Upload DEB
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -e
-          gh release upload "${{ github.ref_name }}" \
-            target/debian/cview.deb target/debian/cview.deb.sha256
-
-  # ---------------------------------------------------------------------------
-  # RPM — must be built inside a Fedora container. cargo-generate-rpm with
-  # auto-req resolves dependency names against the host package database, so
-  # building on Ubuntu produces requires that no RPM distro can satisfy.
-  # ---------------------------------------------------------------------------
-  build-rpm:
-    name: Build RPM
-    needs: create-release
-    runs-on: ubuntu-latest
-    container:
-      image: fedora:41
-    steps:
-      - name: Install toolchain and dependencies
-        run: |
-          set -e
-          dnf -y install \
-            gcc gcc-c++ make pkgconf-pkg-config \
-            rust cargo \
-            gtk4-devel libadwaita-devel \
-            rpm-build gh git tar findutils
-
-      - uses: actions/checkout@v4
-
-      - name: Mark workspace safe for git
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-      - name: Install cargo-generate-rpm
-        run: cargo install cargo-generate-rpm --locked
-
-      - name: Build Binary
-        run: cargo build --release --locked
-
-      - name: Build RPM
-        run: |
-          set -e
-          export PATH="$HOME/.cargo/bin:$PATH"
-          cargo generate-rpm
-          mv target/generate-rpm/*.rpm target/generate-rpm/cview.rpm
-          sha256sum target/generate-rpm/cview.rpm > target/generate-rpm/cview.rpm.sha256
-
-      - name: Upload RPM
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -e
-          gh release upload "${{ github.ref_name }}" \
-            target/generate-rpm/cview.rpm target/generate-rpm/cview.rpm.sha256
-
-  # ---------------------------------------------------------------------------
   # Publish the draft only if every build succeeded. test-v* tags stay drafts.
   # ---------------------------------------------------------------------------
   finalize:
@@ -535,8 +442,6 @@ jobs:
       - build-windows
       - build-macos
       - build-flatpak
-      - build-deb
-      - build-rpm
     runs-on: ubuntu-latest
     if: startsWith(github.ref_name, 'v')
     steps:
