@@ -56,7 +56,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-73fdb25c.js";
+            window.path_to_searchindex_js = "../searchindex-862a4412.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6b4ea5f4.js"></script>
@@ -327,14 +327,32 @@ CView automatically detects the file type based on extension and content. You ca
 <p>The <strong>Bonds</strong> section in the sidebar controls:</p>
 <ul>
 <li><strong>Bond Radius</strong>: Thickness of bond cylinders (default: 0.12 Å)</li>
-<li><strong>Bond Tolerance</strong>: Multiplier on the covalent-radius sum used for drawing bonds (default: 1.15)</li>
+<li><strong>Bond Rules…</strong>: Which element pairs bond, and over what distance (also <strong>View → Bond Rules…</strong>)</li>
 <li><strong>Bond Color</strong>: RGB picker for custom bond colors</li>
 </ul>
-<p>Bonds are drawn between atoms whose distance $d$ satisfies:
+<h4 id="bond-rules"><a class="header" href="#bond-rules">Bond rules</a></h4>
+<p>Bonds are decided per element pair: atoms A and B are bonded when their distance $d$ satisfies $d_{\min}(A,B) &lt; d \leq d_{\max}(A,B)$ (and $d \geq 0.4$ Å; closer atoms are overlapping or split sites). The same rules decide the bonds in the main view, the coordination polyhedra and coordination numbers, and the Trajectory Player.</p>
+<p>The defaults are <strong>VESTA’s bond list</strong> (K. Momma &amp; F. Izumi, <em>J. Appl. Cryst.</em> <strong>44</strong>, 1272 (2011)), 914 element pairs, as distributed with pymatgen. So a structure shows the bonds a VESTA user expects: Ti–O (≤ 2.354 Å) and Ba–O (≤ 3.148 Å) in BaTiO₃ but no Ba–Ti, Fe–O in an iron oxide but no Fe–Fe. Pairs VESTA does not list are not bonded, with one exception: VESTA lists no metal–metal pairs and so draws metals and intermetallics without bonds, whereas CView bonds elements that have no listed partner in the structure by covalent radii:
 $$
-d \leq \text{cutoff} \times (r_{\text{cov},A} + r_{\text{cov},B})
+d \leq t \times (r_{\text{cov},A} + r_{\text{cov},B})
 $$
-where $r_{\text{cov}}$ are the covalent radii from the internal database.</p>
+with tolerance $t$ (default 1.15, set in Preferences and in the Bond Rules window). A Heusler alloy therefore still shows its bonds.</p>
+<p>The <strong>Bond Rules</strong> window lists every element pair in the structure with:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Column</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td>✓</td><td>Whether the pair bonds</td></tr>
+<tr><td>Min, Max</td><td>The distance range (Å)</td></tr>
+<tr><td>Default</td><td>Where the default comes from: <em>VESTA</em>, <em>covalent</em>, <em>—</em> (no default; the length shown is a covalent suggestion) or <em>edited</em></td></tr>
+<tr><td>Shortest</td><td>The shortest distance between the two elements in the structure, periodic images included</td></tr>
+<tr><td>Bonds/cell</td><td>How many bonds the rule draws per cell</td></tr>
+</tbody>
+</table>
+</div>
+<p>So to bond Ba–Ti in BaTiO₃, tick the pair: the shortest Ba–Ti distance (3.471 Å) is below the suggested 3.841 Å, and the table shows the 8 bonds per cell it adds. Edits apply at once and belong to the structure (tab); only the pairs you change are stored, so substituting an element brings in its default rules. <strong>Reset to Defaults</strong> forgets the changes. The window follows the active tab.</p>
 <hr>
 <h2 id="coordination-polyhedra"><a class="header" href="#coordination-polyhedra">Coordination Polyhedra</a></h2>
 <p>CView can visualize <strong>coordination polyhedra</strong> around cation centers — a feature essential for understanding ionic and metal-oxide structures.</p>

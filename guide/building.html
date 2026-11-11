@@ -56,7 +56,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-73fdb25c.js";
+            window.path_to_searchindex_js = "../searchindex-862a4412.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-6b4ea5f4.js"></script>
@@ -207,6 +207,17 @@
 <li><strong>Atom Instances</strong> highlights the rows selected in the list.</li>
 </ul>
 <p>The window is not modal, so you can keep it open next to the main view.</p>
+<hr>
+<h2 id="building-from-a-space-group"><a class="header" href="#building-from-a-space-group">Building from a Space Group</a></h2>
+<p><strong>File → New from Space Group…</strong> (Ctrl+N) builds a crystal the way it is tabulated: a space group, the cell parameters and the unique sites (the asymmetric unit). <strong>Structure → Space Group &amp; Sites…</strong> opens the same window on the current structure, so you can change the cell, swap an element or move a site and apply the result to the tab (Ctrl+Z undoes it).</p>
+<ul>
+<li><strong>Space group.</strong> Type a number or a symbol into <em>Find</em> (<code>225</code>, <code>Fm-3m</code>, <code>P21/c</code>), or pick from the list. Groups with more than one setting (monoclinic unique axis and cell choice, origin choice 1 or 2, hexagonal or rhombohedral axes for R groups) list them under <em>Setting</em>; the ITA standard setting is chosen first.</li>
+<li><strong>Unit cell.</strong> Only the free parameters can be edited: for a cubic group b and c follow a and the angles stay at 90°, for hexagonal axes γ is 120°, and so on.</li>
+<li><strong>Wyckoff positions.</strong> Under the group, every Wyckoff position of the chosen setting is listed with its multiplicity and letter (e.g. <code>4a</code>), site symmetry and coordinates, from the most special position down to the general one. You don’t need to remember them: click a position to add a site there.</li>
+<li><strong>Sites.</strong> One row per unique site: label, element, Wyckoff position, its free parameters and occupancy. Only the parameters the position leaves free can be typed (x for <code>24e (x, 0, 0)</code>, z for <code>6c (0, 0, z)</code>); the other coordinates are greyed and show the values the position fixes. Fractions such as <code>1/3</code> are accepted. The <em>Site</em> column shows the position the site actually ends up on: if the parameters land it on a more special position (x = 0 on 24e is 4a), it is shown in yellow with an explanation. A site within 0.05 Å of a special position is moved onto it. Sites that land on top of each other are reported under the table.</li>
+</ul>
+<p>The preview shows the conventional cell as you type. <strong>Create</strong> opens it in a new tab; <strong>Apply</strong> (when editing) replaces the current structure.</p>
+<p>When editing, the structure is first standardized: you get its space group in the standard setting, the conventional cell and one site per symmetry orbit, each on its Wyckoff position (Bi₂Se₃ reads as R-3m with Bi on 6c and Se on 3a and 6c). A structure with partially occupied sites, or a molecule, is listed in P1 with every atom as its own site.</p>
 <hr>
 <h2 id="basis-operations"><a class="header" href="#basis-operations">Basis Operations</a></h2>
 <p>The <strong>Basis</strong> tab (<code>Structure → Basis...</code>) allows you to perform chemical modifications to your structure.</p>
