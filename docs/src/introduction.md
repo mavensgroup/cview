@@ -105,7 +105,3 @@ If you use CView in your research, please cite the paper:
   doi       = {10.1107/S1600576726009003}
 }
 ```
-
-## Code Signing
-
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).

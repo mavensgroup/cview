@@ -51,10 +51,11 @@ jobs:
           Download the DMG matching your CPU: `arm64` for Apple Silicon
           (M1/M2/M3/M4), `x86_64` for Intel Macs.
 
-          ### Code signing
+          ### Windows users
 
-          Free code signing provided by [SignPath.io](https://about.signpath.io/),
-          certificate by [SignPath Foundation](https://signpath.org/).
+          The installer is not code-signed, so SmartScreen may show "Windows
+          protected your PC". Click **More info** → **Run anyway**. Compare the
+          download against `cview-installer.exe.sha256` to check it is intact.
           NOTES
 
           gh release create "${{ github.ref_name }}" \
@@ -132,7 +133,7 @@ jobs:
       - name: Create Installer
         run: |
           set -e
-          makensis installer.ini
+          makensis -DVERSION="${{ needs.create-release.outputs.version }}" installer.ini
           sha256sum cview-installer.exe > cview-installer.exe.sha256
 
       - name: Upload Installer
@@ -452,3 +453,30 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release edit "${{ github.ref_name }}" --draft=false
+
+  # ---------------------------------------------------------------------------
+  # winget — opens a PR on microsoft/winget-pkgs for each published release.
+  # Only works once the package (MAVENsResearchGroup.CView) is already in
+  # winget-pkgs; the first version is submitted by hand (packaging/winget/).
+  # Needs a fork of microsoft/winget-pkgs under the token owner's account and
+  # a WINGET_TOKEN secret (classic PAT, public_repo scope). Skipped without it.
+  # ---------------------------------------------------------------------------
+  winget:
+    needs: finalize
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref_name, 'v')
+    steps:
+      - name: Check token
+        id: token
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          if [ -n "$WINGET_TOKEN" ]; then echo "set=true" >> "$GITHUB_OUTPUT"; else echo "WINGET_TOKEN not set; skipping"; fi
+
+      - name: Submit to winget
+        if: steps.token.outputs.set == 'true'
+        uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: MAVENsResearchGroup.CView
+          installers-regex: 'cview-installer\.exe$'
+          token: ${{ secrets.WINGET_TOKEN }}

@@ -9,9 +9,6 @@ CView releases may provide ready-to-install packages. Check the release assets f
 
 ## <i class="fab fa-windows"></i> Windows 10 / 11
 
->[!NOTE]
->**Code signing:** Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
-
 ### Step-by-Step Installation
 
 1. **Download the installer**
@@ -29,7 +26,7 @@ CView releases may provide ready-to-install packages. Check the release assets f
    - Then click **"Run anyway"**
 
    >[!NOTE]
-   >Windows SmartScreen can show this for any newly released program until enough people have downloaded it, even when it is signed. The installer is signed through the SignPath Foundation, so you can check it is genuine: right-click `cview-installer.exe` → **Properties** → **Digital Signatures** should show **SignPath Foundation**.
+   >The installer is not code-signed, so Windows SmartScreen shows it as coming from an "Unknown publisher". This is expected for small open-source projects: a signing certificate costs money, and the free programmes for open-source software are limited to large projects. CView is built from its public source code by GitHub Actions; each release lists a `cview-installer.exe.sha256` checksum you can compare against (`Get-FileHash cview-installer.exe` in PowerShell). Download it only from the [official Releases page](https://github.com/mavensgroup/cview/releases/latest).
 
 4. **Follow the installation wizard**
    - Click "Next" through the steps

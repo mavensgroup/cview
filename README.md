@@ -98,8 +98,6 @@ Detailed installation is available in [CView Documentation](https://mavensgroup.
 
 Ready-to-install packages are on the [Releases page](https://github.com/mavensgroup/cview/releases/latest).
 
-**Code signing:** Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
-
 After the first run, it can be run from anywhere in the system just by using `cview` in your
 terminal.
 
