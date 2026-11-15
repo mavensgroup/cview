@@ -34,15 +34,25 @@ use utils::console;
 pub fn run() {
     let app = Application::builder()
         .application_id("org.mavensgroup.cview")
+        .flags(gtk4::gio::ApplicationFlags::HANDLES_OPEN)
         .build();
 
-    app.connect_activate(build_ui);
+    app.connect_activate(|app| {
+        build_ui(app);
+    });
+    app.connect_open(|app, files, _hint| open_files(app, files));
 
-    // Run with empty args so we can handle CLI args manually in build_ui
-    app.run_with_args(&Vec::<String>::new());
+    app.run();
 }
 
-fn build_ui(app: &Application) {
+thread_local! {
+    /// The most recently built window, used to open files passed on the
+    /// command line. Holds only weak references, so a closed window is
+    /// detected rather than kept alive.
+    static LATEST_WINDOW: RefCell<Option<menu::actions_file::OpenContext>> = const { RefCell::new(None) };
+}
+
+fn build_ui(app: &Application) -> menu::actions_file::OpenContext {
     // Initialize libadwaita so Adwaita widgets (e.g. the About dialog) and the
     // Adwaita stylesheet are available. Must run before any widget is built.
     if let Err(e) = adw::init() {
@@ -222,21 +232,38 @@ fn build_ui(app: &Application) {
 
     window.present();
 
-    // --- CLI LATE LOAD ---
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() > 1 {
-        let path = &args[1];
-        console::log_info(&format!("CLI: Opening '{}'", path));
+    // Files passed on the command line, including to a second `cview`
+    // process, arrive through the `open` signal and load in this window.
+    let open_ctx = menu::actions_file::OpenContext {
+        state: Rc::downgrade(&state),
+        notebook: view_notebook.downgrade(),
+        atom_box: atom_list_box.downgrade(),
+        window: window.downgrade(),
+        handles: sidebar_handles.clone(),
+    };
+    LATEST_WINDOW.with(|latest| *latest.borrow_mut() = Some(open_ctx.clone()));
+    open_ctx
+}
 
-        menu::actions_file::open_path(
-            &menu::actions_file::OpenContext {
-                state: Rc::downgrade(&state),
-                notebook: view_notebook.downgrade(),
-                atom_box: atom_list_box.downgrade(),
-                window: window.downgrade(),
-                handles: sidebar_handles.clone(),
-            },
-            path,
-        );
+/// Open files given on the command line in the most recent window, creating
+/// one if none is open. GTK forwards a second launch's files here, so
+/// `cview file.cif` loads into the running CView instead of being ignored.
+fn open_files(app: &Application, files: &[gtk4::gio::File]) {
+    let existing = LATEST_WINDOW
+        .with(|latest| latest.borrow().clone())
+        .filter(|ctx| ctx.window.upgrade().is_some());
+    let ctx = existing.unwrap_or_else(|| build_ui(app));
+    if let Some(window) = ctx.window.upgrade() {
+        window.present();
+    }
+    for file in files {
+        match file.path() {
+            Some(path) => {
+                let path = path.to_string_lossy();
+                console::log_info(&format!("CLI: Opening '{}'", path));
+                menu::actions_file::open_path(&ctx, &path);
+            }
+            None => console::log_error(&format!("Cannot open '{}': not a local file", file.uri())),
+        }
     }
 }
