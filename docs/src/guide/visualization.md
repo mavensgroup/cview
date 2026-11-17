@@ -242,6 +242,8 @@ This visualization immediately reveals the corner-sharing connectivity character
 | `Ctrl + W` | Close tab |
 | `Ctrl + Z` | Undo the last structure edit (delete, supercell, slab, substitution, cell toggle…) |
 | `Ctrl + Shift + Z` or `Ctrl + Y` | Redo |
+| `Delete` | Delete the selected atoms |
+| `Ctrl + A` / `Esc` | Select all atoms / clear the selection |
 | `T` | Toggle Primitive ↔ Conventional cell (canvas focused) |
 | `Ctrl + Shift + C` | Matrix transformation tool |
 | `Ctrl + M` | Add Miller plane |

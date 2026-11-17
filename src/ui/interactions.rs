@@ -39,10 +39,23 @@ pub fn setup_interactions(
             return glib::Propagation::Proceed;
         }
 
-        // B. Delete
-        if keyval == gdk::Key::Delete {
-            st.delete_selected();
-            da.queue_draw();
+        // B. Selection keys, shared with the Edit menu entries. Handled here,
+        // after any focused text field, rather than as app accelerators.
+        let edit_action = match keyval {
+            gdk::Key::Delete => Some("app.delete_selected"),
+            gdk::Key::Escape => Some("app.clear_selection"),
+            gdk::Key::a | gdk::Key::A
+                if state_flags.contains(gdk::ModifierType::CONTROL_MASK)
+                    && !state_flags.contains(gdk::ModifierType::SHIFT_MASK) =>
+            {
+                Some("app.select_all")
+            }
+            _ => None,
+        };
+        if let Some(action) = edit_action {
+            // The action borrows state itself.
+            drop(st);
+            let _ = da.activate_action(action, None);
             return glib::Propagation::Stop;
         }
 
@@ -289,6 +302,30 @@ pub fn setup_interactions(
     });
 
     drawing_area.add_controller(click);
+}
+
+/// Select every atom instance that is drawn and pickable on the active tab
+/// (the same instances a box selection over the whole canvas would take).
+pub fn select_all(st: &mut AppState) {
+    if st.active_tab().structure.is_none() {
+        return;
+    }
+    let show_ghosts = st.active_tab().view.show_full_unit_cell;
+    let (atoms, _, _) = scene::calculate_scene(st.active_tab(), &st.config, 1.0, 1.0, false, None, None);
+    let sites = partial_sites(st);
+    let interaction = &mut st.active_tab_mut().interaction;
+    for atom in atoms {
+        if atom.is_coord_only || (atom.is_ghost && !show_ghosts) || sites.is_hidden(atom.original_index) {
+            continue;
+        }
+        interaction.select(SelectedAtom {
+            unique_id: atom.unique_id,
+            original_index: atom.original_index,
+            cart_pos: atom.cart_pos,
+            element: atom.element.clone(),
+            seq: 0,
+        });
+    }
 }
 
 /// Partial-occupancy grouping for the active tab, so picking skips the

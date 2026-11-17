@@ -211,6 +211,28 @@ pub fn setup(
         app.add_action(&act);
     }
 
+    // 6c. Selection: Select All (Ctrl+A), Clear Selection (Esc), Delete
+    // Selected (Delete). The keys are handled by the canvas key controller
+    // (ui/interactions.rs), not app accelerators, so text fields keep them.
+    for name in ["select_all", "clear_selection", "delete_selected"] {
+        let act = gtk4::gio::SimpleAction::new(name, None);
+        let st = state.clone();
+        let nb = notebook.downgrade();
+        act.connect_activate(move |_, _| {
+            let Some(da) = get_da(&nb) else { return };
+            {
+                let mut st = st.borrow_mut();
+                match name {
+                    "select_all" => crate::ui::interactions::select_all(&mut st),
+                    "clear_selection" => st.active_tab_mut().interaction.selected.clear(),
+                    _ => st.delete_selected(),
+                }
+            }
+            da.queue_draw();
+        });
+        app.add_action(&act);
+    }
+
     // 7. Toggle Interstitial Site Overlay
     let act_sites = gtk4::gio::SimpleAction::new("toggle_interstitial_sites", None);
     let s_sites = state.clone();

@@ -1,13 +1,13 @@
 // src/ui/structure/window.rs
 //
 // The Structure window: the tools that change the structure (Supercell,
-// Basis, Atom Instances, Slab) as tabs of one notebook, laid out like the
-// Analysis window. Supercell, Basis and Atom Instances share one preview
+// Basis, Atoms, Atom Instances, Slab) as tabs of one notebook, laid out like
+// the Analysis window. Every tab but Slab shares one preview
 // pane, which moves into whichever of those tabs is showing; Slab keeps its
 // own cutting-plane canvas.
 
 use super::preview::Preview;
-use super::{basis_tab, instances_tab, slab_tab, supercell_tab, TabParts, CONTROL_PANE_WIDTH};
+use super::{atoms_tab, basis_tab, instances_tab, slab_tab, supercell_tab, TabParts, CONTROL_PANE_WIDTH};
 use crate::state::AppState;
 use gtk4::prelude::*;
 use gtk4::{
@@ -22,8 +22,9 @@ use std::rc::Rc;
 pub enum StructureTab {
     Supercell = 0,
     Basis = 1,
-    Instances = 2,
-    Slab = 3,
+    Atoms = 2,
+    Instances = 3,
+    Slab = 4,
 }
 
 /// A tab page with a slot on the left for the shared preview and the tab's
@@ -85,6 +86,10 @@ pub fn show_structure_window(
     add_preview_tab(
         "Basis",
         basis_tab::build(state.clone(), main_notebook, preview.clone()),
+    );
+    add_preview_tab(
+        "Atoms",
+        atoms_tab::build(state.clone(), main_notebook, preview.clone()),
     );
     add_preview_tab(
         "Atom Instances",

@@ -1,3 +1,4 @@
+pub mod atoms_tab;
 pub mod basis_tab;
 pub mod instances_tab;
 pub mod preview;

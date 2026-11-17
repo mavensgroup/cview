@@ -17,11 +17,12 @@ pub fn setup(
     notebook: &Notebook,
     _drawing_area: &DrawingArea,
 ) {
-    // --- STRUCTURE WINDOW: Supercell, Basis, Atom Instances, Slab ---
+    // --- STRUCTURE WINDOW: Supercell, Basis, Atoms, Atom Instances, Slab ---
     // One window with a tab per tool; each action opens it on its own tab.
     for (name, tab) in [
         ("supercell", StructureTab::Supercell),
         ("basis", StructureTab::Basis),
+        ("atoms", StructureTab::Atoms),
         ("atom_instances", StructureTab::Instances),
         ("slab", StructureTab::Slab),
     ] {

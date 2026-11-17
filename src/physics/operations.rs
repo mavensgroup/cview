@@ -1,3 +1,4 @@
+pub mod atom_edit;
 pub mod basis;
 pub mod conversion;
 pub mod miller_algo;

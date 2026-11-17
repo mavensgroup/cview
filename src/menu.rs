@@ -81,8 +81,26 @@ pub fn build_menu_and_actions(
 
     // --- EDIT MENU ---
     let edit_menu = gtk4::gio::Menu::new();
-    edit_menu.append(Some("Undo"), Some("app.undo"));
-    edit_menu.append(Some("Redo"), Some("app.redo"));
+    let edit_history = gtk4::gio::Menu::new();
+    edit_history.append(Some("Undo"), Some("app.undo"));
+    edit_history.append(Some("Redo"), Some("app.redo"));
+    edit_menu.append_section(None, &edit_history);
+    // These keys live on the canvas key controller, not app accelerators (so
+    // text fields keep Delete and Ctrl+A); "accel" only displays them.
+    let edit_select = gtk4::gio::Menu::new();
+    for (label, action, accel) in [
+        ("Select All", "app.select_all", "<Primary>a"),
+        ("Clear Selection", "app.clear_selection", "Escape"),
+        ("Delete Selected", "app.delete_selected", "Delete"),
+    ] {
+        let item = gtk4::gio::MenuItem::new(Some(label), Some(action));
+        item.set_attribute_value("accel", Some(&accel.to_variant()));
+        edit_select.append_item(&item);
+    }
+    edit_menu.append_section(None, &edit_select);
+    let edit_atoms = gtk4::gio::Menu::new();
+    edit_atoms.append(Some("Add or Move Atoms..."), Some("app.atoms"));
+    edit_menu.append_section(None, &edit_atoms);
     root_model.append_submenu(Some("Edit"), &edit_menu);
 
     // --- VIEW MENU ---
@@ -110,6 +128,7 @@ pub fn build_menu_and_actions(
     structure_menu.append(Some("Space Group & Sites..."), Some("app.edit_spacegroup"));
     structure_menu.append(Some("Supercell..."), Some("app.supercell"));
     structure_menu.append(Some("Basis..."), Some("app.basis"));
+    structure_menu.append(Some("Atoms..."), Some("app.atoms"));
     structure_menu.append(Some("Atom Instances..."), Some("app.atom_instances"));
     structure_menu.append(Some("Slab..."), Some("app.slab"));
     let structure_cell = gtk4::gio::Menu::new();

@@ -587,6 +587,35 @@ impl AppState {
         tab.commit(&op, new, Edit::Reindexed);
     }
 
+    /// Select the in-cell instance of each atom in `indices`, in that pick
+    /// order, replacing the selection. Used after an edit that clears the
+    /// selection (add, move) so the edited atoms stay picked.
+    pub fn select_atoms(&mut self, indices: &[usize]) {
+        // Instance ids depend only on the structure, not the canvas size.
+        let (atoms, _, _) = crate::rendering::scene::calculate_scene(
+            self.active_tab(),
+            &self.config,
+            1.0,
+            1.0,
+            false,
+            None,
+            None,
+        );
+        let interaction = &mut self.active_tab_mut().interaction;
+        interaction.selected.clear();
+        for &i in indices {
+            if let Some(a) = atoms.iter().find(|a| a.original_index == i && !a.is_ghost) {
+                interaction.select(SelectedAtom {
+                    unique_id: a.unique_id,
+                    original_index: i,
+                    cart_pos: a.cart_pos,
+                    element: a.element.clone(),
+                    seq: 0,
+                });
+            }
+        }
+    }
+
     pub fn undo(&mut self) {
         if !self.active_tab_mut().undo() {
             crate::utils::console::log_info("Nothing to undo.");
