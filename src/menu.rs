@@ -99,7 +99,7 @@ pub fn build_menu_and_actions(
     }
     edit_menu.append_section(None, &edit_select);
     let edit_atoms = gtk4::gio::Menu::new();
-    edit_atoms.append(Some("Add or Move Atoms..."), Some("app.atoms"));
+    edit_atoms.append(Some("Add, Move or Replace Atoms..."), Some("app.atoms"));
     edit_menu.append_section(None, &edit_atoms);
     root_model.append_submenu(Some("Edit"), &edit_menu);
 

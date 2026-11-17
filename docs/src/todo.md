@@ -7,8 +7,8 @@ open an issue before starting on one so work isn't duplicated.
 
 - [x] **Build a structure from a space group** and its unique atomic sites
   (asymmetric unit), and edit an existing structure the same way.
-- [x] **Add and move atoms** by typed coordinates or at an interstitial
-  site, with undo and redo for every structure edit.
+- [x] **Add, move and replace atoms** by typed coordinates or at an
+  interstitial site, with undo and redo for every structure edit.
 - [ ] Drag atoms with the mouse.
 
 ## Visualization

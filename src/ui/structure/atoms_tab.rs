@@ -1,7 +1,7 @@
 // src/ui/structure/atoms_tab.rs
 //
-// Add an atom, or move the atoms selected in the main view, by typed
-// coordinates (fractional or Cartesian). The preview shows the result before
+// Add an atom, or move or replace the atoms selected in the main view.
+// Positions are typed as fractional or Cartesian coordinates. The preview shows the result before
 // it is applied and rings the atoms that change; the nearest-atom distance
 // warns of overlaps. Each change is one step of Edit → Undo.
 
@@ -27,6 +27,7 @@ use std::time::Duration;
 enum Card {
     Add,
     Move,
+    Replace,
 }
 
 /// An interstitial site's position: (fractional, Cartesian).
@@ -143,6 +144,19 @@ fn proximity(s: &Structure, moved: &[usize]) -> String {
     lines.join("\n")
 }
 
+/// "2 Ti, 1 O" for the atoms at `indices`, in order of first appearance.
+fn species_counts(s: &Structure, indices: &[usize]) -> String {
+    let mut counts: Vec<(&str, usize)> = Vec::new();
+    for &i in indices {
+        let el = s.atoms[i].element.as_str();
+        match counts.iter_mut().find(|(e, _)| *e == el) {
+            Some((_, n)) => *n += 1,
+            None => counts.push((el, 1)),
+        }
+    }
+    counts.iter().map(|(e, n)| format!("{n} {e}")).collect::<Vec<_>>().join(", ")
+}
+
 fn redraw_main(nb: &glib::WeakRef<Notebook>) {
     if let Some(da) = nb.upgrade().and_then(|nb| crate::ui::get_active_drawing_area(&nb)) {
         da.queue_draw();
@@ -209,6 +223,31 @@ pub fn build(state: Rc<RefCell<AppState>>, main_notebook: &Notebook, preview: Pr
     move_body.append(&btn_move);
     controls.append(&group("Move the selected atoms", &move_body));
 
+    // --- Replace the selected atoms ---
+    let entry_rep = Entry::new();
+    entry_rep.set_placeholder_text(Some("e.g. Zr"));
+    let lbl_rep = Label::new(None);
+    lbl_rep.set_wrap(true);
+    lbl_rep.set_xalign(0.0);
+    lbl_rep.add_css_class("cview-caption");
+    let btn_rep = Button::with_label("Replace");
+    btn_rep.add_css_class("suggested-action");
+    btn_rep.set_halign(Align::End);
+    let rep_note = Label::new(Some(
+        "To replace all or some atoms of one element, or to mix an element into \
+         a site as a partial occupancy, use the Basis tab.",
+    ));
+    rep_note.set_wrap(true);
+    rep_note.set_xalign(0.0);
+    rep_note.add_css_class("cview-caption");
+
+    let rep_body = card_body(8);
+    rep_body.append(&captioned("New element", &entry_rep));
+    rep_body.append(&lbl_rep);
+    rep_body.append(&btn_rep);
+    rep_body.append(&rep_note);
+    controls.append(&group("Replace the selected atoms", &rep_body));
+
     let card = Rc::new(Cell::new(Card::Add));
     // Set while fields are filled in by code, so that does not count as the
     // user editing a card.
@@ -227,17 +266,19 @@ pub fn build(state: Rc<RefCell<AppState>>, main_notebook: &Notebook, preview: Pr
         let (entry_el, add_xyz, move_xyz) = (entry_el.clone(), add_xyz.clone(), move_xyz.clone());
         let (lbl_add, lbl_move, lbl_sel) = (lbl_add.clone(), lbl_move.clone(), lbl_sel.clone());
         let (btn_add, btn_move, dd_mode) = (btn_add.clone(), btn_move.clone(), dd_mode.clone());
+        let (entry_rep, lbl_rep, btn_rep) = (entry_rep.clone(), lbl_rep.clone(), btn_rep.clone());
         let card = card.clone();
         let is_frac = is_frac.clone();
         Rc::new(move || {
             let st = state.borrow();
             let Some(s) = st.active_tab().structure.as_ref() else {
-                for l in [&lbl_add, &lbl_move] {
+                for l in [&lbl_add, &lbl_move, &lbl_rep] {
                     l.set_text("No structure loaded.");
                 }
                 lbl_sel.set_text("");
                 btn_add.set_sensitive(false);
                 btn_move.set_sensitive(false);
+                btn_rep.set_sensitive(false);
                 preview.set_candidate(None);
                 return;
             };
@@ -291,9 +332,42 @@ pub fn build(state: Rc<RefCell<AppState>>, main_notebook: &Notebook, preview: Pr
             }
             btn_move.set_sensitive(mv.is_some());
 
+            // Replace
+            let rep_text = entry_rep.text();
+            let rep = match (sel.is_empty(), element_of(&rep_text, s)) {
+                (true, _) => {
+                    lbl_rep.set_text("Select the atoms to replace in the main view.");
+                    None
+                }
+                (false, None) => {
+                    lbl_rep.set_text(if rep_text.trim().is_empty() {
+                        "Type an element symbol."
+                    } else {
+                        "Not an element symbol."
+                    });
+                    None
+                }
+                (false, Some(el)) => {
+                    let changing: Vec<usize> =
+                        sel.iter().copied().filter(|&i| s.atoms[i].element != el).collect();
+                    if changing.is_empty() {
+                        lbl_rep.set_text(&format!("The selected atoms are already {el}."));
+                        None
+                    } else {
+                        lbl_rep.set_text(&format!(
+                            "{} → {el}",
+                            species_counts(s, &changing)
+                        ));
+                        Some(crate::physics::operations::basis::modify_selection(s, &changing, &el))
+                    }
+                }
+            };
+            btn_rep.set_sensitive(rep.is_some());
+
             let (cand, hl) = match card.get() {
                 Card::Add => add.map_or((None, vec![]), |(c, hl)| (Some(c), hl)),
                 Card::Move => (mv, sel),
+                Card::Replace => (rep, sel),
             };
             preview.set_candidate(cand);
             preview.set_highlight(hl.into_iter().collect(), false, None);
@@ -339,6 +413,10 @@ pub fn build(state: Rc<RefCell<AppState>>, main_notebook: &Notebook, preview: Pr
     for e in &move_xyz {
         let t = touched(Card::Move);
         e.connect_changed(move |_| t());
+    }
+    {
+        let t = touched(Card::Replace);
+        entry_rep.connect_changed(move |_| t());
     }
     {
         let (t, prefill) = (touched(Card::Move), prefill_move.clone());
@@ -456,6 +534,31 @@ pub fn build(state: Rc<RefCell<AppState>>, main_notebook: &Notebook, preview: Pr
                 // Moving changes the rendered instances; pick the same atoms
                 // again so a shift can be repeated.
                 st.select_atoms(&sel);
+            }
+            redraw_main(&nb);
+            refresh();
+        });
+    }
+
+    {
+        let state = state.clone();
+        let (entry_rep, refresh, nb) = (entry_rep.clone(), refresh.clone(), nb.clone());
+        btn_rep.connect_clicked(move |_| {
+            {
+                let mut st = state.borrow_mut();
+                let sel = selected_indices(&st);
+                let tab = st.active_tab_mut();
+                let Some(s) = &tab.structure else { return };
+                let Some(el) = element_of(&entry_rep.text(), s) else { return };
+                let changing: Vec<usize> =
+                    sel.iter().copied().filter(|&i| s.atoms[i].element != el).collect();
+                if changing.is_empty() {
+                    return;
+                }
+                let op = format!("Replaced {} → {el}", species_counts(s, &changing));
+                let new = crate::physics::operations::basis::modify_selection(s, &changing, &el);
+                // Same atoms at the same places: the selection is kept.
+                tab.commit(&op, new, Edit::Species);
             }
             redraw_main(&nb);
             refresh();

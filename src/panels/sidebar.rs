@@ -611,6 +611,41 @@ pub fn build(
     bvs_expander.set_child(Some(&bvs_box));
     root_vbox.append(&bvs_expander);
 
+    // Rebuild the element list when the active structure gains or loses an
+    // element or atoms, or another tab becomes active. Edits come from many
+    // places (Structure window, undo, the space group editor); polling one
+    // cheap key here covers them all. The formula changes with the elements.
+    {
+        let container = atoms_list_container.downgrade();
+        let nb = notebook.downgrade();
+        let state = Rc::downgrade(&state);
+        let mut last: Option<(usize, usize, String)> = None;
+        gtk4::glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
+            let (Some(c), Some(nb), Some(st)) = (container.upgrade(), nb.upgrade(), state.upgrade())
+            else {
+                return gtk4::glib::ControlFlow::Break;
+            };
+            let key = {
+                let s = st.borrow();
+                let Some(tab) = s.tabs.get(s.active_tab_index) else {
+                    return gtk4::glib::ControlFlow::Continue;
+                };
+                let (n, formula) = tab
+                    .structure
+                    .as_ref()
+                    .map_or((0, String::new()), |x| (x.atoms.len(), x.formula.clone()));
+                (s.active_tab_index, n, formula)
+            };
+            // The first sighting only records the key: the list was built
+            // by whoever loaded the structure.
+            if last.as_ref().is_some_and(|l| *l != key) {
+                refresh_atom_list(&c, st.clone(), &nb);
+            }
+            last = Some(key);
+            gtk4::glib::ControlFlow::Continue
+        });
+    }
+
     (scroll, atoms_list_container, handles)
 }
 

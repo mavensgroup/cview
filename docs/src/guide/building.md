@@ -6,7 +6,7 @@ Supercell, Basis, Atoms, Atom Instances and Slab are the five tabs of one **Stru
 
 - **Supercell** previews the structure the current matrix would produce, before you press Transform.
 - **Basis** highlights the atoms an action would touch: the atoms selected in the main view, and every atom of the element typed into *Find*.
-- **Atoms** previews the structure with the atom added or moved, and rings that atom.
+- **Atoms** previews the structure with the atom added, moved or replaced, and rings the atoms that change.
 - **Atom Instances** highlights the rows selected in the list.
 
 The window is not modal, so you can keep it open next to the main view.
@@ -121,9 +121,9 @@ CView also reads these files, including potentials written by an SCF run (`ALAT 
 
 ---
 
-## Adding and Moving Atoms
+## Adding, Moving and Replacing Atoms
 
-The **Atoms** tab (**Edit → Add or Move Atoms...** or **Structure → Atoms...**) edits positions by typed coordinates. The **Coordinates** card chooses fractional or Cartesian (Å) input for both cards below it; switching converts what is already typed. Fractional fields accept fractions such as `1/3`. A structure with no cell (a plain XYZ molecule) is always Cartesian.
+The **Atoms** tab (**Edit → Add, Move or Replace Atoms...** or **Structure → Atoms...**) edits single atoms: it adds them and moves them by typed coordinates, and changes the element of the selected ones. The **Coordinates** card chooses fractional or Cartesian (Å) input for both cards below it; switching converts what is already typed. Fractional fields accept fractions such as `1/3`. A structure with no cell (a plain XYZ molecule) is always Cartesian.
 
 **Add an atom**: type the element and its position, or pick one of the **interstitial sites** found by Analysis → Void Analysis (the list appears once sites have been screened for the tab; picking one also fills in the screened ion when no element is typed). The preview shows the new atom ringed, and the line under the fields gives the nearest other atom and its distance, in red when the two would overlap (closer than half the sum of their covalent radii). **Add atom** appends it and leaves it selected, ready to move.
 
@@ -132,6 +132,8 @@ The **Atoms** tab (**Edit → Add or Move Atoms...** or **Structure → Atoms...
 - **Move to** places a single selected atom at a position; the fields start at its current one.
 
 The moved atoms stay selected. Positions are kept exactly as typed, never wrapped into the cell; an atom pushed more than half a cell outside it is not drawn, and the status line says so (**Basis → Standardize positions** wraps it back in).
+
+**Replace the selected atoms**: type the new element; the status line says what will change (e.g. `2 Ti, 1 O → Zr`) and the preview shows it. **Replace** changes them and keeps them selected. To replace every atom of an element, only some of them, or to mix an element into a site as a partial occupancy, use the **Basis** tab described above.
 
 ---
 
