@@ -41,8 +41,7 @@ pub fn setup_interactions(
 
         // B. Delete
         if keyval == gdk::Key::Delete {
-            let msg = st.delete_selected();
-            console::log_info(&msg);
+            st.delete_selected();
             da.queue_draw();
             return glib::Propagation::Stop;
         }

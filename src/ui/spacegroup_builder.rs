@@ -1021,16 +1021,9 @@ impl Builder {
                         );
                         return;
                     };
-                    if let Some(old) = tab.structure.take() {
-                        tab.interaction.undo_stack.push(old);
-                    }
-                    tab.structure = Some(structure.clone());
-                    tab.interaction.selected.clear();
-                    tab.overrides.clear();
-                    tab.invalidate_derived();
+                    tab.commit("Edited space group & sites", structure, crate::state::Edit::Reindexed);
                     tab.style_generic_species();
                 }
-                console::structure_changed("Edited space group & sites", &structure);
                 if let Some(nb) = self.ctx.notebook.upgrade() {
                     if let Some(da) = crate::ui::get_active_drawing_area(&nb) {
                         da.queue_draw();

@@ -105,7 +105,7 @@ pub fn place_structure(
             // of state that referred to the previous structure — otherwise old
             // selections appear as "pre-highlighted" atoms on the new one.
             tab.interaction.selected.clear();
-            tab.interaction.undo_stack.clear();
+            tab.history.clear();
             tab.miller_planes.clear();
             tab.kpath_result = None;
             tab.void_result = None;

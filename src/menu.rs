@@ -40,6 +40,7 @@ pub fn build_menu_and_actions(
         state.clone(),
         notebook,
         drawing_area,
+        atom_list_box,
         sidebar_handles,
     );
     actions_tools::setup(app, window, state.clone(), notebook, drawing_area);
@@ -54,6 +55,7 @@ pub fn build_menu_and_actions(
     app.set_accels_for_action("app.export", &["<Primary>e"]);
     app.set_accels_for_action("app.preferences", &["<Primary>comma"]);
     app.set_accels_for_action("app.undo", &["<Primary>z"]);
+    app.set_accels_for_action("app.redo", &["<Primary><Shift>z", "<Primary>y"]);
     app.set_accels_for_action("app.quit", &["<Primary>q"]);
     app.set_accels_for_action("app.view_reset", &["<Primary>r"]);
     app.set_accels_for_action("app.toggle_bonds", &["<Primary>b"]);
@@ -80,6 +82,7 @@ pub fn build_menu_and_actions(
     // --- EDIT MENU ---
     let edit_menu = gtk4::gio::Menu::new();
     edit_menu.append(Some("Undo"), Some("app.undo"));
+    edit_menu.append(Some("Redo"), Some("app.redo"));
     root_model.append_submenu(Some("Edit"), &edit_menu);
 
     // --- VIEW MENU ---

@@ -178,10 +178,11 @@ pub fn remove_selection(structure: &Structure, indices: &[usize]) -> Structure {
         .collect();
 
     // Note: This re-indexes atoms. The UI selection must be cleared after this op.
+    let formula = build_formula(&new_atoms);
     Structure {
         atoms: new_atoms,
         lattice: structure.lattice,
-        formula: structure.formula.clone(),
+        formula,
         is_periodic: structure.is_periodic,
     }
 }

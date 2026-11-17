@@ -240,7 +240,8 @@ This visualization immediately reveals the corner-sharing connectivity character
 | `Ctrl + E` | Export image (PNG/PDF/SVG) |
 | `Ctrl + ,` | Preferences |
 | `Ctrl + W` | Close tab |
-| `Ctrl + Z` | Undo (e.g. atom deletion) |
+| `Ctrl + Z` | Undo the last structure edit (delete, supercell, slab, substitution, cell toggle…) |
+| `Ctrl + Shift + Z` or `Ctrl + Y` | Redo |
 | `T` | Toggle Primitive ↔ Conventional cell (canvas focused) |
 | `Ctrl + Shift + C` | Matrix transformation tool |
 | `Ctrl + M` | Add Miller plane |

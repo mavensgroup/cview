@@ -110,9 +110,11 @@ fn convert_and_update(state: &Rc<RefCell<AppState>>, da: &DrawingArea, cell_type
                 };
                 let mut st = state.borrow_mut();
                 let tab = st.active_tab_mut();
-                console::structure_changed(&format!("Switched to {} cell", view_name), &new_struct);
-                tab.structure = Some(new_struct);
-                tab.invalidate_derived();
+                tab.commit(
+                    &format!("Switched to {} cell", view_name),
+                    new_struct,
+                    crate::state::Edit::Reindexed,
+                );
 
                 da.queue_draw();
             }

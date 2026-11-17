@@ -89,10 +89,7 @@ pub fn build(state: Rc<RefCell<AppState>>) -> (Box, std::boxed::Box<dyn Fn()>) {
     btn_box.set_margin_top(8);
     let btn_gen = Button::with_label("Generate Slab");
     btn_gen.add_css_class("suggested-action");
-    let btn_undo = Button::with_label("Undo Last Cut");
-    btn_undo.set_sensitive(false);
     btn_box.append(&btn_gen);
-    btn_box.append(&btn_undo);
     right_pane.append(&btn_box);
 
     let lbl_status = Label::new(Some("Ready."));
@@ -295,11 +292,8 @@ pub fn build(state: Rc<RefCell<AppState>>) -> (Box, std::boxed::Box<dyn Fn()>) {
         state_thick.borrow_mut().thickness = s.value();
     });
 
-    // Generate / Undo Logic
-    let undo_store: Rc<RefCell<Option<Structure>>> = Rc::new(RefCell::new(None));
+    // Generate. Undo is the app's (Edit → Undo), like every other edit.
     let state_gen = state.clone();
-    let undo_gen = undo_store.clone();
-    let btn_undo_gen = btn_undo.clone();
     let lbl_gen = lbl_status.clone();
 
     btn_gen.connect_clicked(move |_| {
@@ -307,8 +301,6 @@ pub fn build(state: Rc<RefCell<AppState>>) -> (Box, std::boxed::Box<dyn Fn()>) {
         let tab = st.active_tab_mut();
 
         if let Some(structure) = &tab.structure {
-            *undo_gen.borrow_mut() = Some(structure.clone());
-
             let h = spin_h.value() as i32;
             let k = spin_k.value() as i32;
             let l = spin_l.value() as i32;
@@ -317,51 +309,17 @@ pub fn build(state: Rc<RefCell<AppState>>) -> (Box, std::boxed::Box<dyn Fn()>) {
 
             match slab::generate_slab(structure, h, k, l, thick, vac) {
                 Ok(new_struct) => {
-                    tab.structure = Some(new_struct);
-                    // A slab has a different cell, a different atom count and
-                    // different indices than the bulk it came from, so every
-                    // cached analysis and the selection describe a structure
-                    // that no longer exists.
-                    tab.interaction.selected.clear();
-                    tab.invalidate_derived();
-                    if let Some(s) = &tab.structure {
-                        crate::utils::console::structure_changed(
-                            &format!(
-                                "Slab ({} {} {}), {} layer(s), {} Å vacuum",
-                                h, k, l, thick, vac
-                            ),
-                            s,
-                        );
-                    }
-                    lbl_gen.set_markup("<span color='green'>Slab generated.</span>");
-                    btn_undo_gen.set_sensitive(true);
+                    let op = format!("Slab ({} {} {}), {} layer(s), {} Å vacuum", h, k, l, thick, vac);
+                    tab.commit(&op, new_struct, crate::state::Edit::Reindexed);
+                    lbl_gen.set_markup(
+                        "<span color='green'>Slab generated.</span> Edit → Undo (Ctrl+Z) restores the bulk.",
+                    );
                 }
                 Err(e) => {
                     crate::utils::console::log_error(&format!("Slab generation failed: {}", e));
                     lbl_gen.set_markup(&format!("<span color='red'>Error: {}</span>", e));
                 }
             }
-        }
-    });
-
-    let state_undo = state.clone();
-    let undo_store_ref = undo_store.clone();
-    let btn_undo_ref = btn_undo.clone();
-    let lbl_undo = lbl_status.clone();
-
-    btn_undo.connect_clicked(move |_| {
-        let mut st = state_undo.borrow_mut();
-        let tab = st.active_tab_mut();
-        if let Some(backup) = undo_store_ref.borrow_mut().take() {
-            tab.structure = Some(backup);
-            // Restoring the bulk invalidates anything derived from the slab.
-            tab.interaction.selected.clear();
-            tab.invalidate_derived();
-            if let Some(s) = &tab.structure {
-                crate::utils::console::structure_changed("Slab undone — bulk restored", s);
-            }
-            lbl_undo.set_text("Undone.");
-            btn_undo_ref.set_sensitive(false);
         }
     });
 
