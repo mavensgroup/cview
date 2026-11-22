@@ -1,5 +1,5 @@
 <div id="cover-page">
-<img src="images/cview.svg" class="cover-logo" alt="CView Logo">
+<span class="cover-logo cview-logo" role="img" aria-label="CView Logo"></span>
 <h1 class="cover-title">CView</h1>
 <p class="cover-subtitle">Crystal Structure Visualization & Analysis</p>
 <div class="cover-divider"></div>
