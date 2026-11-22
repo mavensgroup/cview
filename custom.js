@@ -3,7 +3,6 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // 1. Define Links
     // "index.html" is the rendered version of README.md (The Cover)
-    var logoUrl = path_to_root + "images/cview.svg";
     var homeLink = path_to_root + "index.html";
 
     // 2. COVER PAGE LOGIC (No Sidebar/Menu)
@@ -34,11 +33,11 @@ document.addEventListener("DOMContentLoaded", function() {
             link.className = "sidebar-logo-link";
             link.title = "Go to Cover"; // Tooltip
 
-            // Create the Image
-            var logo = document.createElement("img");
-            logo.src = logoUrl;
-            logo.alt = "CView Logo";
-            logo.className = "sidebar-logo";
+            // The logo (drawn by CSS, see .cview-logo in custom.css)
+            var logo = document.createElement("span");
+            logo.setAttribute("role", "img");
+            logo.setAttribute("aria-label", "CView Logo");
+            logo.className = "sidebar-logo cview-logo";
 
             link.appendChild(logo);
 

@@ -76,12 +76,23 @@ html:has(#cover-page) .page-wrapper {
   display: none !important;
 }
 
-/* LOGO */
+/* LOGO
+   The logo is the SVG used as a mask over a block filled with the theme's
+   text colour, so it follows mdBook's theme picker (an <img> could only
+   follow the system setting). The SVG's transparency carries over: the
+   half-tone facet and the cut-out centre dot. */
+.cview-logo {
+  display: inline-block;
+  aspect-ratio: 1;
+  background-color: var(--fg);
+  -webkit-mask: url("../images/cview.svg") center / contain no-repeat;
+  mask: url("../images/cview.svg") center / contain no-repeat;
+}
+
 #cover-page .cover-logo {
   height: 40vh !important;
   width: auto !important;
   margin-bottom: 2vh !important;
-  filter: drop-shadow(0 10px 15px rgba(0,0,0,0.2));
 }
 
 /* TITLE */
@@ -181,6 +192,7 @@ html:has(#cover-page) .page-wrapper {
 }
 
 .sidebar-logo {
+    background-color: var(--sidebar-fg) !important;
     width: 30%;
     max-width: 180px;
     height: auto;
