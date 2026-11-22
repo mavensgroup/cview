@@ -36,8 +36,8 @@
         <link rel="icon" href="favicon-de23e50b.svg">
         <link rel="shortcut icon" href="favicon-8114d1fc.png">
         <link rel="stylesheet" href="css/variables-8adf115d.css">
-        <link rel="stylesheet" href="css/general-e96d0476.css">
-        <link rel="stylesheet" href="css/chrome-d279d366.css">
+        <link rel="stylesheet" href="css/general-2459343d.css">
+        <link rel="stylesheet" href="css/chrome-ae938929.css">
         <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
@@ -57,10 +57,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-3c102049.js";
+            window.path_to_searchindex_js = "searchindex-869ccf21.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-6b4ea5f4.js"></script>
+        <script src="toc-f492e3cf.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -222,12 +222,12 @@
 
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="cview-crystal-structure-visualization--analysis"><a class="header" href="#cview-crystal-structure-visualization--analysis">CView: Crystal Structure Visualization &amp; Analysis</a></h1>
-<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"><span class="img-wrapper"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></span></label>
-<label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="https://img.shields.io/badge/rust-1.75%2B-orange.svg" alt="Language"><span class="img-wrapper"><img src="https://img.shields.io/badge/rust-1.75%2B-orange.svg" alt="Language"></span></label>
-<label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="https://img.shields.io/badge/Toolkit-GTK4-46a946?logo=gtk&amp;logoColor=white" alt="GTK4"><span class="img-wrapper"><img src="https://img.shields.io/badge/Toolkit-GTK4-46a946?logo=gtk&amp;logoColor=white" alt="GTK4"></span></label>
-<label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="https://img.shields.io/badge/Linux-FCC624?logo=linux&amp;logoColor=black" alt="Linux"><span class="img-wrapper"><img src="https://img.shields.io/badge/Linux-FCC624?logo=linux&amp;logoColor=black" alt="Linux"></span></label>
-<label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="https://img.shields.io/badge/Windows-fcc624?logo=microsoft&amp;logoColor=white" alt="Windows"><span class="img-wrapper"><img src="https://img.shields.io/badge/Windows-fcc624?logo=microsoft&amp;logoColor=white" alt="Windows"></span></label>
-<label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="https://img.shields.io/badge/macOS-fcc624?logo=apple&amp;logoColor=black" alt="macOS"><span class="img-wrapper"><img src="https://img.shields.io/badge/macOS-fcc624?logo=apple&amp;logoColor=black" alt="macOS"></span></label></p>
+<p><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License">
+<img src="https://img.shields.io/badge/rust-1.75%2B-orange.svg" alt="Language">
+<img src="https://img.shields.io/badge/Toolkit-GTK4-46a946?logo=gtk&amp;logoColor=white" alt="GTK4">
+<img src="https://img.shields.io/badge/Linux-FCC624?logo=linux&amp;logoColor=black" alt="Linux">
+<img src="https://img.shields.io/badge/Windows-fcc624?logo=microsoft&amp;logoColor=white" alt="Windows">
+<img src="https://img.shields.io/badge/macOS-fcc624?logo=apple&amp;logoColor=black" alt="macOS"></p>
 <p><strong>CView</strong> is a high-performance crystallographic tool written in <strong>Rust</strong> and <strong>GTK4</strong>. It bridges the gap between structure visualization and <em>ab-initio</em> calculation setup (VASP, QE, SPRKKR).</p>
 <blockquote class="blockquote-tag blockquote-tag-tip">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
@@ -243,7 +243,7 @@ The largest molecule we have tested is of $6000$ atoms core shell polymer.</p>
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
 <p>CView is not just a viewer; it is a <strong>pre-calculation validator</strong>. It focuses on Reciprocal Space and Geometric consistency to prevent wasted CPU hours on incorrect VASP/QE inputs.</p>
 </blockquote>
-<p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="images/screenshot_main.png" alt="Screenshot of CView"><span class="img-wrapper"><img src="images/screenshot_main.png" alt="Screenshot of CView"></span></label></p>
+<p><img src="images/screenshot_main.png" alt="Screenshot of CView"></p>
 <hr>
 <h2 id="why-cview"><a class="header" href="#why-cview">Why CView?</a></h2>
 <div class="table-wrapper">
@@ -255,6 +255,7 @@ The largest molecule we have tested is of $6000$ atoms core shell polymer.</p>
 <tr><td style="text-align: left"><strong>Fast &amp; Lightweight</strong></td><td style="text-align: left">Built on Rust/GTK4. The main viewer needs no GPU; the 3D charge density view and the trajectory player use OpenGL 3.3, which any laptop from the last decade provides.</td></tr>
 <tr><td style="text-align: left"><strong>Analysis First</strong></td><td style="text-align: left">Dedicated tools for <a href="#high-symmetry-k-points-and-k-path">K-Paths</a>, <a href="#surface-slabs-building">Slabs</a>, and <a href="#voids-analysis">Void Analysis</a>.</td></tr>
 <tr><td style="text-align: left"><strong>DFT Ready</strong></td><td style="text-align: left">Native support for VASP (including every step of a <code>vasprun.xml</code>), Quantum Espresso and SPRKKR. LAMMPS dumps are read too — a dump is the same box-plus-coordinates trajectory data as the others, just from a classical-MD code, so it reuses the same reader rather than widening CView’s scope. Relaxations and MD runs play back in the <a href="#trajectories-relaxation-and-md">Trajectory Player</a>.</td></tr>
+<tr><td style="text-align: left"><strong>Magnetism</strong></td><td style="text-align: left">Moments from VASP, Quantum Espresso, magnetic CIF and mumax3/OOMMF files shown as colour-coded arrows; build antiferromagnetic cells from a propagation vector and write the <code>MAGMOM</code> / <code>starting_magnetization</code> for the calculation. See <a href="#magnetism">Magnetism</a>.</td></tr>
 <tr><td style="text-align: left"><strong>Publication Quality</strong></td><td style="text-align: left">Export high-resolution PNG, PDF, and SVG figures with Cairo-based rendering, and journal-ready <a href="#3d-isosurfaces">3D charge density figures</a> at a physical size and dpi.</td></tr>
 </tbody>
 </table>
@@ -270,6 +271,7 @@ The largest molecule we have tested is of $6000$ atoms core shell polymer.</p>
 <li><strong><a href="#xrd-simulation">XRD Simulation</a></strong>: Structure factors and powder diffraction patterns.</li>
 <li><strong><a href="#surface-slabs-building">Surface Slabs</a></strong>: Creating vacuum-padded slabs for surface science.</li>
 <li><strong><a href="#charge-density-visualization">Charge Density</a></strong>: Charge Density analysis</li>
+<li><strong><a href="#magnetism">Magnetism</a></strong>: Magnetic moments, ordered cells and spin textures</li>
 </ul>
 </li>
 <li><strong><a href="tutorials">Tutorials</a></strong>: To Do.</li>
@@ -629,12 +631,14 @@ CView automatically detects the file type based on extension and content. You ca
 </thead>
 <tbody>
 <tr><td style="text-align: left"><strong>CIF</strong></td><td style="text-align: left"><code>.cif</code></td><td style="text-align: left">Standard Crystallographic Information Files.</td></tr>
-<tr><td style="text-align: left"><strong>VASP</strong></td><td style="text-align: left"><code>POSCAR</code>, <code>CONTCAR</code>, <code>.vasp</code></td><td style="text-align: left">Standard VASP structure inputs and outputs.</td></tr>
-<tr><td style="text-align: left"><strong>VASP run</strong></td><td style="text-align: left"><code>vasprun.xml</code> (any name; recognised by content)</td><td style="text-align: left">Every ionic step of a relaxation or MD run, with its energy and largest force.</td></tr>
-<tr><td style="text-align: left"><strong>Quantum Espresso</strong></td><td style="text-align: left"><code>.in</code>, <code>.out</code>, <code>.pwi</code>, <code>.qe</code></td><td style="text-align: left">Inputs, and every geometry of a relax, vc-relax or MD output (starting with the input structure), with energies and forces.</td></tr>
+<tr><td style="text-align: left"><strong>Magnetic CIF</strong></td><td style="text-align: left"><code>.mcif</code> (or a <code>.cif</code> with magnetic operations)</td><td style="text-align: left">Magnetic space-group operations and site moments, shown as arrows. See <a href="#magnetism">Magnetism</a>.</td></tr>
+<tr><td style="text-align: left"><strong>VASP</strong></td><td style="text-align: left"><code>POSCAR</code>, <code>CONTCAR</code>, <code>.vasp</code></td><td style="text-align: left">Standard VASP structure inputs and outputs. Magnetic moments are read from an <code>INCAR</code> or <code>OUTCAR</code> in the same folder.</td></tr>
+<tr><td style="text-align: left"><strong>VASP run</strong></td><td style="text-align: left"><code>vasprun.xml</code> (any name; recognised by content)</td><td style="text-align: left">Every ionic step of a relaxation or MD run, with its energy and largest force, and its magnetic moments.</td></tr>
+<tr><td style="text-align: left"><strong>Quantum Espresso</strong></td><td style="text-align: left"><code>.in</code>, <code>.out</code>, <code>.pwi</code>, <code>.qe</code></td><td style="text-align: left">Inputs, and every geometry of a relax, vc-relax or MD output (starting with the input structure), with energies, forces and magnetic moments.</td></tr>
 <tr><td style="text-align: left"><strong>LAMMPS</strong></td><td style="text-align: left"><code>.dump</code>, <code>.lammpstrj</code>, <code>.dat</code>, any name starting with <code>ITEM: TIMESTEP</code></td><td style="text-align: left">Text dumps: wrapped, scaled or unwrapped positions; orthogonal or triclinic boxes; every frame. Species come from an <code>element</code> or <code>mass</code> column, otherwise atoms are shown as <code>Type n</code>.</td></tr>
 <tr><td style="text-align: left"><strong>SPR-KKR</strong></td><td style="text-align: left"><code>.pot</code>, <code>.pot_new</code>, <code>.sys</code></td><td style="text-align: left">Munich SPR-KKR potential and system files. Chemical disorder (CPA sites with several occupants) is read as mixed sites and written back as CPA sites. Reading needs nothing extra (<code>.pot</code>, <code>.pot_new</code>, <code>.pot_out</code>). Writing uses CView’s own writer by default; set the environment variable <code>CVIEW_PYTHON</code> to a Python that has ase2sprkkr to write with ase2sprkkr instead — an optional improvement, never a requirement (see <a href="#exporting-a-disordered-alloy-to-spr-kkr">Building Structures</a>).</td></tr>
-<tr><td style="text-align: left"><strong>XYZ</strong></td><td style="text-align: left"><code>.xyz</code></td><td style="text-align: left">Cartesian coordinates (Standard and Extended XYZ).</td></tr>
+<tr><td style="text-align: left"><strong>XYZ</strong></td><td style="text-align: left"><code>.xyz</code></td><td style="text-align: left">Cartesian coordinates (Standard and Extended XYZ, including a <code>magmoms</code> column).</td></tr>
+<tr><td style="text-align: left"><strong>OVF</strong></td><td style="text-align: left"><code>.ovf</code>, <code>.omf</code>, <code>.ohf</code></td><td style="text-align: left">Magnetization textures from mumax3, OOMMF and Spirit (OVF 1.0 and 2.0, text or binary), one arrow per mesh cell. See <a href="#ovf-files-mumax3-oommf-spirit">Magnetism</a>.</td></tr>
 <tr><td style="text-align: left"><strong>PDB</strong></td><td style="text-align: left"><code>.pdb</code>, <code>.ent</code></td><td style="text-align: left">Protein Data Bank records. Reads the <code>CRYST1</code> cell, <code>ATOM</code>/<code>HETATM</code> sites, occupancies and formal charges; the first <code>MODEL</code> only. Files without a real cell load as non-periodic molecules.</td></tr>
 </tbody>
 </table>
@@ -674,6 +678,10 @@ CView automatically detects the file type based on extension and content. You ca
 <li>XYZ (*.xyz)</li>
 <li>PDB (*.pdb)</li>
 </ul>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>A structure with magnetic moments keeps them in some formats: a saved <strong>POSCAR</strong> also gets the <code>ISPIN</code>/<code>MAGMOM</code> tags in an <code>INCAR</code> beside it (only when there is none), <strong>Quantum Espresso</strong> input gets one species per moment with <code>starting_magnetization</code>, and <strong>XYZ</strong> gets a <code>magmoms</code> column. CIF output does not carry moments. See <a href="#writing-the-moments-for-dft">Magnetism</a>.</p>
+</blockquote>
 <h2 id="visualization-controls"><a class="header" href="#visualization-controls">Visualization Controls</a></h2>
 <p>Once a structure is loaded, the View menu provides tools to orient and inspect the crystal lattice.</p>
 <h3 id="standard-views"><a class="header" href="#standard-views">Standard Views</a></h3>
@@ -712,6 +720,7 @@ CView automatically detects the file type based on extension and content. You ca
 <li><strong>Bond Valence</strong>: BVS-based coloring (see <a href="#bond-valence-sum-bvs">BVS Guide</a>)</li>
 <li><strong>Element Colors</strong>: Per-element colour, transparency, and polyhedra controls</li>
 </ol>
+<p>Under <strong>Appearance</strong>, a structure with magnetic moments also uses the <strong>Magnetic Moments</strong> group: show or hide the arrows, draw them without the atom spheres, set their length and choose how they are coloured. See <a href="#showing-the-moments">Magnetism</a>.</p>
 <h3 id="color-modes"><a class="header" href="#color-modes">Color Modes</a></h3>
 <p>CView offers two coloring schemes, accessible via the <strong>Bond Valence</strong> expander’s <strong>Color Mode</strong> dropdown:</p>
 <div class="table-wrapper">
@@ -850,7 +859,10 @@ with tolerance $t$ (default 1.15, set in Preferences and in the Bond Rules windo
 <tr><td style="text-align: left"><code>Ctrl + E</code></td><td style="text-align: left">Export image (PNG/PDF/SVG)</td></tr>
 <tr><td style="text-align: left"><code>Ctrl + ,</code></td><td style="text-align: left">Preferences</td></tr>
 <tr><td style="text-align: left"><code>Ctrl + W</code></td><td style="text-align: left">Close tab</td></tr>
-<tr><td style="text-align: left"><code>Ctrl + Z</code></td><td style="text-align: left">Undo (e.g. atom deletion)</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + Z</code></td><td style="text-align: left">Undo the last structure edit (delete, supercell, slab, substitution, cell toggle…)</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + Shift + Z</code> or <code>Ctrl + Y</code></td><td style="text-align: left">Redo</td></tr>
+<tr><td style="text-align: left"><code>Delete</code></td><td style="text-align: left">Delete the selected atoms</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + A</code> / <code>Esc</code></td><td style="text-align: left">Select all atoms / clear the selection</td></tr>
 <tr><td style="text-align: left"><code>T</code></td><td style="text-align: left">Toggle Primitive ↔ Conventional cell (canvas focused)</td></tr>
 <tr><td style="text-align: left"><code>Ctrl + Shift + C</code></td><td style="text-align: left">Matrix transformation tool</td></tr>
 <tr><td style="text-align: left"><code>Ctrl + M</code></td><td style="text-align: left">Add Miller plane</td></tr>
@@ -1303,13 +1315,16 @@ Where:</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="building-structures"><a class="header" href="#building-structures">Building Structures</a></h1>
 <p>CView provides several tools to manipulate and construct crystal structures. These operations are accessible via the <strong>Structure</strong> menu and enable you to prepare input geometries for <em>ab-initio</em> calculations.</p>
-<p>Supercell, Basis, Atom Instances and Slab are the four tabs of one <strong>Structure</strong> window. Each menu entry opens the window on its own tab. The first three share a <strong>Preview</strong> pane: a flat schematic of the cell in the same style as the Slab cutting-plane view (white canvas, element-coloured dots, wireframe cell, the same fixed isometric orientation). It is a preview, not the 3D viewport, so it has no shading or bonds. Highlighted atoms get a dark ring:</p>
+<p>Supercell, Basis, Atoms, Atom Instances, Magnetic and Slab are the six tabs of one <strong>Structure</strong> window. Each menu entry opens the window on its own tab. All but Slab share a <strong>Preview</strong> pane: a flat schematic of the cell in the same style as the Slab cutting-plane view (white canvas, element-coloured dots, wireframe cell, the same fixed isometric orientation). It is a preview, not the 3D viewport, so it has no shading or bonds. Highlighted atoms get a dark ring:</p>
 <ul>
 <li><strong>Supercell</strong> previews the structure the current matrix would produce, before you press Transform.</li>
 <li><strong>Basis</strong> highlights the atoms an action would touch: the atoms selected in the main view, and every atom of the element typed into <em>Find</em>.</li>
+<li><strong>Atoms</strong> previews the structure with the atom added, moved or replaced, and rings the atoms that change.</li>
 <li><strong>Atom Instances</strong> highlights the rows selected in the list.</li>
+<li><strong>Magnetic</strong> previews the structure with the moments (and, for a propagation vector, the larger cell) you have set up, with magnetic arrows.</li>
 </ul>
 <p>The window is not modal, so you can keep it open next to the main view.</p>
+<p>Every change to the structure (from this window, the Space Group editor, deleting atoms, the primitive/conventional toggle or the Trajectory Player) is one step of <strong>Edit → Undo</strong> (<code>Ctrl + Z</code>) and <strong>Edit → Redo</strong> (<code>Ctrl + Shift + Z</code>). The last 50 steps are kept for each tab.</p>
 <hr>
 <h2 id="building-from-a-space-group"><a class="header" href="#building-from-a-space-group">Building from a Space Group</a></h2>
 <p><strong>File → New from Space Group…</strong> (Ctrl+N) builds a crystal the way it is tabulated: a space group, the cell parameters and the unique sites (the asymmetric unit). <strong>Structure → Space Group &amp; Sites…</strong> opens the same window on the current structure, so you can change the cell, swap an element or move a site and apply the result to the tab (Ctrl+Z undoes it).</p>
@@ -1403,7 +1418,18 @@ Where:</p>
 <li>Enter the replacement element symbol</li>
 <li>Click <strong>Change element</strong></li>
 </ol>
-<p><strong>Atom Removal</strong>: Press <code>Delete</code> after selecting atoms to create vacancies or remove unwanted species.</p>
+<p><strong>Atom Removal</strong>: Press <code>Delete</code> (or <strong>Edit → Delete Selected</strong>) after selecting atoms to create vacancies or remove unwanted species. <code>Ctrl + A</code> selects every atom drawn, <code>Esc</code> clears the selection.</p>
+<hr>
+<h2 id="adding-moving-and-replacing-atoms"><a class="header" href="#adding-moving-and-replacing-atoms">Adding, Moving and Replacing Atoms</a></h2>
+<p>The <strong>Atoms</strong> tab (<strong>Edit → Add, Move or Replace Atoms…</strong> or <strong>Structure → Atoms…</strong>) edits single atoms: it adds them and moves them by typed coordinates, and changes the element of the selected ones. The <strong>Coordinates</strong> card chooses fractional or Cartesian (Å) input for both cards below it; switching converts what is already typed. Fractional fields accept fractions such as <code>1/3</code>. A structure with no cell (a plain XYZ molecule) is always Cartesian.</p>
+<p><strong>Add an atom</strong>: type the element and its position, or pick one of the <strong>interstitial sites</strong> found by Analysis → Void Analysis (the list appears once sites have been screened for the tab; picking one also fills in the screened ion when no element is typed). The preview shows the new atom ringed, and the line under the fields gives the nearest other atom and its distance, in red when the two would overlap (closer than half the sum of their covalent radii). <strong>Add atom</strong> appends it and leaves it selected, ready to move.</p>
+<p><strong>Move the selected atoms</strong>: select atoms in the main view, then</p>
+<ul>
+<li><strong>Shift by</strong> moves all of them by the same vector (fractional or Å). The fields keep their values after <strong>Move</strong>, so pressing it again repeats the step.</li>
+<li><strong>Move to</strong> places a single selected atom at a position; the fields start at its current one.</li>
+</ul>
+<p>The moved atoms stay selected. Positions are kept exactly as typed, never wrapped into the cell; an atom pushed more than half a cell outside it is not drawn, and the status line says so (<strong>Basis → Standardize positions</strong> wraps it back in).</p>
+<p><strong>Replace the selected atoms</strong>: type the new element; the status line says what will change (e.g. <code>2 Ti, 1 O → Zr</code>) and the preview shows it. <strong>Replace</strong> changes them and keeps them selected. To replace every atom of an element, only some of them, or to mix an element into a site as a partial occupancy, use the <strong>Basis</strong> tab described above.</p>
 <hr>
 <h2 id="cell-type-conversion"><a class="header" href="#cell-type-conversion">Cell Type Conversion</a></h2>
 <h3 id="primitive-vs-conventional-cells"><a class="header" href="#primitive-vs-conventional-cells">Primitive vs. Conventional Cells</a></h3>
@@ -1447,6 +1473,9 @@ Where:</p>
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
 <p>These overrides are not written to structure files. Use <code>View → Hide Symmetric Basis</code> or <code>Ctrl + Shift + B</code> to toggle visible periodic images.</p>
 </blockquote>
+<hr>
+<h2 id="magnetic-moments-and-order"><a class="header" href="#magnetic-moments-and-order">Magnetic Moments and Order</a></h2>
+<p>The <strong>Magnetic</strong> tab (<code>Structure → Magnetic Moments...</code>) sets a moment on each atom and builds antiferromagnetic cells from a propagation vector (ferro-, A-, C- and G-type presets), then gives the INCAR tags for the result. See <a href="#magnetism">Magnetism</a>.</p>
 <hr>
 <h2 id="related-operations"><a class="header" href="#related-operations">Related Operations</a></h2>
 <p>For creating larger structures from unit cells, see:</p>
@@ -1596,6 +1625,183 @@ This isolates the slab in the z-direction, preventing spurious interactions betw
 <h3 id="duplicate-removal"><a class="header" href="#duplicate-removal">Duplicate Removal</a></h3>
 <p>The code includes a proximity check (<code>remove_duplicate_atoms</code> with <code>TOLERANCE = 1e-5</code>) to ensure that atoms lying exactly on cell boundaries are not double-counted during the wrapping process.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="magnetism"><a class="header" href="#magnetism">Magnetism</a></h1>
+<p>CView shows magnetic moments as arrows through the atoms, builds antiferromagnetic and other ordered cells, and writes the moments back out for VASP and Quantum Espresso. It handles collinear structures (ferro-, antiferro- and ferrimagnets), canted and non-collinear ones, and spin textures such as spirals and skyrmions.</p>
+<p>A moment is stored on each atom as a Cartesian vector in μB. Most formats carry none, so nothing changes for a structure without moments.</p>
+<hr>
+<h2 id="where-the-moments-come-from"><a class="header" href="#where-the-moments-come-from">Where the moments come from</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Source</th><th style="text-align: left">What is read</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left"><strong>POSCAR / CONTCAR / <code>.vasp</code></strong></td><td style="text-align: left">The <strong>INCAR</strong> or <strong>OUTCAR</strong> in the same folder (the file names are matched without regard to case). A CONTCAR takes the OUTCAR’s final moments first and the INCAR’s <code>MAGMOM</code> as a fallback; a POSCAR takes the INCAR first.</td></tr>
+<tr><td style="text-align: left"><strong><code>vasprun.xml</code></strong></td><td style="text-align: left"><code>MAGMOM</code> from the run’s parameters on every frame. If an OUTCAR with one <code>magnetization</code> table per ionic step sits beside it, those computed moments are used per frame instead.</td></tr>
+<tr><td style="text-align: left"><strong>Quantum Espresso output</strong></td><td style="text-align: left">The last “Magnetic moment per site” block of each geometry (collinear, or three values per atom for a non-collinear run).</td></tr>
+<tr><td style="text-align: left"><strong>Magnetic CIF</strong></td><td style="text-align: left"><code>.mcif</code>, or a <code>.cif</code> with magnetic symmetry operations. See <a href="#magnetic-cif-mcif">below</a>.</td></tr>
+<tr><td style="text-align: left"><strong>Extended XYZ</strong></td><td style="text-align: left">A <code>magmoms</code> (or <code>initial_magmoms</code>) column, one value (collinear, along z) or three per atom. The XYZ writer saves the moments the same way.</td></tr>
+<tr><td style="text-align: left"><strong>OVF</strong></td><td style="text-align: left">The magnetization of a mumax3, OOMMF or Spirit run. See <a href="#ovf-files-mumax3-oommf-spirit">below</a>.</td></tr>
+</tbody>
+</table>
+</div>
+<p>The System Log says where the moments came from, for example <em>Magnetic moments from the INCAR MAGMOM beside the file</em>.</p>
+<h3 id="vasp-details"><a class="header" href="#vasp-details">VASP details</a></h3>
+<ul>
+<li><code>MAGMOM</code> is used only when VASP would use it: <code>ISPIN = 2</code>, or a non-collinear run (<code>LNONCOLLINEAR</code> or <code>LSORBIT</code>). With the default <code>ISPIN = 1</code> it is ignored, so no arrows appear.</li>
+<li><code>N*x</code> repeats (<code>2*5.0 3*0</code>), comments, <code>;</code> between tags and <code>\</code> line continuations are handled.</li>
+<li>The number of values must match the structure: N for a collinear run, 3N for a non-collinear one. Otherwise the file is skipped rather than guessed at.</li>
+<li><code>SAXIS</code> is applied, so a collinear <code>MAGMOM</code> along a rotated spin axis becomes the right Cartesian vector.</li>
+</ul>
+<h3 id="magnetic-cif-mcif"><a class="header" href="#magnetic-cif-mcif">Magnetic CIF (mCIF)</a></h3>
+<p>The reader uses the magnetic space-group operations and centring translations of the file, each with its time-reversal flag (<code>x,y,z,+1</code>, <code>-x,y,z,-1</code>). Site moments in <code>_atom_site_moment.crystalaxis_x/y/z</code> are in μB along unit vectors parallel to <strong>a</strong>, <strong>b</strong>, <strong>c</strong>, as the standard defines them, and are spread over the symmetry-equivalent atoms as axial vectors:</p>
+<ul>
+<li>a rotation turns the moment;</li>
+<li>inversion leaves it unchanged, and a mirror keeps the component along the mirror normal and reverses the components in the mirror plane (a moment is an axial vector); and</li>
+<li>time reversal (<code>-1</code>) reverses it.</li>
+</ul>
+<p>That is what makes a body-centred antiferromagnet such as MnF₂ come out with opposite moments on the corner and centre atoms.</p>
+<p><img src="images/magnetism_mnf2.png" alt="MnF₂ read from a magnetic CIF: red arrows on the corner Mn atoms, a blue one on the body-centre atom">
+The Bilbao <strong>MAGNDATA</strong> database provides published structures in this format.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>A plain <code>.cif</code> that has <code>_atom_site_moment</code> but no magnetic operations is expanded with the ordinary symmetry and no time reversal, so an antiferromagnet would come out ferromagnetic. The System Log warns when this happens. Such an order needs <a href="#building-a-magnetic-order">the Magnetic tab</a> instead.</p>
+</blockquote>
+<h3 id="ovf-files-mumax3-oommf-spirit"><a class="header" href="#ovf-files-mumax3-oommf-spirit">OVF files (mumax3, OOMMF, Spirit)</a></h3>
+<p><code>.ovf</code>, <code>.omf</code> and <code>.ohf</code> files hold a magnetization on a mesh of cells, usually nanometres apart. CView reads OVF 1.0 and 2.0, regular and irregular meshes, as text or binary (4 or 8 bytes), and shows one site per cell at the cell centre. Positions are converted from the file’s mesh unit to Å.</p>
+<ul>
+<li>Cells where the magnetization is zero (outside the magnet in a mumax3 geometry) are left out, so a disc reads as a disc.</li>
+<li>A magnetization in A/m is divided by its largest magnitude, so you always see <strong>m = M/Ms</strong>. Structure Info shows the sum and the average of m, without a μB unit.</li>
+<li>Meshes above 40 000 cells are thinned (every k-th cell in x and y) to keep the CPU renderer fast; the System Log reports it.</li>
+<li>Only the first segment is read, and only vector fields: a scalar field (an energy density) is refused with a message.</li>
+<li>Opening a mesh switches on <strong>Arrows only</strong> and sets the arrow length to about one cell spacing, with bonds and periodic images off.</li>
+</ul>
+<p><img src="images/magnetism_skyrmion.png" alt="A Néel skyrmion in Direction colouring, arrows only"></p>
+<p>A mumax3 run’s <code>m000000.ovf, m000001.ovf, …</code> open as separate tabs.</p>
+<hr>
+<h2 id="showing-the-moments"><a class="header" href="#showing-the-moments">Showing the moments</a></h2>
+<p>The <strong>Magnetic Moments</strong> group in the sidebar (under <strong>Appearance</strong>) controls the arrows for the active tab. The settings are per tab and are not saved between sessions.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Control</th><th style="text-align: left">Effect</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left"><strong>Show Moment Arrows</strong></td><td style="text-align: left">Draw the arrows.</td></tr>
+<tr><td style="text-align: left"><strong>Arrows only</strong></td><td style="text-align: left">Hide the spheres of atoms that carry a moment, leaving the arrows at their full length. Use it for spin textures, where the spheres hide the pattern. Atoms without a moment (a substrate, say) stay visible.</td></tr>
+<tr><td style="text-align: left"><strong>Length (Å/μB)</strong></td><td style="text-align: left">Arrow length per μB. Each end of an arrow sticks out of the atom by half of</td></tr>
+<tr><td style="text-align: left"><strong>Color by</strong></td><td style="text-align: left">How the arrows are coloured (below).</td></tr>
+<tr><td style="text-align: left"><strong>Up / Down</strong> colours</td><td style="text-align: left">The two colours used by the Up / Down mode (<strong>Color</strong> in Single mode).</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Color by:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Mode</th><th style="text-align: left">Use</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left"><strong>Auto</strong> (default)</td><td style="text-align: left">Up / Down when all moments are collinear, Direction otherwise.</td></tr>
+<tr><td style="text-align: left"><strong>Up / Down</strong></td><td style="text-align: left">Red along the structure’s magnetic axis, blue against it. The axis is the line of the largest moment (oriented towards +z), so antiferromagnets and ferrimagnets split into their sublattices whichever way the spins point.</td></tr>
+<tr><td style="text-align: left"><strong>Direction</strong></td><td style="text-align: left">Hue from the in-plane angle, white at +z and black at −z, the usual spin-texture colouring.</td></tr>
+<tr><td style="text-align: left"><strong>Single</strong></td><td style="text-align: left">One colour for every arrow.</td></tr>
+</tbody>
+</table>
+</div>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>Near-white arrows (moments close to +z in Direction mode) are hard to see on the default light background. A grey or dark background helps.</p>
+</blockquote>
+<p><strong>Structure Info</strong> lists a moment column and the total moment: <code>m_z</code> when every moment is collinear along z, the full vector otherwise. An antiferromagnet shows a total of 0; a ferrimagnet shows its net moment.</p>
+<hr>
+<h2 id="building-a-magnetic-order"><a class="header" href="#building-a-magnetic-order">Building a magnetic order</a></h2>
+<p><strong>Structure → Magnetic Moments…</strong> opens the <strong>Magnetic</strong> tab of the Structure window. It sets moments on the atoms of the current cell and, with a propagation vector, builds the larger cell an antiferromagnetic order needs. The Preview pane shows the result with its arrows.</p>
+<p><img src="images/magnetism_tab.png" alt="The Magnetic tab of the Structure window with the preview of a G-type cell"></p>
+<h3 id="site-moments"><a class="header" href="#site-moments">Site moments</a></h3>
+<p>A table lists every atom with its moment and phase φ.</p>
+<ol>
+<li><strong>Pick rows</strong>: select them in the list (Ctrl or Shift for several), or use the <em>Pick rows</em> menu for the <strong>main-view selection</strong>, <strong>all atoms</strong>, or <strong>all of one element</strong>.</li>
+<li>Enter <strong>mx, my, mz</strong> (μB, Cartesian) and a phase, then press <strong>Set on picked rows</strong>. <strong>Reverse</strong> flips the picked moments; <strong>No moment</strong> clears them.</li>
+</ol>
+<p>The phase is used by the propagation vector below: 180° reverses a site.</p>
+<h3 id="propagation-vector"><a class="header" href="#propagation-vector">Propagation vector</a></h3>
+<p>Antiferromagnets often order on a cell larger than the chemical one, which a plain CIF cannot store. Neutron-diffraction papers describe the order with a <strong>propagation vector k</strong> (in reciprocal-lattice units). CView builds it as</p>
+<blockquote>
+<p>m_j(R) = m_j · cos(2π k·R + φ_j)</p>
+</blockquote>
+<p>for site <em>j</em> moved by the lattice vector <strong>R</strong>. The new cell is the old one multiplied along each axis by the denominator of the matching component of <strong>k</strong> (up to 12).</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Preset</th><th style="text-align: left">k</th><th style="text-align: left">Order (one magnetic atom per cubic cell)</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left">Ferromagnetic</td><td style="text-align: left">(0, 0, 0)</td><td style="text-align: left">All parallel</td></tr>
+<tr><td style="text-align: left">A-type</td><td style="text-align: left">(0, 0, ½)</td><td style="text-align: left">Ferromagnetic planes, alternating along c</td></tr>
+<tr><td style="text-align: left">C-type</td><td style="text-align: left">(½, ½, 0)</td><td style="text-align: left">Antiferromagnetic planes, chains along c</td></tr>
+<tr><td style="text-align: left">G-type</td><td style="text-align: left">(½, ½, ½)</td><td style="text-align: left">Every neighbour antiparallel</td></tr>
+</tbody>
+</table>
+</div>
+<p>Components accept fractions such as <code>1/2</code> or <code>1/3</code>. A component of ⅓ gives a modulated wave (+m, −m/2, −m/2).</p>
+<ul>
+<li>With <strong>k = 0</strong> the cell and atom order stay as they are and only the moments are set (one undo step; selection is kept).</li>
+<li>With several magnetic sites per cell (rock-salt NiO, for example) use the phases: 180° on one sublattice gives the AFM-II pattern.</li>
+<li>The presets assume one magnetic atom per (pseudo)cubic cell, as on the B site of a perovskite.</li>
+</ul>
+<p>A line under the controls gives the new cell size, atom count and net moment. <strong>Apply</strong> builds the structure (<strong>Edit → Undo</strong> reverses it), <strong>Reload from structure</strong> refills the table from the current structure.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Only single-<strong>k</strong> orders are built: collinear or amplitude-modulated. A helix needs two components 90° out of phase, and an incommensurate <strong>k</strong> has no finite cell.</p>
+</blockquote>
+<h3 id="example-g-type-lafeo₃"><a class="header" href="#example-g-type-lafeo₃">Example: G-type LaFeO₃</a></h3>
+<ol>
+<li>Open a cubic LaFeO₃ cell and choose <strong>Structure → Magnetic Moments…</strong>.</li>
+<li>In <em>Pick rows</em> choose <strong>All Fe</strong>, enter <code>mz = 4</code>, press <strong>Set on picked rows</strong>.</li>
+<li>Choose the <strong>G-type</strong> preset. The preview shows a 2×2×2 cell with alternating arrows; the net moment is 0.</li>
+<li>Press <strong>Apply</strong>.</li>
+</ol>
+<hr>
+<h2 id="writing-the-moments-for-dft"><a class="header" href="#writing-the-moments-for-dft">Writing the moments for DFT</a></h2>
+<h3 id="vasp"><a class="header" href="#vasp">VASP</a></h3>
+<p>The <strong>DFT input</strong> card of the Magnetic tab shows the INCAR tags for the result, with <strong>Copy INCAR tags</strong>:</p>
+<pre><code>ISPIN = 2
+MAGMOM = 2*3.6 2*-3.6 4*0
+</code></pre>
+<ul>
+<li><code>MAGMOM</code> follows the order CView writes a POSCAR in: atoms are grouped by element, with the symbols in alphabetical order (Fe before O), and atoms of one element keep their order. Anything written beside a POSCAR must follow it, and these tags do.</li>
+<li>Moments collinear along some axis other than z are written as their component along that axis, with a comment in the output. With spin-orbit coupling, also set <code>SAXIS</code> to it.</li>
+<li>Non-collinear moments get <code>LNONCOLLINEAR = .TRUE.</code> and three <code>MAGMOM</code> values per atom.</li>
+</ul>
+<p>When you <strong>save a POSCAR</strong> (File → Save As) from a structure with moments, CView also writes these tags into an <code>INCAR</code> in the same folder, but <strong>only if there is none</strong>. An existing INCAR is never touched; the tags go to Structure Info instead.</p>
+<h3 id="quantum-espresso"><a class="header" href="#quantum-espresso">Quantum Espresso</a></h3>
+<p>Saving as <code>.in</code> writes the magnetization into the <code>&amp;SYSTEM</code> block. pw.x sets the starting magnetization <strong>per species</strong>, so CView splits each element into one species per distinct moment (<code>Fe1</code>, <code>Fe2</code>), with <code>nspin = 2</code> and a signed <code>starting_magnetization(i)</code>. Non-collinear moments get <code>noncolin = .true.</code> and <code>angle1</code>/<code>angle2</code>.</p>
+<p><code>starting_magnetization</code> is a fraction of the valence charge, not μB. CView scales the <strong>largest moment to 0.5</strong> and keeps the others in proportion; the file says so in a comment, so adjust the values for your pseudopotentials.</p>
+<p>pw.x allows at most <strong>10 species</strong>. A texture with more distinct moments (a skyrmion, a spiral) is grouped: each magnetic element gets a share of the 10 slots, its moments are clustered into that many groups, and each group starts from its mean moment. The file and the System Log say when this happened.</p>
+<p>Species labels such as <code>Fe1</code>, <code>Fe_up</code> are read back as the element, so a file written by CView opens again. The starting magnetization of a QE <em>input</em> is not read back as moments, however: it is a fraction, not μB.</p>
+<hr>
+<h2 id="what-editing-does-to-the-moments"><a class="header" href="#what-editing-does-to-the-moments">What editing does to the moments</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Operation</th><th style="text-align: left">Moments</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left">Supercell, moving atoms, deleting atoms</td><td style="text-align: left">Kept with their atoms.</td></tr>
+<tr><td style="text-align: left">Changing an atom’s element, or substituting an element</td><td style="text-align: left">Dropped for those atoms: the new species’ moment is not known.</td></tr>
+<tr><td style="text-align: left">Slab, primitive/conventional conversion, rebuilding from a space group</td><td style="text-align: left"><strong>Lost.</strong> These rebuild the atoms from element and position. The System Log warns when an edit drops every moment.</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="limits"><a class="header" href="#limits">Limits</a></h2>
+<ul>
+<li>The arrows are drawn in the main view and in the Structure window preview only; the GPU windows (Trajectory Player, 3D charge density) do not show them.</li>
+<li>Antiferromagnetic orders on a larger cell are only built from a single propagation vector. Searching all magnetic subgroups is not done: take a published structure from MAGNDATA as an mCIF instead.</li>
+<li>There is no topological charge or skyrmion builder yet; see the <a href="#to-do">To Do</a> list.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="to-do"><a class="header" href="#to-do">To Do</a></h1>
 <p>Planned features, roughly in priority order. Contributions are welcome —
 open an issue before starting on one so work isn’t duplicated.</p>
@@ -1603,14 +1809,30 @@ open an issue before starting on one so work isn’t duplicated.</p>
 <ul>
 <li><input disabled="" type="checkbox" checked=""> <strong>Build a structure from a space group</strong> and its unique atomic sites
 (asymmetric unit), and edit an existing structure the same way.</li>
-<li><input disabled="" type="checkbox"> <strong>Add and move atoms</strong> interactively, with undo.</li>
+<li><input disabled="" type="checkbox" checked=""> <strong>Add, move and replace atoms</strong> by typed coordinates or at an
+interstitial site, with undo and redo for every structure edit.</li>
+<li><input disabled="" type="checkbox"> Drag atoms with the mouse.</li>
 </ul>
 <h2 id="visualization"><a class="header" href="#visualization">Visualization</a></h2>
 <ul>
 <li><input disabled="" type="checkbox" checked=""> <strong>Bond rules per element pair</strong> (minimum/maximum distance, boundary
 handling), shared by bonds, polyhedra and bond valence.</li>
-<li><input disabled="" type="checkbox"> <strong>Magnetic moments as arrows</strong>, read from VASP (<code>MAGMOM</code>, OUTCAR),
-Quantum Espresso and magnetic CIF.</li>
+<li><input disabled="" type="checkbox" checked=""> <strong>Magnetic moments as arrows</strong>, read from VASP (INCAR <code>MAGMOM</code> or
+OUTCAR beside a POSCAR/CONTCAR, vasprun.xml), Quantum Espresso output,
+magnetic CIF (<code>.mcif</code>, with the magnetic space-group operations) and
+extended XYZ.</li>
+<li><input disabled="" type="checkbox" checked=""> <strong>Magnetic order</strong>: set moments per site, build antiferromagnetic
+cells from a propagation vector (FM, A-, C-, G-type presets), and write
+them for VASP (<code>MAGMOM</code>, in POSCAR order) and Quantum Espresso (one
+species per moment, <code>starting_magnetization</code>).</li>
+<li><input disabled="" type="checkbox" checked=""> <strong>Spin textures</strong> (spirals, skyrmions): colour by direction, arrows
+without atoms, and Quantum Espresso input that stays within pw.x’s
+species limit.</li>
+<li><input disabled="" type="checkbox" checked=""> <strong>OVF files</strong> (mumax3, OOMMF, Spirit): magnetization textures shown
+as arrows.</li>
+<li><input disabled="" type="checkbox"> Topological charge of a spin texture; build skyrmion lattices; play a
+series of OVF snapshots.</li>
+<li><input disabled="" type="checkbox"> Magnetic moment arrows in the 3D windows.</li>
 <li><input disabled="" type="checkbox"> <strong>Thermal ellipsoids</strong> from anisotropic displacement parameters in CIF.</li>
 <li><input disabled="" type="checkbox"> Overlay two structures in one view.</li>
 </ul>
@@ -1666,11 +1888,11 @@ without opening the window.</li>
 
         <script src="elasticlunr-ef4e11c1.min.js"></script>
         <script src="mark-09e88c2c.min.js"></script>
-        <script src="searcher-09f2665d.js"></script>
+        <script src="searcher-c2a407aa.js"></script>
 
         <script src="clipboard-1626706a.min.js"></script>
         <script src="highlight-abc7f01d.js"></script>
-        <script src="book-609e4cb8.js"></script>
+        <script src="book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
         <script src="src/custom-526988bf.js"></script>

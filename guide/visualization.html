@@ -35,8 +35,8 @@
         <link rel="icon" href="../favicon-de23e50b.svg">
         <link rel="shortcut icon" href="../favicon-8114d1fc.png">
         <link rel="stylesheet" href="../css/variables-8adf115d.css">
-        <link rel="stylesheet" href="../css/general-e96d0476.css">
-        <link rel="stylesheet" href="../css/chrome-d279d366.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
         <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
@@ -56,10 +56,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-3c102049.js";
+            window.path_to_searchindex_js = "../searchindex-869ccf21.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-6b4ea5f4.js"></script>
+        <script src="../toc-f492e3cf.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -212,12 +212,14 @@ CView automatically detects the file type based on extension and content. You ca
 </thead>
 <tbody>
 <tr><td style="text-align: left"><strong>CIF</strong></td><td style="text-align: left"><code>.cif</code></td><td style="text-align: left">Standard Crystallographic Information Files.</td></tr>
-<tr><td style="text-align: left"><strong>VASP</strong></td><td style="text-align: left"><code>POSCAR</code>, <code>CONTCAR</code>, <code>.vasp</code></td><td style="text-align: left">Standard VASP structure inputs and outputs.</td></tr>
-<tr><td style="text-align: left"><strong>VASP run</strong></td><td style="text-align: left"><code>vasprun.xml</code> (any name; recognised by content)</td><td style="text-align: left">Every ionic step of a relaxation or MD run, with its energy and largest force.</td></tr>
-<tr><td style="text-align: left"><strong>Quantum Espresso</strong></td><td style="text-align: left"><code>.in</code>, <code>.out</code>, <code>.pwi</code>, <code>.qe</code></td><td style="text-align: left">Inputs, and every geometry of a relax, vc-relax or MD output (starting with the input structure), with energies and forces.</td></tr>
+<tr><td style="text-align: left"><strong>Magnetic CIF</strong></td><td style="text-align: left"><code>.mcif</code> (or a <code>.cif</code> with magnetic operations)</td><td style="text-align: left">Magnetic space-group operations and site moments, shown as arrows. See <a href="magnetism.html">Magnetism</a>.</td></tr>
+<tr><td style="text-align: left"><strong>VASP</strong></td><td style="text-align: left"><code>POSCAR</code>, <code>CONTCAR</code>, <code>.vasp</code></td><td style="text-align: left">Standard VASP structure inputs and outputs. Magnetic moments are read from an <code>INCAR</code> or <code>OUTCAR</code> in the same folder.</td></tr>
+<tr><td style="text-align: left"><strong>VASP run</strong></td><td style="text-align: left"><code>vasprun.xml</code> (any name; recognised by content)</td><td style="text-align: left">Every ionic step of a relaxation or MD run, with its energy and largest force, and its magnetic moments.</td></tr>
+<tr><td style="text-align: left"><strong>Quantum Espresso</strong></td><td style="text-align: left"><code>.in</code>, <code>.out</code>, <code>.pwi</code>, <code>.qe</code></td><td style="text-align: left">Inputs, and every geometry of a relax, vc-relax or MD output (starting with the input structure), with energies, forces and magnetic moments.</td></tr>
 <tr><td style="text-align: left"><strong>LAMMPS</strong></td><td style="text-align: left"><code>.dump</code>, <code>.lammpstrj</code>, <code>.dat</code>, any name starting with <code>ITEM: TIMESTEP</code></td><td style="text-align: left">Text dumps: wrapped, scaled or unwrapped positions; orthogonal or triclinic boxes; every frame. Species come from an <code>element</code> or <code>mass</code> column, otherwise atoms are shown as <code>Type n</code>.</td></tr>
 <tr><td style="text-align: left"><strong>SPR-KKR</strong></td><td style="text-align: left"><code>.pot</code>, <code>.pot_new</code>, <code>.sys</code></td><td style="text-align: left">Munich SPR-KKR potential and system files. Chemical disorder (CPA sites with several occupants) is read as mixed sites and written back as CPA sites. Reading needs nothing extra (<code>.pot</code>, <code>.pot_new</code>, <code>.pot_out</code>). Writing uses CView’s own writer by default; set the environment variable <code>CVIEW_PYTHON</code> to a Python that has ase2sprkkr to write with ase2sprkkr instead — an optional improvement, never a requirement (see <a href="building.html#exporting-a-disordered-alloy-to-spr-kkr">Building Structures</a>).</td></tr>
-<tr><td style="text-align: left"><strong>XYZ</strong></td><td style="text-align: left"><code>.xyz</code></td><td style="text-align: left">Cartesian coordinates (Standard and Extended XYZ).</td></tr>
+<tr><td style="text-align: left"><strong>XYZ</strong></td><td style="text-align: left"><code>.xyz</code></td><td style="text-align: left">Cartesian coordinates (Standard and Extended XYZ, including a <code>magmoms</code> column).</td></tr>
+<tr><td style="text-align: left"><strong>OVF</strong></td><td style="text-align: left"><code>.ovf</code>, <code>.omf</code>, <code>.ohf</code></td><td style="text-align: left">Magnetization textures from mumax3, OOMMF and Spirit (OVF 1.0 and 2.0, text or binary), one arrow per mesh cell. See <a href="magnetism.html#ovf-files-mumax3-oommf-spirit">Magnetism</a>.</td></tr>
 <tr><td style="text-align: left"><strong>PDB</strong></td><td style="text-align: left"><code>.pdb</code>, <code>.ent</code></td><td style="text-align: left">Protein Data Bank records. Reads the <code>CRYST1</code> cell, <code>ATOM</code>/<code>HETATM</code> sites, occupancies and formal charges; the first <code>MODEL</code> only. Files without a real cell load as non-periodic molecules.</td></tr>
 </tbody>
 </table>
@@ -257,6 +259,10 @@ CView automatically detects the file type based on extension and content. You ca
 <li>XYZ (*.xyz)</li>
 <li>PDB (*.pdb)</li>
 </ul>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>A structure with magnetic moments keeps them in some formats: a saved <strong>POSCAR</strong> also gets the <code>ISPIN</code>/<code>MAGMOM</code> tags in an <code>INCAR</code> beside it (only when there is none), <strong>Quantum Espresso</strong> input gets one species per moment with <code>starting_magnetization</code>, and <strong>XYZ</strong> gets a <code>magmoms</code> column. CIF output does not carry moments. See <a href="magnetism.html#writing-the-moments-for-dft">Magnetism</a>.</p>
+</blockquote>
 <h2 id="visualization-controls"><a class="header" href="#visualization-controls">Visualization Controls</a></h2>
 <p>Once a structure is loaded, the View menu provides tools to orient and inspect the crystal lattice.</p>
 <h3 id="standard-views"><a class="header" href="#standard-views">Standard Views</a></h3>
@@ -295,6 +301,7 @@ CView automatically detects the file type based on extension and content. You ca
 <li><strong>Bond Valence</strong>: BVS-based coloring (see <a href="bvs.html">BVS Guide</a>)</li>
 <li><strong>Element Colors</strong>: Per-element colour, transparency, and polyhedra controls</li>
 </ol>
+<p>Under <strong>Appearance</strong>, a structure with magnetic moments also uses the <strong>Magnetic Moments</strong> group: show or hide the arrows, draw them without the atom spheres, set their length and choose how they are coloured. See <a href="magnetism.html#showing-the-moments">Magnetism</a>.</p>
 <h3 id="color-modes"><a class="header" href="#color-modes">Color Modes</a></h3>
 <p>CView offers two coloring schemes, accessible via the <strong>Bond Valence</strong> expander’s <strong>Color Mode</strong> dropdown:</p>
 <div class="table-wrapper">
@@ -433,7 +440,10 @@ with tolerance $t$ (default 1.15, set in Preferences and in the Bond Rules windo
 <tr><td style="text-align: left"><code>Ctrl + E</code></td><td style="text-align: left">Export image (PNG/PDF/SVG)</td></tr>
 <tr><td style="text-align: left"><code>Ctrl + ,</code></td><td style="text-align: left">Preferences</td></tr>
 <tr><td style="text-align: left"><code>Ctrl + W</code></td><td style="text-align: left">Close tab</td></tr>
-<tr><td style="text-align: left"><code>Ctrl + Z</code></td><td style="text-align: left">Undo (e.g. atom deletion)</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + Z</code></td><td style="text-align: left">Undo the last structure edit (delete, supercell, slab, substitution, cell toggle…)</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + Shift + Z</code> or <code>Ctrl + Y</code></td><td style="text-align: left">Redo</td></tr>
+<tr><td style="text-align: left"><code>Delete</code></td><td style="text-align: left">Delete the selected atoms</td></tr>
+<tr><td style="text-align: left"><code>Ctrl + A</code> / <code>Esc</code></td><td style="text-align: left">Select all atoms / clear the selection</td></tr>
 <tr><td style="text-align: left"><code>T</code></td><td style="text-align: left">Toggle Primitive ↔ Conventional cell (canvas focused)</td></tr>
 <tr><td style="text-align: left"><code>Ctrl + Shift + C</code></td><td style="text-align: left">Matrix transformation tool</td></tr>
 <tr><td style="text-align: left"><code>Ctrl + M</code></td><td style="text-align: left">Add Miller plane</td></tr>
@@ -501,11 +511,11 @@ with tolerance $t$ (default 1.15, set in Preferences and in the Bond Rules windo
 
         <script src="../elasticlunr-ef4e11c1.min.js"></script>
         <script src="../mark-09e88c2c.min.js"></script>
-        <script src="../searcher-09f2665d.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
 
         <script src="../clipboard-1626706a.min.js"></script>
         <script src="../highlight-abc7f01d.js"></script>
-        <script src="../book-609e4cb8.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
         <script src="../src/custom-526988bf.js"></script>

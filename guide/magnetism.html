@@ -1,0 +1,435 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Magnetism - CView</title>
+
+
+        <!-- Custom HTML head -->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+        
+        <script>
+          MathJax = {
+            tex: {
+              inlineMath: [['$', '$'], ['\\(', '\\)']],
+              displayMath: [['$$', '$$'], ['\\[', '\\]']],
+              processEscapes: true,
+              processEnvironments: true,
+            },
+            options: {
+              skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre'],
+            },
+          };
+        </script>
+        <script
+          id="MathJax-script"
+          async
+          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"
+        ></script>
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="../src/custom-6ac2dfa5.css">
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-869ccf21.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-f492e3cf.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">CView</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/mavensgroup/cview" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="magnetism"><a class="header" href="#magnetism">Magnetism</a></h1>
+<p>CView shows magnetic moments as arrows through the atoms, builds antiferromagnetic and other ordered cells, and writes the moments back out for VASP and Quantum Espresso. It handles collinear structures (ferro-, antiferro- and ferrimagnets), canted and non-collinear ones, and spin textures such as spirals and skyrmions.</p>
+<p>A moment is stored on each atom as a Cartesian vector in μB. Most formats carry none, so nothing changes for a structure without moments.</p>
+<hr>
+<h2 id="where-the-moments-come-from"><a class="header" href="#where-the-moments-come-from">Where the moments come from</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Source</th><th style="text-align: left">What is read</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left"><strong>POSCAR / CONTCAR / <code>.vasp</code></strong></td><td style="text-align: left">The <strong>INCAR</strong> or <strong>OUTCAR</strong> in the same folder (the file names are matched without regard to case). A CONTCAR takes the OUTCAR’s final moments first and the INCAR’s <code>MAGMOM</code> as a fallback; a POSCAR takes the INCAR first.</td></tr>
+<tr><td style="text-align: left"><strong><code>vasprun.xml</code></strong></td><td style="text-align: left"><code>MAGMOM</code> from the run’s parameters on every frame. If an OUTCAR with one <code>magnetization</code> table per ionic step sits beside it, those computed moments are used per frame instead.</td></tr>
+<tr><td style="text-align: left"><strong>Quantum Espresso output</strong></td><td style="text-align: left">The last “Magnetic moment per site” block of each geometry (collinear, or three values per atom for a non-collinear run).</td></tr>
+<tr><td style="text-align: left"><strong>Magnetic CIF</strong></td><td style="text-align: left"><code>.mcif</code>, or a <code>.cif</code> with magnetic symmetry operations. See <a href="#magnetic-cif-mcif">below</a>.</td></tr>
+<tr><td style="text-align: left"><strong>Extended XYZ</strong></td><td style="text-align: left">A <code>magmoms</code> (or <code>initial_magmoms</code>) column, one value (collinear, along z) or three per atom. The XYZ writer saves the moments the same way.</td></tr>
+<tr><td style="text-align: left"><strong>OVF</strong></td><td style="text-align: left">The magnetization of a mumax3, OOMMF or Spirit run. See <a href="#ovf-files-mumax3-oommf-spirit">below</a>.</td></tr>
+</tbody>
+</table>
+</div>
+<p>The System Log says where the moments came from, for example <em>Magnetic moments from the INCAR MAGMOM beside the file</em>.</p>
+<h3 id="vasp-details"><a class="header" href="#vasp-details">VASP details</a></h3>
+<ul>
+<li><code>MAGMOM</code> is used only when VASP would use it: <code>ISPIN = 2</code>, or a non-collinear run (<code>LNONCOLLINEAR</code> or <code>LSORBIT</code>). With the default <code>ISPIN = 1</code> it is ignored, so no arrows appear.</li>
+<li><code>N*x</code> repeats (<code>2*5.0 3*0</code>), comments, <code>;</code> between tags and <code>\</code> line continuations are handled.</li>
+<li>The number of values must match the structure: N for a collinear run, 3N for a non-collinear one. Otherwise the file is skipped rather than guessed at.</li>
+<li><code>SAXIS</code> is applied, so a collinear <code>MAGMOM</code> along a rotated spin axis becomes the right Cartesian vector.</li>
+</ul>
+<h3 id="magnetic-cif-mcif"><a class="header" href="#magnetic-cif-mcif">Magnetic CIF (mCIF)</a></h3>
+<p>The reader uses the magnetic space-group operations and centring translations of the file, each with its time-reversal flag (<code>x,y,z,+1</code>, <code>-x,y,z,-1</code>). Site moments in <code>_atom_site_moment.crystalaxis_x/y/z</code> are in μB along unit vectors parallel to <strong>a</strong>, <strong>b</strong>, <strong>c</strong>, as the standard defines them, and are spread over the symmetry-equivalent atoms as axial vectors:</p>
+<ul>
+<li>a rotation turns the moment;</li>
+<li>inversion leaves it unchanged, and a mirror keeps the component along the mirror normal and reverses the components in the mirror plane (a moment is an axial vector); and</li>
+<li>time reversal (<code>-1</code>) reverses it.</li>
+</ul>
+<p>That is what makes a body-centred antiferromagnet such as MnF₂ come out with opposite moments on the corner and centre atoms.</p>
+<p><img src="../images/magnetism_mnf2.png" alt="MnF₂ read from a magnetic CIF: red arrows on the corner Mn atoms, a blue one on the body-centre atom">
+The Bilbao <strong>MAGNDATA</strong> database provides published structures in this format.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>A plain <code>.cif</code> that has <code>_atom_site_moment</code> but no magnetic operations is expanded with the ordinary symmetry and no time reversal, so an antiferromagnet would come out ferromagnetic. The System Log warns when this happens. Such an order needs <a href="#building-a-magnetic-order">the Magnetic tab</a> instead.</p>
+</blockquote>
+<h3 id="ovf-files-mumax3-oommf-spirit"><a class="header" href="#ovf-files-mumax3-oommf-spirit">OVF files (mumax3, OOMMF, Spirit)</a></h3>
+<p><code>.ovf</code>, <code>.omf</code> and <code>.ohf</code> files hold a magnetization on a mesh of cells, usually nanometres apart. CView reads OVF 1.0 and 2.0, regular and irregular meshes, as text or binary (4 or 8 bytes), and shows one site per cell at the cell centre. Positions are converted from the file’s mesh unit to Å.</p>
+<ul>
+<li>Cells where the magnetization is zero (outside the magnet in a mumax3 geometry) are left out, so a disc reads as a disc.</li>
+<li>A magnetization in A/m is divided by its largest magnitude, so you always see <strong>m = M/Ms</strong>. Structure Info shows the sum and the average of m, without a μB unit.</li>
+<li>Meshes above 40 000 cells are thinned (every k-th cell in x and y) to keep the CPU renderer fast; the System Log reports it.</li>
+<li>Only the first segment is read, and only vector fields: a scalar field (an energy density) is refused with a message.</li>
+<li>Opening a mesh switches on <strong>Arrows only</strong> and sets the arrow length to about one cell spacing, with bonds and periodic images off.</li>
+</ul>
+<p><img src="../images/magnetism_skyrmion.png" alt="A Néel skyrmion in Direction colouring, arrows only"></p>
+<p>A mumax3 run’s <code>m000000.ovf, m000001.ovf, …</code> open as separate tabs.</p>
+<hr>
+<h2 id="showing-the-moments"><a class="header" href="#showing-the-moments">Showing the moments</a></h2>
+<p>The <strong>Magnetic Moments</strong> group in the sidebar (under <strong>Appearance</strong>) controls the arrows for the active tab. The settings are per tab and are not saved between sessions.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Control</th><th style="text-align: left">Effect</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left"><strong>Show Moment Arrows</strong></td><td style="text-align: left">Draw the arrows.</td></tr>
+<tr><td style="text-align: left"><strong>Arrows only</strong></td><td style="text-align: left">Hide the spheres of atoms that carry a moment, leaving the arrows at their full length. Use it for spin textures, where the spheres hide the pattern. Atoms without a moment (a substrate, say) stay visible.</td></tr>
+<tr><td style="text-align: left"><strong>Length (Å/μB)</strong></td><td style="text-align: left">Arrow length per μB. Each end of an arrow sticks out of the atom by half of</td></tr>
+<tr><td style="text-align: left"><strong>Color by</strong></td><td style="text-align: left">How the arrows are coloured (below).</td></tr>
+<tr><td style="text-align: left"><strong>Up / Down</strong> colours</td><td style="text-align: left">The two colours used by the Up / Down mode (<strong>Color</strong> in Single mode).</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Color by:</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Mode</th><th style="text-align: left">Use</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left"><strong>Auto</strong> (default)</td><td style="text-align: left">Up / Down when all moments are collinear, Direction otherwise.</td></tr>
+<tr><td style="text-align: left"><strong>Up / Down</strong></td><td style="text-align: left">Red along the structure’s magnetic axis, blue against it. The axis is the line of the largest moment (oriented towards +z), so antiferromagnets and ferrimagnets split into their sublattices whichever way the spins point.</td></tr>
+<tr><td style="text-align: left"><strong>Direction</strong></td><td style="text-align: left">Hue from the in-plane angle, white at +z and black at −z, the usual spin-texture colouring.</td></tr>
+<tr><td style="text-align: left"><strong>Single</strong></td><td style="text-align: left">One colour for every arrow.</td></tr>
+</tbody>
+</table>
+</div>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>Near-white arrows (moments close to +z in Direction mode) are hard to see on the default light background. A grey or dark background helps.</p>
+</blockquote>
+<p><strong>Structure Info</strong> lists a moment column and the total moment: <code>m_z</code> when every moment is collinear along z, the full vector otherwise. An antiferromagnet shows a total of 0; a ferrimagnet shows its net moment.</p>
+<hr>
+<h2 id="building-a-magnetic-order"><a class="header" href="#building-a-magnetic-order">Building a magnetic order</a></h2>
+<p><strong>Structure → Magnetic Moments…</strong> opens the <strong>Magnetic</strong> tab of the Structure window. It sets moments on the atoms of the current cell and, with a propagation vector, builds the larger cell an antiferromagnetic order needs. The Preview pane shows the result with its arrows.</p>
+<p><img src="../images/magnetism_tab.png" alt="The Magnetic tab of the Structure window with the preview of a G-type cell"></p>
+<h3 id="site-moments"><a class="header" href="#site-moments">Site moments</a></h3>
+<p>A table lists every atom with its moment and phase φ.</p>
+<ol>
+<li><strong>Pick rows</strong>: select them in the list (Ctrl or Shift for several), or use the <em>Pick rows</em> menu for the <strong>main-view selection</strong>, <strong>all atoms</strong>, or <strong>all of one element</strong>.</li>
+<li>Enter <strong>mx, my, mz</strong> (μB, Cartesian) and a phase, then press <strong>Set on picked rows</strong>. <strong>Reverse</strong> flips the picked moments; <strong>No moment</strong> clears them.</li>
+</ol>
+<p>The phase is used by the propagation vector below: 180° reverses a site.</p>
+<h3 id="propagation-vector"><a class="header" href="#propagation-vector">Propagation vector</a></h3>
+<p>Antiferromagnets often order on a cell larger than the chemical one, which a plain CIF cannot store. Neutron-diffraction papers describe the order with a <strong>propagation vector k</strong> (in reciprocal-lattice units). CView builds it as</p>
+<blockquote>
+<p>m_j(R) = m_j · cos(2π k·R + φ_j)</p>
+</blockquote>
+<p>for site <em>j</em> moved by the lattice vector <strong>R</strong>. The new cell is the old one multiplied along each axis by the denominator of the matching component of <strong>k</strong> (up to 12).</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Preset</th><th style="text-align: left">k</th><th style="text-align: left">Order (one magnetic atom per cubic cell)</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left">Ferromagnetic</td><td style="text-align: left">(0, 0, 0)</td><td style="text-align: left">All parallel</td></tr>
+<tr><td style="text-align: left">A-type</td><td style="text-align: left">(0, 0, ½)</td><td style="text-align: left">Ferromagnetic planes, alternating along c</td></tr>
+<tr><td style="text-align: left">C-type</td><td style="text-align: left">(½, ½, 0)</td><td style="text-align: left">Antiferromagnetic planes, chains along c</td></tr>
+<tr><td style="text-align: left">G-type</td><td style="text-align: left">(½, ½, ½)</td><td style="text-align: left">Every neighbour antiparallel</td></tr>
+</tbody>
+</table>
+</div>
+<p>Components accept fractions such as <code>1/2</code> or <code>1/3</code>. A component of ⅓ gives a modulated wave (+m, −m/2, −m/2).</p>
+<ul>
+<li>With <strong>k = 0</strong> the cell and atom order stay as they are and only the moments are set (one undo step; selection is kept).</li>
+<li>With several magnetic sites per cell (rock-salt NiO, for example) use the phases: 180° on one sublattice gives the AFM-II pattern.</li>
+<li>The presets assume one magnetic atom per (pseudo)cubic cell, as on the B site of a perovskite.</li>
+</ul>
+<p>A line under the controls gives the new cell size, atom count and net moment. <strong>Apply</strong> builds the structure (<strong>Edit → Undo</strong> reverses it), <strong>Reload from structure</strong> refills the table from the current structure.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Only single-<strong>k</strong> orders are built: collinear or amplitude-modulated. A helix needs two components 90° out of phase, and an incommensurate <strong>k</strong> has no finite cell.</p>
+</blockquote>
+<h3 id="example-g-type-lafeo₃"><a class="header" href="#example-g-type-lafeo₃">Example: G-type LaFeO₃</a></h3>
+<ol>
+<li>Open a cubic LaFeO₃ cell and choose <strong>Structure → Magnetic Moments…</strong>.</li>
+<li>In <em>Pick rows</em> choose <strong>All Fe</strong>, enter <code>mz = 4</code>, press <strong>Set on picked rows</strong>.</li>
+<li>Choose the <strong>G-type</strong> preset. The preview shows a 2×2×2 cell with alternating arrows; the net moment is 0.</li>
+<li>Press <strong>Apply</strong>.</li>
+</ol>
+<hr>
+<h2 id="writing-the-moments-for-dft"><a class="header" href="#writing-the-moments-for-dft">Writing the moments for DFT</a></h2>
+<h3 id="vasp"><a class="header" href="#vasp">VASP</a></h3>
+<p>The <strong>DFT input</strong> card of the Magnetic tab shows the INCAR tags for the result, with <strong>Copy INCAR tags</strong>:</p>
+<pre><code>ISPIN = 2
+MAGMOM = 2*3.6 2*-3.6 4*0
+</code></pre>
+<ul>
+<li><code>MAGMOM</code> follows the order CView writes a POSCAR in: atoms are grouped by element, with the symbols in alphabetical order (Fe before O), and atoms of one element keep their order. Anything written beside a POSCAR must follow it, and these tags do.</li>
+<li>Moments collinear along some axis other than z are written as their component along that axis, with a comment in the output. With spin-orbit coupling, also set <code>SAXIS</code> to it.</li>
+<li>Non-collinear moments get <code>LNONCOLLINEAR = .TRUE.</code> and three <code>MAGMOM</code> values per atom.</li>
+</ul>
+<p>When you <strong>save a POSCAR</strong> (File → Save As) from a structure with moments, CView also writes these tags into an <code>INCAR</code> in the same folder, but <strong>only if there is none</strong>. An existing INCAR is never touched; the tags go to Structure Info instead.</p>
+<h3 id="quantum-espresso"><a class="header" href="#quantum-espresso">Quantum Espresso</a></h3>
+<p>Saving as <code>.in</code> writes the magnetization into the <code>&amp;SYSTEM</code> block. pw.x sets the starting magnetization <strong>per species</strong>, so CView splits each element into one species per distinct moment (<code>Fe1</code>, <code>Fe2</code>), with <code>nspin = 2</code> and a signed <code>starting_magnetization(i)</code>. Non-collinear moments get <code>noncolin = .true.</code> and <code>angle1</code>/<code>angle2</code>.</p>
+<p><code>starting_magnetization</code> is a fraction of the valence charge, not μB. CView scales the <strong>largest moment to 0.5</strong> and keeps the others in proportion; the file says so in a comment, so adjust the values for your pseudopotentials.</p>
+<p>pw.x allows at most <strong>10 species</strong>. A texture with more distinct moments (a skyrmion, a spiral) is grouped: each magnetic element gets a share of the 10 slots, its moments are clustered into that many groups, and each group starts from its mean moment. The file and the System Log say when this happened.</p>
+<p>Species labels such as <code>Fe1</code>, <code>Fe_up</code> are read back as the element, so a file written by CView opens again. The starting magnetization of a QE <em>input</em> is not read back as moments, however: it is a fraction, not μB.</p>
+<hr>
+<h2 id="what-editing-does-to-the-moments"><a class="header" href="#what-editing-does-to-the-moments">What editing does to the moments</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th style="text-align: left">Operation</th><th style="text-align: left">Moments</th></tr>
+</thead>
+<tbody>
+<tr><td style="text-align: left">Supercell, moving atoms, deleting atoms</td><td style="text-align: left">Kept with their atoms.</td></tr>
+<tr><td style="text-align: left">Changing an atom’s element, or substituting an element</td><td style="text-align: left">Dropped for those atoms: the new species’ moment is not known.</td></tr>
+<tr><td style="text-align: left">Slab, primitive/conventional conversion, rebuilding from a space group</td><td style="text-align: left"><strong>Lost.</strong> These rebuild the atoms from element and position. The System Log warns when an edit drops every moment.</td></tr>
+</tbody>
+</table>
+</div>
+<hr>
+<h2 id="limits"><a class="header" href="#limits">Limits</a></h2>
+<ul>
+<li>The arrows are drawn in the main view and in the Structure window preview only; the GPU windows (Trajectory Player, 3D charge density) do not show them.</li>
+<li>Antiferromagnetic orders on a larger cell are only built from a single propagation vector. Searching all magnetic subgroups is not done: take a published structure from MAGNDATA as an mCIF instead.</li>
+<li>There is no topological charge or skyrmion builder yet; see the <a href="../todo.html">To Do</a> list.</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../guide/slabs.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../todo.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../guide/slabs.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../todo.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+        <script src="../src/custom-526988bf.js"></script>
+
+
+
+    </div>
+    </body>
+</html>
