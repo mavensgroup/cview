@@ -308,6 +308,7 @@ mod tests {
                     original_index: i,
                     oxidation: None,
                     occupancy: 1.0,
+                    magmom: None,
                 })
                 .collect(),
             formula: String::new(),

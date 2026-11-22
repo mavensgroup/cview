@@ -2,6 +2,8 @@
 pub mod chgcar;
 pub mod cif;
 pub mod lammps_dump;
+pub mod magmom;
+pub mod ovf;
 pub mod pdb;
 pub mod poscar;
 pub mod qe;
@@ -76,14 +78,18 @@ pub fn load_structure(path: &str) -> io::Result<Structure> {
     }
 
     // Check extension-based formats first
-    if p.ends_with(".cif") {
+    if p.ends_with(".cif") || p.ends_with(".mcif") {
         return cif::parse(path);
+    }
+    // OOMMF vector fields (mumax3, OOMMF, Spirit): a magnetization texture.
+    if p.ends_with(".ovf") || p.ends_with(".omf") || p.ends_with(".ohf") {
+        return ovf::parse(path);
     }
     if p.ends_with(".xyz") {
         return xyz::parse(path);
     }
     if p.ends_with(".vasp") {
-        return poscar::parse(path);
+        return poscar_with_moments(path);
     }
     if p.ends_with(".pdb") || p.ends_with(".ent") {
         return pdb::parse(path);
@@ -109,7 +115,7 @@ pub fn load_structure(path: &str) -> io::Result<Structure> {
         .to_lowercase();
 
     if filename.starts_with("poscar") || filename.starts_with("contcar") {
-        return poscar::parse(path);
+        return poscar_with_moments(path);
     }
     if filename.starts_with("chgcar") {
         return Err(io::Error::new(
@@ -120,7 +126,20 @@ pub fn load_structure(path: &str) -> io::Result<Structure> {
     }
 
     // Fallback: try POSCAR parser (most permissive for VASP-family files)
-    poscar::parse(path)
+    poscar_with_moments(path)
+}
+
+/// A POSCAR/CONTCAR, with magnetic moments from the INCAR or OUTCAR in the
+/// same directory when they match its atom count.
+fn poscar_with_moments(path: &str) -> io::Result<Structure> {
+    let mut s = poscar::parse(path)?;
+    if let Some((moments, source)) = magmom::vasp_sidecar_moments(path, s.atoms.len()) {
+        for (a, m) in s.atoms.iter_mut().zip(moments) {
+            a.magmom = Some(m);
+        }
+        crate::utils::console::log_info(&format!("Magnetic moments from the {} beside the file", source));
+    }
+    Ok(s)
 }
 
 pub fn save_structure(path: &str, structure: &Structure) -> io::Result<()> {
@@ -137,20 +156,37 @@ pub fn save_structure(path: &str, structure: &Structure) -> io::Result<()> {
     } else if p.ends_with(".inp") || is_sprkkr_potential(&p) || p.ends_with(".sys") {
         sprkkr::write(path, structure)
     } else {
-        // Check filename for POSCAR/CONTCAR/VASP patterns
-        let filename = Path::new(path)
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_lowercase();
+        // POSCAR (named, .vasp, or the fallback for anything else).
+        poscar::write(path, structure)?;
+        write_magmom_beside(path, structure);
+        Ok(())
+    }
+}
 
-        if p.ends_with(".vasp") || filename.starts_with("poscar") || filename.starts_with("contcar")
-        {
-            poscar::write(path, structure)
-        } else {
-            // Default fallback
-            poscar::write(path, structure)
-        }
+/// After a POSCAR with moments is saved: put the magnetic INCAR tags in an
+/// INCAR beside it when there is none, so VASP gets the same order. An
+/// existing INCAR is never changed; the tags go to Structure Info instead.
+fn write_magmom_beside(path: &str, structure: &Structure) {
+    use crate::utils::console;
+    let Some(tags) = magmom::vasp_incar_tags(structure) else { return };
+    let dir = Path::new(path).parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let incar = dir.join("INCAR");
+    if incar.exists() {
+        console::log_info(&format!(
+            "Not changing the existing {}; the magnetic tags for this POSCAR are in Structure Info",
+            incar.display()
+        ));
+        console::info_report(&format!("INCAR magnetic tags for {}:\n{}", path, tags));
+        return;
+    }
+    let text = format!(
+        "# Magnetic tags written by CView to go with {}\n# (atom order as in that POSCAR). Add the rest of your settings.\n{}",
+        Path::new(path).file_name().unwrap_or_default().to_string_lossy(),
+        tags
+    );
+    match std::fs::write(&incar, text) {
+        Ok(()) => console::log_info(&format!("Wrote the magnetic moments to {}", incar.display())),
+        Err(e) => console::log_warn(&format!("Could not write {}: {}", incar.display(), e)),
     }
 }
 

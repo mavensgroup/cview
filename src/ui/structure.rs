@@ -1,5 +1,7 @@
+pub mod atoms_tab;
 pub mod basis_tab;
 pub mod instances_tab;
+pub mod magnetic_tab;
 pub mod preview;
 pub mod slab_tab;
 pub mod supercell_tab;

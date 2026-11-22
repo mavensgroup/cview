@@ -109,6 +109,7 @@ pub fn convert_structure(structure: &Structure, cell_type: CellType) -> Result<S
             // oxidation hint here — downstream BVS will re-infer.
             oxidation: None,
             occupancy: 1.0,
+            magmom: None,
         });
     }
 
@@ -178,6 +179,7 @@ mod tests {
                 original_index: i,
                 oxidation: None,
                 occupancy: 1.0,
+                magmom: None,
             })
             .collect();
         let s = Structure {

@@ -16,6 +16,7 @@ pub fn setup(
     state: Rc<RefCell<AppState>>,
     notebook: &Notebook,
     drawing_area: &DrawingArea,
+    atom_list_box: &gtk4::Box,
     sidebar_handles: Rc<SidebarHandles>,
 ) {
     // Helper to get active DA from weak notebook ref
@@ -189,19 +190,48 @@ pub fn setup(
     });
     app.add_action(&act_boundary);
 
-    // 6b. Undo (Ctrl+Z) — registered as an action so it shows up in the Edit menu
-    let act_undo = gtk4::gio::SimpleAction::new("undo", None);
-    let s_undo = state.clone();
-    let nb_undo = notebook.downgrade();
-
-    act_undo.connect_activate(move |_, _| {
-        if let Some(da) = get_da(&nb_undo) {
-            let msg = s_undo.borrow_mut().undo();
-            crate::utils::console::log_info(&msg);
+    // 6b. Undo (Ctrl+Z) / Redo (Ctrl+Shift+Z), shown in the Edit menu
+    for (name, redo) in [("undo", false), ("redo", true)] {
+        let act = gtk4::gio::SimpleAction::new(name, None);
+        let st = state.clone();
+        let nb = notebook.downgrade();
+        let ab = atom_list_box.downgrade();
+        act.connect_activate(move |_, _| {
+            let Some(da) = get_da(&nb) else { return };
+            if redo {
+                st.borrow_mut().redo();
+            } else {
+                st.borrow_mut().undo();
+            }
             da.queue_draw();
-        }
-    });
-    app.add_action(&act_undo);
+            if let (Some(ab), Some(nb)) = (ab.upgrade(), nb.upgrade()) {
+                crate::panels::sidebar::refresh_atom_list(&ab, st.clone(), &nb);
+            }
+        });
+        app.add_action(&act);
+    }
+
+    // 6c. Selection: Select All (Ctrl+A), Clear Selection (Esc), Delete
+    // Selected (Delete). The keys are handled by the canvas key controller
+    // (ui/interactions.rs), not app accelerators, so text fields keep them.
+    for name in ["select_all", "clear_selection", "delete_selected"] {
+        let act = gtk4::gio::SimpleAction::new(name, None);
+        let st = state.clone();
+        let nb = notebook.downgrade();
+        act.connect_activate(move |_, _| {
+            let Some(da) = get_da(&nb) else { return };
+            {
+                let mut st = st.borrow_mut();
+                match name {
+                    "select_all" => crate::ui::interactions::select_all(&mut st),
+                    "clear_selection" => st.active_tab_mut().interaction.selected.clear(),
+                    _ => st.delete_selected(),
+                }
+            }
+            da.queue_draw();
+        });
+        app.add_action(&act);
+    }
 
     // 7. Toggle Interstitial Site Overlay
     let act_sites = gtk4::gio::SimpleAction::new("toggle_interstitial_sites", None);

@@ -211,6 +211,7 @@ pub fn generate_slab(
             // tuple pipeline. BVS will fall back to inference.
             oxidation: None,
             occupancy: 1.0,
+            magmom: None,
         });
     }
 
@@ -330,6 +331,7 @@ mod tests {
                     original_index: i,
                     oxidation: None,
                     occupancy: 1.0,
+                    magmom: None,
                 })
                 .collect(),
             formula: "TiO2".into(),

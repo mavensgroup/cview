@@ -7,7 +7,7 @@
 use super::preview::Preview;
 use super::TabParts;
 use crate::physics::operations::basis;
-use crate::state::AppState;
+use crate::state::{AppState, Edit};
 use crate::ui::style::{captioned, card_body, group};
 use gtk4::glib;
 use gtk4::prelude::*;
@@ -334,13 +334,8 @@ pub fn build(
                 let tab = s.active_tab_mut();
                 if let Some(current) = &tab.structure {
                     let new_s = basis::modify_selection(current, &indices, &new_el);
-                    tab.structure = Some(new_s);
-                    tab.invalidate_derived();
-                    crate::utils::console::log_info(&format!(
-                        "Changed {} atom(s) to {}",
-                        indices.len(),
-                        new_el
-                    ));
+                    let op = format!("Changed {} atom(s) to {}", indices.len(), new_el);
+                    tab.commit(&op, new_s, Edit::Species);
                 }
             }
             redraw_main(&nb);
@@ -376,21 +371,13 @@ pub fn build(
                         ));
                         return;
                     }
-                    tab.structure = Some(new_s);
-                    tab.interaction.selected.clear();
-                    tab.overrides.clear();
-                    tab.invalidate_derived();
-                    if let Some(s) = &tab.structure {
-                        crate::utils::console::structure_changed(
-                            &format!(
-                                "Mixed occupancy: {} site(s) now {:.0}% {}",
-                                indices.len(),
-                                fraction * 100.0,
-                                new_el
-                            ),
-                            s,
-                        );
-                    }
+                    let op = format!(
+                        "Mixed occupancy: {} site(s) now {:.0}% {}",
+                        indices.len(),
+                        fraction * 100.0,
+                        new_el
+                    );
+                    tab.commit(&op, new_s, Edit::Reindexed);
                 }
             }
             redraw_main(&nb);
@@ -432,8 +419,6 @@ pub fn build(
                 if let Some(current) = &tab.structure {
                     let total = current.atoms.iter().filter(|a| a.element == from).count();
                     let new_s = basis::modify_selection(current, &chosen, &to);
-                    tab.structure = Some(new_s);
-                    tab.invalidate_derived();
                     let what = if chosen.len() == total {
                         format!("Element substitution {} → {}", from, to)
                     } else {
@@ -445,9 +430,7 @@ pub fn build(
                             to
                         )
                     };
-                    if let Some(s) = &tab.structure {
-                        crate::utils::console::structure_changed(&what, s);
-                    }
+                    tab.commit(&what, new_s, Edit::Species);
                 }
             }
             // The next pick is a fresh draw.
@@ -465,14 +448,7 @@ pub fn build(
                 let tab = s.active_tab_mut();
                 if let Some(current) = &tab.structure {
                     let new_s = basis::standardize_positions(current);
-                    tab.structure = Some(new_s);
-                    tab.invalidate_derived();
-                    if let Some(s) = &tab.structure {
-                        crate::utils::console::structure_changed(
-                            "Standardize positions [0, 1)",
-                            s,
-                        );
-                    }
+                    tab.commit("Standardize positions [0, 1)", new_s, Edit::Geometry);
                 }
             }
             redraw_main(&nb);

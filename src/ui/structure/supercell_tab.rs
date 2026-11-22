@@ -188,12 +188,7 @@ pub fn build(
                 let source = tab.structure.as_ref().or(tab.original_structure.as_ref());
                 if let Some(src) = source {
                     let new_s = supercell::transform(src, m);
-                    tab.structure = Some(new_s);
-                    tab.interaction.selected.clear();
-                    tab.invalidate_derived();
-                    if let Some(s) = &tab.structure {
-                        crate::utils::console::structure_changed("Supercell", s);
-                    }
+                    tab.commit("Supercell", new_s, crate::state::Edit::Reindexed);
                 }
             }
             if let Some(nb) = nb.upgrade() {
@@ -217,12 +212,7 @@ pub fn build(
                 let mut s = state.borrow_mut();
                 let tab = s.active_tab_mut();
                 if let Some(orig) = tab.original_structure.clone() {
-                    tab.structure = Some(orig);
-                    tab.interaction.selected.clear();
-                    tab.invalidate_derived();
-                    if let Some(s) = &tab.structure {
-                        crate::utils::console::structure_changed("Reset to as-loaded cell", s);
-                    }
+                    tab.commit("Reset to as-loaded cell", orig, crate::state::Edit::Reindexed);
                 }
             }
             if let Some(nb) = nb.upgrade() {

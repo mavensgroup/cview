@@ -78,7 +78,10 @@ impl log::Log for GtkLogger {
         .unwrap_or_default();
       let msg = format!("{} {}  {}\n", time, icon, record.args());
 
-      glib::MainContext::default().spawn_local(async move {
+      // `spawn`, not `spawn_local`: parsers log from worker threads, and
+      // `spawn_local` panics off the main thread. The block still runs on
+      // the main loop, where the view lives.
+      glib::MainContext::default().spawn(async move {
         if let Some(weak_ref) = LOG_VIEW.get() {
           if let Some(view) = weak_ref.upgrade() {
             let buffer = view.buffer();

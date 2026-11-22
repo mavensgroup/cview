@@ -687,6 +687,7 @@ pub fn build(hall_number: i32, params: CellParams, sites: &[Site]) -> Result<Bui
                 original_index: atoms.len(),
                 oxidation: site.oxidation,
                 occupancy: site.occupancy,
+                magmom: None,
             });
             atom_site.push(si);
             kept += 1;

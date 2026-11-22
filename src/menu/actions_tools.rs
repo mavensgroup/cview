@@ -17,12 +17,14 @@ pub fn setup(
     notebook: &Notebook,
     _drawing_area: &DrawingArea,
 ) {
-    // --- STRUCTURE WINDOW: Supercell, Basis, Atom Instances, Slab ---
+    // --- STRUCTURE WINDOW: Supercell, Basis, Atoms, Atom Instances, Slab ---
     // One window with a tab per tool; each action opens it on its own tab.
     for (name, tab) in [
         ("supercell", StructureTab::Supercell),
         ("basis", StructureTab::Basis),
+        ("atoms", StructureTab::Atoms),
         ("atom_instances", StructureTab::Instances),
+        ("magnetic_order", StructureTab::Magnetic),
         ("slab", StructureTab::Slab),
     ] {
         let action = gtk4::gio::SimpleAction::new(name, None);
@@ -110,9 +112,11 @@ fn convert_and_update(state: &Rc<RefCell<AppState>>, da: &DrawingArea, cell_type
                 };
                 let mut st = state.borrow_mut();
                 let tab = st.active_tab_mut();
-                console::structure_changed(&format!("Switched to {} cell", view_name), &new_struct);
-                tab.structure = Some(new_struct);
-                tab.invalidate_derived();
+                tab.commit(
+                    &format!("Switched to {} cell", view_name),
+                    new_struct,
+                    crate::state::Edit::Reindexed,
+                );
 
                 da.queue_draw();
             }

@@ -203,6 +203,7 @@ fn read_frames(path: &str, limit: Option<usize>) -> io::Result<Trajectory> {
                 energy: None,
                 max_force: None,
                 step: Some(step),
+                magmoms: None,
             };
             match traj.as_mut() {
                 None => {
@@ -333,6 +334,7 @@ fn read_atoms(
             original_index: i,
             oxidation: None,
             occupancy: 1.0,
+            magmom: None,
         })
         .collect();
 

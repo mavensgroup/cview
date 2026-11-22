@@ -901,15 +901,13 @@ pub fn show(parent: &ApplicationWindow, state: Rc<RefCell<AppState>>, notebook: 
                 console::log_warn("Trajectory Player: the tab this trajectory came from is closed");
                 return;
             };
-            if let Some(old) = tab.structure.take() {
-                tab.interaction.undo_stack.push(old);
-            }
-            tab.structure = Some(s.clone());
+            // Frames of one run normally keep the atom order; a frame with a
+            // different atom count (LAMMPS with insertions) does not.
+            let same_atoms = tab.structure.as_ref().is_some_and(|c| c.atoms.len() == s.atoms.len());
+            let edit = if same_atoms { crate::state::Edit::Geometry } else { crate::state::Edit::Reindexed };
+            tab.commit(&format!("Trajectory frame {} of {}", idx + 1, traj.len()), s.clone(), edit);
             tab.trajectory_frame = idx;
-            tab.interaction.selected.clear();
-            tab.invalidate_derived();
             drop(guard);
-            console::structure_changed(&format!("Trajectory frame {} of {}", idx + 1, traj.len()), &s);
             if let Some(da) = nb.upgrade().and_then(|nb| crate::ui::get_active_drawing_area(&nb)) {
                 da.queue_draw();
             }
@@ -990,6 +988,7 @@ mod tests {
                 energy: None,
                 max_force: None,
                 step: None,
+                magmoms: None,
             }],
             is_periodic: true,
             format: "test",

@@ -18,6 +18,7 @@
 - [Building Structures](guide/building.md)
     - [Supercells](guide/supercells.md)
     - [Slab generation](guide/slabs.md)
+- [Magnetism](guide/magnetism.md)
 - [To Do](todo.md)
 
 <!-- # Tutorials -->

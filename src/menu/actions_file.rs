@@ -105,7 +105,7 @@ pub fn place_structure(
             // of state that referred to the previous structure — otherwise old
             // selections appear as "pre-highlighted" atoms on the new one.
             tab.interaction.selected.clear();
-            tab.interaction.undo_stack.clear();
+            tab.history.clear();
             tab.miller_planes.clear();
             tab.kpath_result = None;
             tab.void_result = None;
@@ -216,6 +216,9 @@ pub fn setup(
         let filter_struct = FileFilter::new();
         filter_struct.set_name(Some("All Supported Formats"));
         filter_struct.add_pattern("*.cif");
+        filter_struct.add_pattern("*.mcif");
+        filter_struct.add_pattern("*.ovf");
+        filter_struct.add_pattern("*.omf");
         filter_struct.add_pattern("*.CIF");
         filter_struct.add_pattern("*.xyz");
         filter_struct.add_pattern("*.pdb");
@@ -254,10 +257,18 @@ pub fn setup(
         dialog.add_filter(&f_lmp);
 
         let f_cif = FileFilter::new();
-        f_cif.set_name(Some("CIF (*.cif)"));
+        f_cif.set_name(Some("CIF / magnetic CIF (*.cif, *.mcif)"));
         f_cif.add_pattern("*.cif");
         f_cif.add_pattern("*.CIF");
+        f_cif.add_pattern("*.mcif");
         dialog.add_filter(&f_cif);
+
+        let f_ovf = FileFilter::new();
+        f_ovf.set_name(Some("Magnetization, mumax3 / OOMMF / Spirit (*.ovf, *.omf)"));
+        f_ovf.add_pattern("*.ovf");
+        f_ovf.add_pattern("*.omf");
+        f_ovf.add_pattern("*.ohf");
+        dialog.add_filter(&f_ovf);
 
         let f_vasp = FileFilter::new();
         f_vasp.set_name(Some("VASP (POSCAR, CONTCAR, *.vasp, vasprun.xml)"));

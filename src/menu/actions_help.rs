@@ -22,8 +22,10 @@ pub fn setup(app: &Application, window: &ApplicationWindow) {
 <b>Keyboard Shortcuts:</b>
 • <b>Ctrl + O:</b> Open File
 • <b>Ctrl + W:</b> Close Tab
-• <b>Ctrl + Z:</b> Undo (e.g. atom deletion)
+• <b>Ctrl + Z:</b> Undo the last structure edit
+• <b>Ctrl + Shift + Z / Ctrl + Y:</b> Redo
 • <b>Delete:</b> Delete selected atoms
+• <b>Ctrl + A / Esc:</b> Select all atoms / clear the selection
 • <b>Ctrl + Shift + S:</b> Save As
 • <b>Ctrl + E:</b> Export Image
 • <b>Ctrl + ,:</b> Preferences

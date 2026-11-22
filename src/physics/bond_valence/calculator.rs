@@ -950,6 +950,7 @@ mod tests {
             original_index: 0,
             oxidation: None,
             occupancy: 1.0,
+            magmom: None,
         }
     }
 
@@ -960,6 +961,7 @@ mod tests {
             original_index: 0,
             oxidation: Some(ox),
             occupancy: 1.0,
+            magmom: None,
         }
     }
 
@@ -970,6 +972,7 @@ mod tests {
             original_index: 0,
             oxidation: None,
             occupancy: occ,
+            magmom: None,
         }
     }
 

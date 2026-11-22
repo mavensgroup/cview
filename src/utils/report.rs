@@ -53,15 +53,51 @@ fn summary_with_header(structure: &Structure, header: &str) -> String {
     "--------------------------------------------------\n"
   };
 
+  // A moment column appears only when the file gave moments: one number
+  // (m_z) when every moment is collinear along z, the vector otherwise.
+  let moments = MomentColumn::of(structure);
+  // An OVF mesh carries m = M/Ms (unitless), not atomic moments in μB.
+  let mesh = !structure.atoms.is_empty()
+    && structure.atoms.iter().all(|a| a.element == crate::io::ovf::SITE_NAME);
+  let unit = if mesh { "" } else { " μB" };
+
   let mut out = String::new();
   out.push_str(&format!("{}\n", header));
   out.push_str(&format!("Formula: {}\n", formula_str));
+  if let Some(total) = moments.map(|_| total_moment(structure)) {
+    out.push_str(&format!(
+      "{}: ({:.3}, {:.3}, {:.3}){unit}, |{}| = {:.3}{unit}\n",
+      if mesh { "Sum of m over cells" } else { "Total moment" },
+      total[0],
+      total[1],
+      total[2],
+      if mesh { "Σm" } else { "M" },
+      norm(total)
+    ));
+    if mesh {
+      let n = structure.atoms.len().max(1) as f64;
+      out.push_str(&format!(
+        "Average m: ({:.4}, {:.4}, {:.4})\n",
+        total[0] / n,
+        total[1] / n,
+        total[2] / n
+      ));
+    }
+  }
   out.push_str(rule);
   out.push_str(&format!(
     "{:<8} {:<8} {:<10} {:<10} {:<10}",
     "Index", "Element", "X", "Y", "Z"
   ));
-  out.push_str(if partial { " Occ\n" } else { "\n" });
+  if partial {
+    out.push_str(" Occ ");
+  }
+  match moments {
+    Some(MomentColumn::Collinear) => out.push_str(if mesh { " m_z" } else { " m_z (μB)" }),
+    Some(MomentColumn::Vector) => out.push_str(if mesh { " m" } else { " m (μB)" }),
+    None => {}
+  }
+  out.push('\n');
   out.push_str(rule);
 
   for (i, atom) in structure.atoms.iter().take(20).enumerate() {
@@ -72,6 +108,14 @@ fn summary_with_header(structure: &Structure, header: &str) -> String {
     if partial {
       out.push_str(&format!(" {:.2}", atom.occupancy));
     }
+    match (moments, atom.magmom) {
+      (Some(MomentColumn::Collinear), Some(m)) => out.push_str(&format!(" {:>8.3}", m[2])),
+      (Some(MomentColumn::Vector), Some(m)) => {
+        out.push_str(&format!(" ({:.3}, {:.3}, {:.3})", m[0], m[1], m[2]))
+      }
+      (Some(_), None) => out.push_str("        —"),
+      _ => {}
+    }
     out.push('\n');
   }
   if structure.atoms.len() > 20 {
@@ -81,6 +125,43 @@ fn summary_with_header(structure: &Structure, header: &str) -> String {
     ));
   }
   out
+}
+
+#[derive(Clone, Copy)]
+enum MomentColumn {
+  Collinear,
+  Vector,
+}
+
+impl MomentColumn {
+  fn of(structure: &Structure) -> Option<Self> {
+    let mut any = false;
+    let mut collinear = true;
+    for m in structure.atoms.iter().filter_map(|a| a.magmom) {
+      any = true;
+      if m[0].abs() > 1e-6 || m[1].abs() > 1e-6 {
+        collinear = false;
+      }
+    }
+    any.then_some(if collinear { Self::Collinear } else { Self::Vector })
+  }
+}
+
+/// Sum of the atomic moments, μB, weighted by occupancy.
+fn total_moment(structure: &Structure) -> [f64; 3] {
+  let mut t = [0.0; 3];
+  for a in &structure.atoms {
+    if let Some(m) = a.magmom {
+      for k in 0..3 {
+        t[k] += m[k] * a.occupancy;
+      }
+    }
+  }
+  t
+}
+
+fn norm(v: [f64; 3]) -> f64 {
+  (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt()
 }
 
 // ─── BVS analysis ────────────────────────────────────────────────────────────

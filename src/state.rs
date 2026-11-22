@@ -141,7 +141,6 @@ impl AtomOverride {
 #[derive(Default)]
 pub struct InteractionState {
     pub selected: HashMap<usize, SelectedAtom>,
-    pub undo_stack: Vec<Structure>,
     pub is_shift_pressed: bool,
     pub selection_box: Option<((f64, f64), (f64, f64))>,
     /// Cumulative drag offset reported on the previous drag-update event.
@@ -172,6 +171,67 @@ impl InteractionState {
         let mut v: Vec<&SelectedAtom> = self.selected.values().collect();
         v.sort_by_key(|a| a.seq);
         v
+    }
+}
+
+/// How the atom list after an edit relates to the one before it. Decides
+/// which per-atom state (the selection, cosmetic overrides) still applies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Edit {
+    /// Same atoms at the same places; only species or occupancy changed.
+    /// The selection and the overrides still point at the right atoms.
+    Species,
+    /// Existing atoms keep their indices, but positions or the cell changed,
+    /// or atoms were appended at the end. Overrides still apply; the
+    /// selection does not (it is keyed by rendered instance, which moves).
+    Geometry,
+    /// Atoms removed, inserted or reordered, or a new cell altogether.
+    /// Nothing keyed by atom index survives.
+    Reindexed,
+}
+
+/// The structure as it was before one edit.
+#[derive(Clone)]
+pub struct Snapshot {
+    pub structure: Structure,
+    /// What the edit was called ("Supercell", "Deleted 2 atom(s)").
+    pub op: String,
+    pub edit: Edit,
+}
+
+/// Undo and redo for one tab's structure. Every edit is recorded through
+/// `TabState::commit`; the inverse of an edit has the same `Edit` kind, so a
+/// snapshot carries it both ways.
+#[derive(Default)]
+pub struct History {
+    undo: Vec<Snapshot>,
+    redo: Vec<Snapshot>,
+}
+
+impl History {
+    /// Steps kept. A snapshot is a whole structure, and large MD cells are
+    /// megabytes each.
+    pub const LIMIT: usize = 50;
+
+    fn record(&mut self, snap: Snapshot) {
+        self.redo.clear();
+        self.undo.push(snap);
+        if self.undo.len() > Self::LIMIT {
+            self.undo.remove(0);
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.undo.clear();
+        self.redo.clear();
+    }
+
+    pub fn can_undo(&self) -> bool {
+        !self.undo.is_empty()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        !self.redo.is_empty()
     }
 }
 
@@ -218,6 +278,8 @@ pub struct TabState {
     /// the defaults (`model::bonds::default_rules`) for the elements present,
     /// so substituting an element brings in its default rules.
     pub bond_overrides: HashMap<(String, String), crate::model::bonds::BondRule>,
+    /// Undo/redo of structure edits. Written only by `commit`, `undo`, `redo`.
+    pub history: History,
 }
 
 impl TabState {
@@ -240,7 +302,79 @@ impl TabState {
             trajectory: None,
             trajectory_frame: 0,
             bond_overrides: HashMap::new(),
+            history: History::default(),
         }
+    }
+
+    /// Replace the structure with `new` as one undoable step called `op`.
+    ///
+    /// Every operation that changes the structure goes through here: it keeps
+    /// the old structure for Undo, drops the Redo history, clears whatever
+    /// per-atom state `edit` says no longer applies, drops derived analysis,
+    /// and records the change in the console.
+    pub fn commit(&mut self, op: &str, new: Structure, edit: Edit) {
+        if let Some(old) = self.structure.take() {
+            // Operations that rebuild the atom list from elements and
+            // positions (slab, cell conversion, space-group rebuild) have no
+            // moment to give the new atoms. Say so rather than lose them
+            // silently.
+            let had = old.atoms.iter().any(|a| a.magmom.is_some());
+            let has = new.atoms.iter().any(|a| a.magmom.is_some());
+            if had && !has {
+                crate::utils::console::log_warn(&format!(
+                    "{}: magnetic moments are not carried over by this operation",
+                    op
+                ));
+            }
+            self.history.record(Snapshot { structure: old, op: op.to_string(), edit });
+        }
+        crate::utils::console::structure_changed(op, &new);
+        self.structure = Some(new);
+        self.after_replace(edit);
+    }
+
+    /// Step back one edit. Returns false when there is nothing to undo.
+    pub fn undo(&mut self) -> bool {
+        let Some(snap) = self.history.undo.pop() else { return false };
+        let Snapshot { structure, op, edit } = snap;
+        if let Some(cur) = self.structure.replace(structure) {
+            self.history.redo.push(Snapshot { structure: cur, op: op.clone(), edit });
+        }
+        if let Some(s) = &self.structure {
+            crate::utils::console::structure_changed(&format!("Undo: {}", op), s);
+        }
+        self.after_replace(edit);
+        true
+    }
+
+    /// Re-apply the last undone edit. Returns false when there is none.
+    pub fn redo(&mut self) -> bool {
+        let Some(snap) = self.history.redo.pop() else { return false };
+        let Snapshot { structure, op, edit } = snap;
+        if let Some(cur) = self.structure.replace(structure) {
+            // Not `record`: that would clear the rest of the redo stack.
+            self.history.undo.push(Snapshot { structure: cur, op: op.clone(), edit });
+        }
+        if let Some(s) = &self.structure {
+            crate::utils::console::structure_changed(&format!("Redo: {}", op), s);
+        }
+        self.after_replace(edit);
+        true
+    }
+
+    fn after_replace(&mut self, edit: Edit) {
+        if edit != Edit::Species {
+            self.interaction.selected.clear();
+        }
+        match edit {
+            Edit::Reindexed => self.overrides.clear(),
+            _ => {
+                // Undoing an append leaves overrides on atoms that are gone.
+                let n = self.structure.as_ref().map_or(0, |s| s.atoms.len());
+                self.overrides.retain(|&i, _| i < n);
+            }
+        }
+        self.invalidate_derived();
     }
 
     /// Tolerance on covalent radii for the pairs that use them.
@@ -311,6 +445,47 @@ impl TabState {
         if any {
             self.view.show_bonds = false;
         }
+        self.style_ovf_mesh();
+    }
+
+    /// A magnetization mesh (OVF from mumax3, OOMMF, Spirit): its sites are
+    /// cells nanometres apart carrying unit-scale vectors, so show the
+    /// arrows alone at about one cell spacing, small grey dots for picking,
+    /// no bonds and no periodic images. Runs only when every site is an OVF
+    /// cell.
+    fn style_ovf_mesh(&mut self) {
+        use crate::io::ovf::SITE_NAME;
+        let Some(s) = &self.structure else { return };
+        if s.atoms.is_empty() || s.atoms.iter().any(|a| a.element != SITE_NAME) {
+            return;
+        }
+        // Cell spacing: the nearest neighbour of the first few sites.
+        let mut spacing = f64::MAX;
+        for a in s.atoms.iter().take(8) {
+            for b in &s.atoms {
+                let d: f64 = (0..3).map(|k| (a.position[k] - b.position[k]).powi(2)).sum::<f64>().sqrt();
+                if d > 1e-9 {
+                    spacing = spacing.min(d);
+                }
+            }
+        }
+        if spacing == f64::MAX {
+            spacing = 1.0;
+        }
+        let largest = s
+            .atoms
+            .iter()
+            .filter_map(|a| a.magmom)
+            .map(|m| (m[0] * m[0] + m[1] * m[1] + m[2] * m[2]).sqrt())
+            .fold(0.0, f64::max)
+            .max(1e-9);
+        self.style.moment_arrows_only = true;
+        self.style.show_moments = true;
+        self.style.moment_scale = 0.9 * spacing / largest;
+        self.style.element_colors.insert(SITE_NAME.to_string(), (0.6, 0.6, 0.6));
+        self.species_radius.insert(SITE_NAME.to_string(), 0.12 * spacing);
+        self.view.show_bonds = false;
+        self.view.show_full_unit_cell = false;
     }
 
     /// Color to use for atom at `index`: override if present, else None
@@ -443,56 +618,66 @@ impl AppState {
         }
     }
 
-    pub fn delete_selected(&mut self) -> String {
+    /// Delete the selected atoms (every rendered copy of them) as one
+    /// undoable step.
+    pub fn delete_selected(&mut self) {
         let tab = self.active_tab_mut();
         if tab.interaction.selected.is_empty() {
-            return "No atoms selected.".to_string();
+            crate::utils::console::log_info("No atoms selected.");
+            return;
         }
-        if let Some(ref mut structure) = tab.structure {
-            tab.interaction.undo_stack.push(structure.clone());
+        let Some(structure) = &tab.structure else {
+            crate::utils::console::log_info("No structure loaded.");
+            return;
+        };
+        // Ghost copies share an original_index: delete each atom once.
+        let mut indices: Vec<usize> =
+            tab.interaction.selected.values().map(|s| s.original_index).collect();
+        indices.sort_unstable();
+        indices.dedup();
+        let new = crate::physics::operations::basis::remove_selection(structure, &indices);
+        let op = format!("Deleted {} atom(s)", indices.len());
+        tab.commit(&op, new, Edit::Reindexed);
+    }
 
-            // Multiple ghost copies share an original_index — dedupe before deleting,
-            // otherwise we'd try to remove the same atom multiple times.
-            let mut indices: Vec<usize> = tab
-                .interaction
-                .selected
-                .values()
-                .map(|s| s.original_index)
-                .collect();
-            indices.sort_unstable();
-            indices.dedup();
-            let count = indices.len();
-            // Remove from highest index first to keep earlier indices valid.
-            indices.sort_by(|a, b| b.cmp(a));
-            for &idx in &indices {
-                if idx < structure.atoms.len() {
-                    structure.atoms.remove(idx);
-                }
+    /// Select the in-cell instance of each atom in `indices`, in that pick
+    /// order, replacing the selection. Used after an edit that clears the
+    /// selection (add, move) so the edited atoms stay picked.
+    pub fn select_atoms(&mut self, indices: &[usize]) {
+        // Instance ids depend only on the structure, not the canvas size.
+        let (atoms, _, _) = crate::rendering::scene::calculate_scene(
+            self.active_tab(),
+            &self.config,
+            1.0,
+            1.0,
+            false,
+            None,
+            None,
+        );
+        let interaction = &mut self.active_tab_mut().interaction;
+        interaction.selected.clear();
+        for &i in indices {
+            if let Some(a) = atoms.iter().find(|a| a.original_index == i && !a.is_ghost) {
+                interaction.select(SelectedAtom {
+                    unique_id: a.unique_id,
+                    original_index: i,
+                    cart_pos: a.cart_pos,
+                    element: a.element.clone(),
+                    seq: 0,
+                });
             }
-            tab.interaction.selected.clear();
-            tab.invalidate_derived();
-            // Atom indices shifted — overrides keyed on those indices are no
-            // longer meaningful. Drop them rather than try to remap.
-            tab.overrides.clear();
-            format!("Deleted {} atom(s)", count)
-        } else {
-            "No structure loaded.".to_string()
         }
     }
 
-    pub fn undo(&mut self) -> String {
-        let tab = self.active_tab_mut();
-        if let Some(prev_structure) = tab.interaction.undo_stack.pop() {
-            tab.structure = Some(prev_structure);
-            tab.interaction.selected.clear();
-            tab.invalidate_derived();
-            // Same reasoning as `delete_selected`: undo can shift atom counts
-            // and indices, so any overrides that pointed to the post-delete
-            // arrangement are stale.
-            tab.overrides.clear();
-            "Undo successful.".to_string()
-        } else {
-            "Nothing to undo.".to_string()
+    pub fn undo(&mut self) {
+        if !self.active_tab_mut().undo() {
+            crate::utils::console::log_info("Nothing to undo.");
+        }
+    }
+
+    pub fn redo(&mut self) {
+        if !self.active_tab_mut().redo() {
+            crate::utils::console::log_info("Nothing to redo.");
         }
     }
 }
@@ -500,5 +685,137 @@ impl AppState {
 impl Default for AppState {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::structure::Atom;
+
+    fn chain(elements: &[&str]) -> Structure {
+        let atoms = elements
+            .iter()
+            .enumerate()
+            .map(|(i, el)| Atom {
+                element: el.to_string(),
+                position: [i as f64, 0.0, 0.0],
+                original_index: i,
+                oxidation: None,
+                occupancy: 1.0,
+                magmom: None,
+            })
+            .collect();
+        Structure {
+            lattice: [[10.0, 0.0, 0.0], [0.0, 10.0, 0.0], [0.0, 0.0, 10.0]],
+            atoms,
+            formula: String::new(),
+            is_periodic: true,
+        }
+    }
+
+    fn elements(tab: &TabState) -> Vec<String> {
+        tab.structure.as_ref().unwrap().atoms.iter().map(|a| a.element.clone()).collect()
+    }
+
+    fn tab_with(s: Structure) -> TabState {
+        let mut tab = TabState::new(&Config::default());
+        tab.structure = Some(s);
+        tab
+    }
+
+    #[test]
+    fn undo_redo_walk_the_history() {
+        let mut tab = tab_with(chain(&["Fe", "O"]));
+        tab.commit("a", chain(&["Co", "O"]), Edit::Species);
+        tab.commit("b", chain(&["Co"]), Edit::Reindexed);
+        assert!(tab.undo());
+        assert_eq!(elements(&tab), ["Co", "O"]);
+        assert!(tab.undo());
+        assert_eq!(elements(&tab), ["Fe", "O"]);
+        assert!(!tab.undo());
+        assert!(tab.redo());
+        assert!(tab.redo());
+        assert_eq!(elements(&tab), ["Co"]);
+        assert!(!tab.redo());
+    }
+
+    #[test]
+    fn a_new_edit_drops_the_redo_history() {
+        let mut tab = tab_with(chain(&["Fe"]));
+        tab.commit("a", chain(&["Co"]), Edit::Species);
+        tab.undo();
+        tab.commit("b", chain(&["Ni"]), Edit::Species);
+        assert!(!tab.redo());
+        tab.undo();
+        assert_eq!(elements(&tab), ["Fe"]);
+    }
+
+    #[test]
+    fn history_is_bounded() {
+        let mut tab = tab_with(chain(&["Fe"]));
+        for _ in 0..History::LIMIT + 10 {
+            tab.commit("x", chain(&["Fe"]), Edit::Species);
+        }
+        let mut n = 0;
+        while tab.undo() {
+            n += 1;
+        }
+        assert_eq!(n, History::LIMIT);
+    }
+
+    #[test]
+    fn edit_kind_decides_what_per_atom_state_survives() {
+        let sel = SelectedAtom {
+            unique_id: 0,
+            original_index: 0,
+            cart_pos: [0.0; 3],
+            element: "Fe".into(),
+            seq: 0,
+        };
+        let mut tab = tab_with(chain(&["Fe", "O"]));
+        tab.interaction.select(sel.clone());
+        tab.overrides.insert(1, AtomOverride { color: Some((1.0, 0.0, 0.0)), ..Default::default() });
+
+        tab.commit("species", chain(&["Co", "O"]), Edit::Species);
+        assert_eq!(tab.interaction.selected.len(), 1);
+        assert!(tab.overrides.contains_key(&1));
+
+        // Appending keeps overrides; undoing the append prunes the ones
+        // past the end.
+        tab.commit("append", chain(&["Co", "O", "H"]), Edit::Geometry);
+        assert!(tab.interaction.selected.is_empty());
+        tab.overrides.insert(2, AtomOverride::default());
+        tab.undo();
+        assert!(tab.overrides.contains_key(&1));
+        assert!(!tab.overrides.contains_key(&2));
+
+        tab.commit("delete", chain(&["Co"]), Edit::Reindexed);
+        assert!(tab.overrides.is_empty());
+    }
+
+    #[test]
+    fn delete_selected_is_undoable_and_updates_the_formula() {
+        let mut app = AppState {
+            load_jobs: vec![],
+            tabs: vec![tab_with(chain(&["Fe", "O", "O"]))],
+            active_tab_index: 0,
+            config: Config::default(),
+        };
+        for (uid, idx) in [(0, 1), (7, 1)] {
+            // Two rendered copies of the same atom delete it once.
+            app.active_tab_mut().interaction.select(SelectedAtom {
+                unique_id: uid,
+                original_index: idx,
+                cart_pos: [0.0; 3],
+                element: "O".into(),
+                seq: 0,
+            });
+        }
+        app.delete_selected();
+        assert_eq!(elements(app.active_tab()), ["Fe", "O"]);
+        assert_eq!(app.active_tab().structure.as_ref().unwrap().formula, "FeO");
+        app.undo();
+        assert_eq!(elements(app.active_tab()), ["Fe", "O", "O"]);
     }
 }

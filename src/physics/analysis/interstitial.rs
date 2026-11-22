@@ -357,6 +357,7 @@ mod tests {
                     original_index: i,
                     oxidation: None,
                     occupancy: 1.0,
+                    magmom: None,
                 })
                 .collect(),
             formula: "Na".into(),
@@ -484,6 +485,7 @@ mod tests {
                 original_index: 0,
                 oxidation: None,
                 occupancy: 1.0,
+                magmom: None,
             }],
             formula: "Na".into(),
             is_periodic: true,

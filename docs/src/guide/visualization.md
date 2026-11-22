@@ -14,12 +14,14 @@ CView automatically detects the file type based on extension and content. You ca
 | Format | Extensions | Description |
 | :--- | :--- | :--- |
 | **CIF** | `.cif` | Standard Crystallographic Information Files. |
-| **VASP** | `POSCAR`, `CONTCAR`, `.vasp` | Standard VASP structure inputs and outputs. |
-| **VASP run** | `vasprun.xml` (any name; recognised by content) | Every ionic step of a relaxation or MD run, with its energy and largest force. |
-| **Quantum Espresso** | `.in`, `.out`, `.pwi`, `.qe` | Inputs, and every geometry of a relax, vc-relax or MD output (starting with the input structure), with energies and forces. |
+| **Magnetic CIF** | `.mcif` (or a `.cif` with magnetic operations) | Magnetic space-group operations and site moments, shown as arrows. See [Magnetism](magnetism.md). |
+| **VASP** | `POSCAR`, `CONTCAR`, `.vasp` | Standard VASP structure inputs and outputs. Magnetic moments are read from an `INCAR` or `OUTCAR` in the same folder. |
+| **VASP run** | `vasprun.xml` (any name; recognised by content) | Every ionic step of a relaxation or MD run, with its energy and largest force, and its magnetic moments. |
+| **Quantum Espresso** | `.in`, `.out`, `.pwi`, `.qe` | Inputs, and every geometry of a relax, vc-relax or MD output (starting with the input structure), with energies, forces and magnetic moments. |
 | **LAMMPS** | `.dump`, `.lammpstrj`, `.dat`, any name starting with `ITEM: TIMESTEP` | Text dumps: wrapped, scaled or unwrapped positions; orthogonal or triclinic boxes; every frame. Species come from an `element` or `mass` column, otherwise atoms are shown as `Type n`. |
 | **SPR-KKR** | `.pot`, `.pot_new`, `.sys` | Munich SPR-KKR potential and system files. Chemical disorder (CPA sites with several occupants) is read as mixed sites and written back as CPA sites. Reading needs nothing extra (`.pot`, `.pot_new`, `.pot_out`). Writing uses CView's own writer by default; set the environment variable `CVIEW_PYTHON` to a Python that has ase2sprkkr to write with ase2sprkkr instead — an optional improvement, never a requirement (see [Building Structures](building.md#exporting-a-disordered-alloy-to-spr-kkr)). |
-| **XYZ** | `.xyz` | Cartesian coordinates (Standard and Extended XYZ). |
+| **XYZ** | `.xyz` | Cartesian coordinates (Standard and Extended XYZ, including a `magmoms` column). |
+| **OVF** | `.ovf`, `.omf`, `.ohf` | Magnetization textures from mumax3, OOMMF and Spirit (OVF 1.0 and 2.0, text or binary), one arrow per mesh cell. See [Magnetism](magnetism.md#ovf-files-mumax3-oommf-spirit). |
 | **PDB** | `.pdb`, `.ent` | Protein Data Bank records. Reads the `CRYST1` cell, `ATOM`/`HETATM` sites, occupancies and formal charges; the first `MODEL` only. Files without a real cell load as non-periodic molecules. |
 
 >[!NOTE]
@@ -58,6 +60,9 @@ To convert a loaded structure into a different format, use `File → Save As (Sh
 - Quantum Espresso Input (*.in)
 - XYZ (*.xyz)
 - PDB (*.pdb)
+
+>[!NOTE]
+>A structure with magnetic moments keeps them in some formats: a saved **POSCAR** also gets the `ISPIN`/`MAGMOM` tags in an `INCAR` beside it (only when there is none), **Quantum Espresso** input gets one species per moment with `starting_magnetization`, and **XYZ** gets a `magmoms` column. CIF output does not carry moments. See [Magnetism](magnetism.md#writing-the-moments-for-dft).
 
 
 ## Visualization Controls
@@ -100,6 +105,8 @@ The **Sidebar** (right panel) is the primary control interface for customizing t
 2. **Appearance**: Atom size, bond thickness, colors
 3. **Bond Valence**: BVS-based coloring (see [BVS Guide](bvs.md))
 4. **Element Colors**: Per-element colour, transparency, and polyhedra controls
+
+Under **Appearance**, a structure with magnetic moments also uses the **Magnetic Moments** group: show or hide the arrows, draw them without the atom spheres, set their length and choose how they are coloured. See [Magnetism](magnetism.md#showing-the-moments).
 
 ### Color Modes
 
@@ -240,7 +247,10 @@ This visualization immediately reveals the corner-sharing connectivity character
 | `Ctrl + E` | Export image (PNG/PDF/SVG) |
 | `Ctrl + ,` | Preferences |
 | `Ctrl + W` | Close tab |
-| `Ctrl + Z` | Undo (e.g. atom deletion) |
+| `Ctrl + Z` | Undo the last structure edit (delete, supercell, slab, substitution, cell toggle…) |
+| `Ctrl + Shift + Z` or `Ctrl + Y` | Redo |
+| `Delete` | Delete the selected atoms |
+| `Ctrl + A` / `Esc` | Select all atoms / clear the selection |
 | `T` | Toggle Primitive ↔ Conventional cell (canvas focused) |
 | `Ctrl + Shift + C` | Matrix transformation tool |
 | `Ctrl + M` | Add Miller plane |

@@ -2,13 +2,17 @@
 
 CView provides several tools to manipulate and construct crystal structures. These operations are accessible via the **Structure** menu and enable you to prepare input geometries for *ab-initio* calculations.
 
-Supercell, Basis, Atom Instances and Slab are the four tabs of one **Structure** window. Each menu entry opens the window on its own tab. The first three share a **Preview** pane: a flat schematic of the cell in the same style as the Slab cutting-plane view (white canvas, element-coloured dots, wireframe cell, the same fixed isometric orientation). It is a preview, not the 3D viewport, so it has no shading or bonds. Highlighted atoms get a dark ring:
+Supercell, Basis, Atoms, Atom Instances, Magnetic and Slab are the six tabs of one **Structure** window. Each menu entry opens the window on its own tab. All but Slab share a **Preview** pane: a flat schematic of the cell in the same style as the Slab cutting-plane view (white canvas, element-coloured dots, wireframe cell, the same fixed isometric orientation). It is a preview, not the 3D viewport, so it has no shading or bonds. Highlighted atoms get a dark ring:
 
 - **Supercell** previews the structure the current matrix would produce, before you press Transform.
 - **Basis** highlights the atoms an action would touch: the atoms selected in the main view, and every atom of the element typed into *Find*.
+- **Atoms** previews the structure with the atom added, moved or replaced, and rings the atoms that change.
 - **Atom Instances** highlights the rows selected in the list.
+- **Magnetic** previews the structure with the moments (and, for a propagation vector, the larger cell) you have set up, with magnetic arrows.
 
 The window is not modal, so you can keep it open next to the main view.
+
+Every change to the structure (from this window, the Space Group editor, deleting atoms, the primitive/conventional toggle or the Trajectory Player) is one step of **Edit → Undo** (`Ctrl + Z`) and **Edit → Redo** (`Ctrl + Shift + Z`). The last 50 steps are kept for each tab.
 
 ---
 
@@ -114,7 +118,23 @@ CView also reads these files, including potentials written by an SCF run (`ALAT 
 3. Enter the replacement element symbol
 4. Click **Change element**
 
-**Atom Removal**: Press `Delete` after selecting atoms to create vacancies or remove unwanted species.
+**Atom Removal**: Press `Delete` (or **Edit → Delete Selected**) after selecting atoms to create vacancies or remove unwanted species. `Ctrl + A` selects every atom drawn, `Esc` clears the selection.
+
+---
+
+## Adding, Moving and Replacing Atoms
+
+The **Atoms** tab (**Edit → Add, Move or Replace Atoms...** or **Structure → Atoms...**) edits single atoms: it adds them and moves them by typed coordinates, and changes the element of the selected ones. The **Coordinates** card chooses fractional or Cartesian (Å) input for both cards below it; switching converts what is already typed. Fractional fields accept fractions such as `1/3`. A structure with no cell (a plain XYZ molecule) is always Cartesian.
+
+**Add an atom**: type the element and its position, or pick one of the **interstitial sites** found by Analysis → Void Analysis (the list appears once sites have been screened for the tab; picking one also fills in the screened ion when no element is typed). The preview shows the new atom ringed, and the line under the fields gives the nearest other atom and its distance, in red when the two would overlap (closer than half the sum of their covalent radii). **Add atom** appends it and leaves it selected, ready to move.
+
+**Move the selected atoms**: select atoms in the main view, then
+- **Shift by** moves all of them by the same vector (fractional or Å). The fields keep their values after **Move**, so pressing it again repeats the step.
+- **Move to** places a single selected atom at a position; the fields start at its current one.
+
+The moved atoms stay selected. Positions are kept exactly as typed, never wrapped into the cell; an atom pushed more than half a cell outside it is not drawn, and the status line says so (**Basis → Standardize positions** wraps it back in).
+
+**Replace the selected atoms**: type the new element; the status line says what will change (e.g. `2 Ti, 1 O → Zr`) and the preview shows it. **Replace** changes them and keeps them selected. To replace every atom of an element, only some of them, or to mix an element into a site as a partial occupancy, use the **Basis** tab described above.
 
 ---
 
@@ -161,6 +181,12 @@ The **Atom Instances** tab provides session-only cosmetic overrides for individu
 
 >[!NOTE]
 >These overrides are not written to structure files. Use `View → Hide Symmetric Basis` or `Ctrl + Shift + B` to toggle visible periodic images.
+
+---
+
+## Magnetic Moments and Order
+
+The **Magnetic** tab (`Structure → Magnetic Moments...`) sets a moment on each atom and builds antiferromagnetic cells from a propagation vector (ferro-, A-, C- and G-type presets), then gives the INCAR tags for the result. See [Magnetism](magnetism.md).
 
 ---
 

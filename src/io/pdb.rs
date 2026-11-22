@@ -120,6 +120,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
                     original_index: atoms.len(),
                     oxidation,
                     occupancy,
+                    magmom: None,
                 });
             }
             _ => {}
@@ -724,6 +725,7 @@ mod tests {
                 original_index: 0,
                 oxidation: Some(3),
                 occupancy: 1.0,
+                magmom: None,
             }],
             formula: String::new(),
             is_periodic: true,
@@ -754,6 +756,7 @@ mod tests {
                     original_index: 0,
                     oxidation: Some(2),
                     occupancy: 1.0,
+                    magmom: None,
                 },
                 Atom {
                     element: "O".into(),
@@ -761,6 +764,7 @@ mod tests {
                     original_index: 1,
                     oxidation: Some(-2),
                     occupancy: 0.75,
+                    magmom: None,
                 },
             ],
             formula: String::new(),
@@ -796,6 +800,7 @@ mod tests {
                 original_index: 0,
                 oxidation: None,
                 occupancy: 1.0,
+                magmom: None,
             }],
             formula: String::new(),
             is_periodic: true,
@@ -823,6 +828,7 @@ mod tests {
                     original_index: 0,
                     oxidation: None,
                     occupancy: 1.0,
+                    magmom: None,
                 },
                 Atom {
                     element: "F".into(),
@@ -830,6 +836,7 @@ mod tests {
                     original_index: 1,
                     oxidation: None,
                     occupancy: 1.0,
+                    magmom: None,
                 },
             ],
             formula: String::new(),

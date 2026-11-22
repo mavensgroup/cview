@@ -18,6 +18,7 @@
 
 use crate::model::trajectory::{Frame, Trajectory};
 use crate::model::Structure;
+use super::magmom::{expand_values, sibling_outcar, VaspMagnetism};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 
@@ -127,6 +128,9 @@ pub fn parse_trajectory(path: &str) -> io::Result<Trajectory> {
     let mut geom: Option<Geometry> = None;
     let mut energy: Option<f64> = None;
     let mut max_force: Option<f64> = None;
+    // Magnetism tags, from <incar> and then <parameters> (which repeats
+    // them with MAGMOM expanded to every atom, so it wins).
+    let mut mag = VaspMagnetism::default();
 
     let push = |traj: &mut Trajectory, geom: Option<Geometry>, energy, max_force, species: &[String]| -> bool {
         let Some((lattice, positions)) = geom.as_ref().and_then(Geometry::cartesian) else {
@@ -136,7 +140,7 @@ pub fn parse_trajectory(path: &str) -> io::Result<Trajectory> {
             traj.species = species.to_vec();
         }
         let step = Some(traj.frames.len() as i64 + 1);
-        traj.push_checked(Frame { lattice, positions, energy, max_force, step })
+        traj.push_checked(Frame { lattice, positions, energy, max_force, step, magmoms: None })
     };
 
     while let Some(line) = lines.next() {
@@ -179,6 +183,20 @@ pub fn parse_trajectory(path: &str) -> io::Result<Trajectory> {
             } else if t.contains("\"finalpos\"") {
                 last_named = Some(g);
             }
+        } else if !in_calc && t.contains("name=\"MAGMOM\"") {
+            if let Some(v) = inner(t, "v").and_then(expand_values) {
+                mag.magmom = Some(v);
+            }
+        } else if !in_calc && t.contains("name=\"ISPIN\"") {
+            mag.ispin = inner(t, "i").and_then(|v| v.trim().parse().ok());
+        } else if !in_calc && (t.contains("name=\"LNONCOLLINEAR\"") || t.contains("name=\"LSORBIT\"")) {
+            if inner(t, "i").is_some_and(|v| v.trim().starts_with('T')) {
+                mag.noncollinear = true;
+            }
+        } else if !in_calc && t.contains("name=\"SAXIS\"") {
+            if let Some(v) = vec3(t) {
+                mag.saxis = Some(v);
+            }
         } else if in_calc && !in_scstep && t.starts_with("<varray name=\"forces\"") {
             let f = read_rows(&mut lines, species.len())?;
             max_force = f.iter().map(|v| (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt()).reduce(f64::max);
@@ -202,7 +220,33 @@ pub fn parse_trajectory(path: &str) -> io::Result<Trajectory> {
     if traj.frames.is_empty() {
         return Err(bad("vasprun.xml has no structures"));
     }
+    attach_moments(&mut traj, path, &mag);
     Ok(traj)
+}
+
+/// vasprun.xml has the starting moments (MAGMOM) but not the computed ones;
+/// those are in the OUTCAR, one table per ionic step. Use the OUTCAR beside
+/// the file when it has one table per frame, else MAGMOM on every frame.
+fn attach_moments(traj: &mut Trajectory, path: &str, mag: &VaspMagnetism) {
+    if !mag.spin_polarised() {
+        return;
+    }
+    let n = traj.species.len();
+    let computed = sibling_outcar(path, n, mag.saxis);
+    if !computed.is_empty() && computed.len() == traj.frames.len() {
+        for (f, m) in traj.frames.iter_mut().zip(computed) {
+            f.magmoms = Some(m);
+        }
+        crate::utils::console::log_info("Magnetic moments per step from the OUTCAR beside vasprun.xml");
+    } else if let Some(m) = mag.moments(n) {
+        for f in &mut traj.frames {
+            f.magmoms = Some(m.clone());
+        }
+        crate::utils::console::log_info(
+            "Magnetic moments: starting values (MAGMOM) from vasprun.xml; \
+             put the run's OUTCAR beside it for the computed moments",
+        );
+    }
 }
 
 /// The last ionic step (the relaxed structure).
@@ -316,6 +360,38 @@ mod tests {
         let p1 = t.frames[1].positions[1];
         assert!((p1[2] - 0.4 * 4.2).abs() < 1e-12);
         assert_eq!(t.frames[1].lattice[0][0], 4.2);
+        assert!(t.frames[0].magmoms.is_none(), "no MAGMOM, no moments");
         let _ = std::fs::remove_dir_all(std::path::Path::new(&p).parent().unwrap());
+    }
+
+    const PARAMS: &str = r#" <parameters>
+  <separator name="electronic spin" >
+   <i type="int" name="ISPIN">      2</i>
+   <i type="logical" name="LNONCOLLINEAR"> F  </i>
+   <v name="MAGMOM">      4.00000000     0.00000000</v>
+   <v name="SAXIS">      0.00000000      0.00000000      1.00000000</v>
+  </separator>
+ </parameters>
+"#;
+
+    #[test]
+    fn magmom_from_parameters_else_outcar_per_step() {
+        let xml = XML.replacen(" <structure name=\"initialpos\"", &format!("{PARAMS} <structure name=\"initialpos\""), 1);
+        let p = tmp("vasprun.xml_mag", &xml);
+        let t = parse_trajectory(&p).unwrap();
+        for f in &t.frames {
+            assert_eq!(f.magmoms.as_ref().unwrap()[0], [0.0, 0.0, 4.0]);
+        }
+
+        // An OUTCAR with one table per step replaces them.
+        let table = |m: f64| {
+            format!(" magnetization (x)\n\n# of ion  s  p  d  tot\n-----\n    1  0 0 0 {m}\n    2  0 0 0 0.1\n-----\ntot 0 0 0 0\n\n")
+        };
+        let dir = std::path::Path::new(&p).parent().unwrap().to_path_buf();
+        std::fs::write(dir.join("OUTCAR"), format!("{}{}", table(3.1), table(3.3))).unwrap();
+        let t = parse_trajectory(&p).unwrap();
+        assert_eq!(t.frames[0].magmoms.as_ref().unwrap()[0], [0.0, 0.0, 3.1]);
+        assert_eq!(t.frames[1].magmoms.as_ref().unwrap()[0], [0.0, 0.0, 3.3]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
