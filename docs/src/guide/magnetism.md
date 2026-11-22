@@ -49,12 +49,20 @@ That is what makes a body-centred antiferromagnet such as MnF₂ come out with o
 * Cells where the magnetization is zero (outside the magnet in a mumax3 geometry) are left out, so a disc reads as a disc.
 * A magnetization in A/m is divided by its largest magnitude, so you always see **m = M/Ms**. Structure Info shows the sum and the average of m, without a μB unit.
 * Meshes above 40 000 cells are thinned (every k-th cell in x and y) to keep the CPU renderer fast; the System Log reports it.
-* Only the first segment is read, and only vector fields: a scalar field (an energy density) is refused with a message.
+* Only vector fields are read: a scalar field (an energy density) is refused with a message.
 * Opening a mesh switches on **Arrows only** and sets the arrow length to about one cell spacing, with bonds and periodic images off.
 
 ![A Néel skyrmion in Direction colouring, arrows only](../images/magnetism_skyrmion.png)
 
-A mumax3 run's `m000000.ovf, m000001.ovf, …` open as separate tabs.
+#### Snapshot series (movies)
+
+A mumax3 or OOMMF run writes one file per snapshot: `m000000.ovf`, `m000001.ovf`, …. Open **any one of them** and CView loads the whole series from the same folder — every file whose name is the same up to a trailing number, with the same extension — in numeric order. The main view shows the file you opened; `Structure → Trajectory Player…` plays them all (see [Trajectories](visualization.md#trajectories-relaxation-and-md)). A Spirit file holding several snapshots as segments is played the same way.
+
+* The simulation time (`Total simulation time` in the header) is shown for each snapshot; the step is OOMMF's iteration number, otherwise the number in the file name.
+* Which cells are kept, and how a magnetization in A/m is scaled, is decided from the opened snapshot and applied to all of them, so the frames are comparable.
+* All snapshots are kept in memory. A long series of a large mesh is thinned further, to about 6 million cell moments in all (at least 2 000 cells per snapshot); the System Log says when it is.
+* A file in the folder with a different mesh, or one that cannot be read, is left out with a warning.
+* Other quantities in the same folder (`B_ext000000.ovf`) and unnumbered files (`m.ovf`) are not part of the series.
 
 ---
 
@@ -177,6 +185,6 @@ Species labels such as `Fe1`, `Fe_up` are read back as the element, so a file wr
 
 ## Limits
 
-* The arrows are drawn in the main view and in the Structure window preview only; the GPU windows (Trajectory Player, 3D charge density) do not show them.
+* The arrows are drawn in the main view, the Structure window preview and the Trajectory Player; the 3D charge density window does not show them.
 * Antiferromagnetic orders on a larger cell are only built from a single propagation vector. Searching all magnetic subgroups is not done: take a published structure from MAGNDATA as an mCIF instead.
 * There is no topological charge or skyrmion builder yet; see the [To Do](../todo.md) list.

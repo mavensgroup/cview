@@ -28,9 +28,10 @@ open an issue before starting on one so work isn't duplicated.
   species limit.
 - [x] **OVF files** (mumax3, OOMMF, Spirit): magnetization textures shown
   as arrows.
-- [ ] Topological charge of a spin texture; build skyrmion lattices; play a
-  series of OVF snapshots.
-- [ ] Magnetic moment arrows in the 3D windows.
+- [x] **OVF snapshot series** play in the Trajectory Player, with moment
+  arrows and a colour map.
+- [ ] Topological charge of a spin texture; build skyrmion lattices.
+- [ ] Magnetic moment arrows in the 3D charge density window.
 - [ ] **Thermal ellipsoids** from anisotropic displacement parameters in CIF.
 - [ ] Overlay two structures in one view.
 

@@ -29,12 +29,14 @@ CView automatically detects the file type based on extension and content. You ca
 
 ### Trajectories (Relaxation and MD)
 
-Files with several frames — `vasprun.xml`, Quantum Espresso relax/MD output, LAMMPS dumps — open as one structure in the main view: the **first** or **last** frame, set in `Preferences → General → Relaxation / MD files open at`. All frames are kept.
+Files with several frames — `vasprun.xml`, Quantum Espresso relax/MD output, LAMMPS dumps — open as one structure in the main view: the **first** or **last** frame, set in `Preferences → General → Relaxation / MD files open at`. All frames are kept. A series of OVF magnetization snapshots (mumax3, OOMMF, Spirit) is a trajectory too, and opens at the snapshot you chose; see [Magnetism](magnetism.md#snapshot-series-movies).
 
 `Structure → Trajectory Player… (Ctrl + Shift + P)` plays them in a separate window drawn on the GPU:
 
 * Play, step and jump with the buttons or **Space**, **, / .** (or **← / →**), **Home / End**; set the speed in frames per second.
-* For relaxations, the energy of every step is plotted under the view (click to jump), with the energy, ΔE and largest force of the current step on screen.
+* For relaxations, the energy of every step is plotted under the view (click to jump), with the energy, ΔE and largest force of the current step on screen. Without energies (an OVF series), the plot shows the mean moment ⟨m_x⟩, ⟨m_y⟩, ⟨m_z⟩ per frame instead, and the simulation time is shown.
+* **View x / y / z** looks down a Cartesian axis and refits the view.
+* When the frames carry magnetic moments, a row of moment controls appears: **Arrows** on/off, **Length**, **Width**, and **Colour** (*Direction*: hue from the in-plane angle, white at +z, black at −z, as in mumax3; *m_z* on a blue–white–red scale; *Up / down*; or one colour). For a magnetization mesh there are also **Every** (an arrow on every n-th cell in the plane, the arrows growing to match) and **Colour map** (every cell drawn as a flat tile in its moment's colour, with grey arrows on top). A large mesh opens with the colour map on and the arrows thinned to about 48 along the longest side.
 * **Show in Main View** copies the current frame into the main window for measurements, analysis and vector export; **Undo** restores the previous structure.
 * **Save Image…** writes the 3D view as a PNG.
 
