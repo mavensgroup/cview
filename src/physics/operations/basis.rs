@@ -10,6 +10,7 @@ pub fn substitute_element(structure: &Structure, target_el: &str, new_el: &str) 
     for atom in &mut new_atoms {
         if atom.element == target_el {
             atom.element = new_el.to_string();
+            atom.magmom = None; // the new species' moment is not known
         }
     }
     // The composition changed, so the formula must too.
@@ -117,6 +118,7 @@ pub fn mix_sites(
                 a.element = new_el.to_string();
                 a.occupancy = share;
                 a.oxidation = None; // the new species' charge is not known
+                a.magmom = None;
                 inserts.push((i, a));
             }
         }
@@ -151,6 +153,7 @@ pub fn modify_selection(structure: &Structure, indices: &[usize], new_el: &str) 
     for &idx in indices {
         if idx < new_atoms.len() {
             new_atoms[idx].element = new_el.to_string();
+            new_atoms[idx].magmom = None;
         }
     }
 
@@ -215,6 +218,7 @@ mod tests {
             original_index: 0,
             oxidation: None,
             occupancy: 1.0,
+            magmom: None,
         };
         Structure {
             atoms: vec![atom("Ba"), atom("Ti"), atom("O"), atom("O"), atom("O")],
@@ -318,6 +322,7 @@ mod mixed_site_guard_tests {
             original_index: 0,
             oxidation: None,
             occupancy: occ,
+            magmom: None,
         };
         Structure {
             atoms: vec![

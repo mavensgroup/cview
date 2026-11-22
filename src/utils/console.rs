@@ -133,7 +133,9 @@ fn do_append(cell: &'static OnceLock<glib::SendWeakRef<TextView>>, message: &str
   };
   let msg = message.to_string();
 
-  glib::MainContext::default().spawn_local(async move {
+  // `spawn` (any thread), not `spawn_local` (main thread only); the block
+  // runs on the main loop either way.
+  glib::MainContext::default().spawn(async move {
     if let Some(view) = weak.upgrade() {
       let buffer = view.buffer();
       let mut end = buffer.end_iter();

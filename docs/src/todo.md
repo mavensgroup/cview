@@ -15,8 +15,22 @@ open an issue before starting on one so work isn't duplicated.
 
 - [x] **Bond rules per element pair** (minimum/maximum distance, boundary
   handling), shared by bonds, polyhedra and bond valence.
-- [ ] **Magnetic moments as arrows**, read from VASP (`MAGMOM`, OUTCAR),
-  Quantum Espresso and magnetic CIF.
+- [x] **Magnetic moments as arrows**, read from VASP (INCAR `MAGMOM` or
+  OUTCAR beside a POSCAR/CONTCAR, vasprun.xml), Quantum Espresso output,
+  magnetic CIF (`.mcif`, with the magnetic space-group operations) and
+  extended XYZ.
+- [x] **Magnetic order**: set moments per site, build antiferromagnetic
+  cells from a propagation vector (FM, A-, C-, G-type presets), and write
+  them for VASP (`MAGMOM`, in POSCAR order) and Quantum Espresso (one
+  species per moment, `starting_magnetization`).
+- [x] **Spin textures** (spirals, skyrmions): colour by direction, arrows
+  without atoms, and Quantum Espresso input that stays within pw.x's
+  species limit.
+- [x] **OVF files** (mumax3, OOMMF, Spirit): magnetization textures shown
+  as arrows.
+- [ ] Topological charge of a spin texture; build skyrmion lattices; play a
+  series of OVF snapshots.
+- [ ] Magnetic moment arrows in the 3D windows.
 - [ ] **Thermal ellipsoids** from anisotropic displacement parameters in CIF.
 - [ ] Overlay two structures in one view.
 

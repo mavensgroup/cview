@@ -9,7 +9,7 @@ use gtk4::{
     Expander, Label, Notebook, Orientation, PolicyType, Scale, ScrolledWindow, Separator,
 };
 
-use crate::config::ColorMode;
+use crate::config::{ColorMode, MomentColorMode};
 use crate::model::elements::get_element_color;
 use crate::state::{AppState, ViewState};
 use crate::ui::style::group;
@@ -359,6 +359,188 @@ pub fn build(
     });
     vbox_atom.append(&check_labels);
     style_box.append(&group("Atom Size", &vbox_atom));
+
+    // --- MAGNETIC MOMENTS ---
+    let vbox_mag = GtkBox::new(Orientation::Vertical, 10);
+    vbox_mag.set_margin_top(8);
+    vbox_mag.set_margin_bottom(12);
+    vbox_mag.set_margin_start(12);
+    vbox_mag.set_margin_end(12);
+    vbox_mag.set_tooltip_text(Some(
+        "Arrows for the moments read from the file: INCAR MAGMOM or OUTCAR beside a \
+         POSCAR/CONTCAR, vasprun.xml, pw.x output, extended XYZ magmoms",
+    ));
+
+    let check_mag = CheckButton::with_label("Show Moment Arrows");
+    check_mag.set_active(state.borrow().active_tab().style.show_moments);
+    let s_mag = state.clone();
+    let nb_mag = nb_weak.clone();
+    let cb_mag = queue_active_draw;
+    let id_mag = check_mag.connect_toggled(move |btn| {
+        s_mag.borrow_mut().active_tab_mut().style.show_moments = btn.is_active();
+        cb_mag(&nb_mag);
+    });
+    vbox_mag.append(&check_mag);
+
+    let check_only = CheckButton::with_label("Arrows only");
+    check_only.set_tooltip_text(Some(
+        "Hide the spheres of atoms that carry a moment, so a spin texture shows \
+         as its arrows (each at its full length)",
+    ));
+    check_only.set_active(state.borrow().active_tab().style.moment_arrows_only);
+    let s_mo = state.clone();
+    let nb_mo = nb_weak.clone();
+    let cb_mo = queue_active_draw;
+    let id_only = check_only.connect_toggled(move |btn| {
+        s_mo.borrow_mut().active_tab_mut().style.moment_arrows_only = btn.is_active();
+        cb_mo(&nb_mo);
+    });
+    vbox_mag.append(&check_only);
+
+    let s_ml = state.clone();
+    let nb_ml = nb_weak.clone();
+    let cb_ml = queue_active_draw;
+    // Å per μB for DFT moments; Å per unit m for an OVF mesh, whose tab
+    // starts at about one cell spacing, so the range follows the tab.
+    let (len_box, len_scale, id_len) = create_tracked_slider(
+        "Length (Å/μB)",
+        0.1,
+        2.0,
+        0.1,
+        state.borrow().active_tab().style.moment_scale.min(2.0),
+        Box::new(move |v| {
+            s_ml.borrow_mut().active_tab_mut().style.moment_scale = v;
+            cb_ml(&nb_ml);
+        }),
+    );
+    vbox_mag.append(&len_box);
+
+    // These follow the active tab: an OVF mesh sets its own, and switching
+    // tabs or opening a file into the empty first tab must show them.
+    {
+        let state = Rc::downgrade(&state);
+        let (check_mag, check_only, len_scale) = (check_mag.downgrade(), check_only.downgrade(), len_scale.downgrade());
+        gtk4::glib::timeout_add_local(std::time::Duration::from_millis(400), move || {
+            let (Some(st), Some(cm), Some(co), Some(ls)) =
+                (state.upgrade(), check_mag.upgrade(), check_only.upgrade(), len_scale.upgrade())
+            else {
+                return gtk4::glib::ControlFlow::Break;
+            };
+            let Ok(st) = st.try_borrow() else { return gtk4::glib::ControlFlow::Continue };
+            if st.tabs.is_empty() {
+                return gtk4::glib::ControlFlow::Continue;
+            }
+            let style = &st.active_tab().style;
+            if cm.is_active() != style.show_moments {
+                cm.block_signal(&id_mag);
+                cm.set_active(style.show_moments);
+                cm.unblock_signal(&id_mag);
+            }
+            if co.is_active() != style.moment_arrows_only {
+                co.block_signal(&id_only);
+                co.set_active(style.moment_arrows_only);
+                co.unblock_signal(&id_only);
+            }
+            let v = style.moment_scale;
+            if (ls.value() - v).abs() > 1e-6 {
+                let adj = ls.adjustment();
+                adj.set_upper((2.0f64).max((2.0 * v).ceil()));
+                ls.block_signal(&id_len);
+                ls.set_value(v);
+                ls.unblock_signal(&id_len);
+            }
+            gtk4::glib::ControlFlow::Continue
+        });
+    }
+
+    // Colour mode, then the up/down colours (Single uses the first).
+    let mode_mrow = GtkBox::new(Orientation::Horizontal, 10);
+    mode_mrow.append(&Label::new(Some("Color by:")));
+    let dd_mcol = DropDown::from_strings(&["Auto", "Up / Down", "Direction", "Single"]);
+    dd_mcol.set_hexpand(true);
+    dd_mcol.set_tooltip_text(Some(
+        "Auto: Up / Down for collinear moments, Direction otherwise. \
+         Up / Down: along the direction of the largest moment (sublattices of \
+         antiferro- and ferrimagnets). Direction: hue from the in-plane angle, \
+         white at +z, black at −z (canted moments, spirals, skyrmions). \
+         Single: one colour.",
+    ));
+    dd_mcol.set_selected(match state.borrow().active_tab().style.moment_color_mode {
+        MomentColorMode::Auto => 0,
+        MomentColorMode::UpDown => 1,
+        MomentColorMode::Direction => 2,
+        MomentColorMode::Single => 3,
+    });
+    mode_mrow.append(&dd_mcol);
+    vbox_mag.append(&mode_mrow);
+
+    let box_mcol = GtkBox::new(Orientation::Horizontal, 10);
+    let color_button = |c: (f64, f64, f64), down: bool| {
+        let btn = ColorButton::new();
+        btn.set_rgba(&gdk::RGBA::new(c.0 as f32, c.1 as f32, c.2 as f32, 1.0));
+        let s_mc = state.clone();
+        let nb_mc = nb_weak.clone();
+        let cb_mc = queue_active_draw;
+        btn.connect_color_set(move |b| {
+            let c = b.rgba();
+            let c = (c.red() as f64, c.green() as f64, c.blue() as f64);
+            {
+                let mut st = s_mc.borrow_mut();
+                let style = &mut st.active_tab_mut().style;
+                if down {
+                    style.moment_color_down = c;
+                } else {
+                    style.moment_color = c;
+                }
+            }
+            cb_mc(&nb_mc);
+        });
+        btn
+    };
+    let (c_up, c_down) = {
+        let st = state.borrow();
+        let style = &st.active_tab().style;
+        (style.moment_color, style.moment_color_down)
+    };
+    let lbl_up = Label::new(Some("Up:"));
+    let btn_up = color_button(c_up, false);
+    let lbl_down = Label::new(Some("Down:"));
+    let btn_down = color_button(c_down, true);
+    box_mcol.append(&lbl_up);
+    box_mcol.append(&btn_up);
+    box_mcol.append(&lbl_down);
+    box_mcol.append(&btn_down);
+    vbox_mag.append(&box_mcol);
+
+    // Show only the colour buttons the mode uses.
+    let show_buttons = {
+        let (lbl_up, btn_up, lbl_down, btn_down, row) =
+            (lbl_up.clone(), btn_up.clone(), lbl_down.clone(), btn_down.clone(), box_mcol.clone());
+        move |mode: MomentColorMode| {
+            row.set_visible(mode != MomentColorMode::Direction);
+            lbl_up.set_label(if mode == MomentColorMode::Single { "Color:" } else { "Up:" });
+            let two = matches!(mode, MomentColorMode::UpDown | MomentColorMode::Auto);
+            lbl_down.set_visible(two);
+            btn_down.set_visible(two);
+            btn_up.set_visible(true);
+        }
+    };
+    show_buttons(state.borrow().active_tab().style.moment_color_mode);
+    let s_mm = state.clone();
+    let nb_mm = nb_weak.clone();
+    let cb_mm = queue_active_draw;
+    dd_mcol.connect_selected_notify(move |dd| {
+        let mode = match dd.selected() {
+            1 => MomentColorMode::UpDown,
+            2 => MomentColorMode::Direction,
+            3 => MomentColorMode::Single,
+            _ => MomentColorMode::Auto,
+        };
+        s_mm.borrow_mut().active_tab_mut().style.moment_color_mode = mode;
+        show_buttons(mode);
+        cb_mm(&nb_mm);
+    });
+    style_box.append(&group("Magnetic Moments", &vbox_mag));
 
     // --- ELEMENT COLORS ---
     style_box.append(&group("Element Colors", &atoms_list_container));

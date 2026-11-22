@@ -314,6 +314,18 @@ impl TabState {
     /// and records the change in the console.
     pub fn commit(&mut self, op: &str, new: Structure, edit: Edit) {
         if let Some(old) = self.structure.take() {
+            // Operations that rebuild the atom list from elements and
+            // positions (slab, cell conversion, space-group rebuild) have no
+            // moment to give the new atoms. Say so rather than lose them
+            // silently.
+            let had = old.atoms.iter().any(|a| a.magmom.is_some());
+            let has = new.atoms.iter().any(|a| a.magmom.is_some());
+            if had && !has {
+                crate::utils::console::log_warn(&format!(
+                    "{}: magnetic moments are not carried over by this operation",
+                    op
+                ));
+            }
             self.history.record(Snapshot { structure: old, op: op.to_string(), edit });
         }
         crate::utils::console::structure_changed(op, &new);
@@ -433,6 +445,47 @@ impl TabState {
         if any {
             self.view.show_bonds = false;
         }
+        self.style_ovf_mesh();
+    }
+
+    /// A magnetization mesh (OVF from mumax3, OOMMF, Spirit): its sites are
+    /// cells nanometres apart carrying unit-scale vectors, so show the
+    /// arrows alone at about one cell spacing, small grey dots for picking,
+    /// no bonds and no periodic images. Runs only when every site is an OVF
+    /// cell.
+    fn style_ovf_mesh(&mut self) {
+        use crate::io::ovf::SITE_NAME;
+        let Some(s) = &self.structure else { return };
+        if s.atoms.is_empty() || s.atoms.iter().any(|a| a.element != SITE_NAME) {
+            return;
+        }
+        // Cell spacing: the nearest neighbour of the first few sites.
+        let mut spacing = f64::MAX;
+        for a in s.atoms.iter().take(8) {
+            for b in &s.atoms {
+                let d: f64 = (0..3).map(|k| (a.position[k] - b.position[k]).powi(2)).sum::<f64>().sqrt();
+                if d > 1e-9 {
+                    spacing = spacing.min(d);
+                }
+            }
+        }
+        if spacing == f64::MAX {
+            spacing = 1.0;
+        }
+        let largest = s
+            .atoms
+            .iter()
+            .filter_map(|a| a.magmom)
+            .map(|m| (m[0] * m[0] + m[1] * m[1] + m[2] * m[2]).sqrt())
+            .fold(0.0, f64::max)
+            .max(1e-9);
+        self.style.moment_arrows_only = true;
+        self.style.show_moments = true;
+        self.style.moment_scale = 0.9 * spacing / largest;
+        self.style.element_colors.insert(SITE_NAME.to_string(), (0.6, 0.6, 0.6));
+        self.species_radius.insert(SITE_NAME.to_string(), 0.12 * spacing);
+        self.view.show_bonds = false;
+        self.view.show_full_unit_cell = false;
     }
 
     /// Color to use for atom at `index`: override if present, else None
@@ -650,6 +703,7 @@ mod tests {
                 original_index: i,
                 oxidation: None,
                 occupancy: 1.0,
+                magmom: None,
             })
             .collect();
         Structure {

@@ -2,12 +2,13 @@
 
 CView provides several tools to manipulate and construct crystal structures. These operations are accessible via the **Structure** menu and enable you to prepare input geometries for *ab-initio* calculations.
 
-Supercell, Basis, Atoms, Atom Instances and Slab are the five tabs of one **Structure** window. Each menu entry opens the window on its own tab. All but Slab share a **Preview** pane: a flat schematic of the cell in the same style as the Slab cutting-plane view (white canvas, element-coloured dots, wireframe cell, the same fixed isometric orientation). It is a preview, not the 3D viewport, so it has no shading or bonds. Highlighted atoms get a dark ring:
+Supercell, Basis, Atoms, Atom Instances, Magnetic and Slab are the six tabs of one **Structure** window. Each menu entry opens the window on its own tab. All but Slab share a **Preview** pane: a flat schematic of the cell in the same style as the Slab cutting-plane view (white canvas, element-coloured dots, wireframe cell, the same fixed isometric orientation). It is a preview, not the 3D viewport, so it has no shading or bonds. Highlighted atoms get a dark ring:
 
 - **Supercell** previews the structure the current matrix would produce, before you press Transform.
 - **Basis** highlights the atoms an action would touch: the atoms selected in the main view, and every atom of the element typed into *Find*.
 - **Atoms** previews the structure with the atom added, moved or replaced, and rings the atoms that change.
 - **Atom Instances** highlights the rows selected in the list.
+- **Magnetic** previews the structure with the moments (and, for a propagation vector, the larger cell) you have set up, with magnetic arrows.
 
 The window is not modal, so you can keep it open next to the main view.
 
@@ -180,6 +181,12 @@ The **Atom Instances** tab provides session-only cosmetic overrides for individu
 
 >[!NOTE]
 >These overrides are not written to structure files. Use `View → Hide Symmetric Basis` or `Ctrl + Shift + B` to toggle visible periodic images.
+
+---
+
+## Magnetic Moments and Order
+
+The **Magnetic** tab (`Structure → Magnetic Moments...`) sets a moment on each atom and builds antiferromagnetic cells from a propagation vector (ferro-, A-, C- and G-type presets), then gives the INCAR tags for the result. See [Magnetism](magnetism.md).
 
 ---
 

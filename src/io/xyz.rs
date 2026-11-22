@@ -46,6 +46,21 @@ pub fn parse(path: &str) -> io::Result<Structure> {
         }
     }
 
+    // Moment columns of an ASE-style extended XYZ: `magmoms` (computed)
+    // or `initial_magmoms`, one value (collinear, m_z) or three.
+    let magmom_cols = properties(&comment).and_then(|props| {
+        ["magmoms", "initial_magmoms"].iter().find_map(|want| {
+            let mut col = 0;
+            for (name, width) in &props {
+                if name.eq_ignore_ascii_case(want) && (*width == 1 || *width == 3) {
+                    return Some((col, *width));
+                }
+                col += width;
+            }
+            None
+        })
+    });
+
     // 3. Atoms
     //
     // Respect n_atoms strictly: XYZ trajectory files concatenate multiple
@@ -74,12 +89,18 @@ pub fn parse(path: &str) -> io::Result<Structure> {
             .parse()
             .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Invalid Z"))?;
 
+        let magmom = magmom_cols.and_then(|(col, width)| {
+            let v: Vec<f64> = parts.get(col..col + width)?.iter().map(|t| t.parse().ok()).collect::<Option<_>>()?;
+            Some(if width == 1 { [0.0, 0.0, v[0]] } else { [v[0], v[1], v[2]] })
+        });
+
         atoms.push(Atom {
             element: el,
             position: [x, y, z],
             original_index: i,
             oxidation: None,
             occupancy: 1.0,
+            magmom,
         });
     }
 
@@ -89,6 +110,21 @@ pub fn parse(path: &str) -> io::Result<Structure> {
         formula: "XYZ Import".to_string(),
         is_periodic,
     })
+}
+
+/// The `Properties=name:type:cols:...` of an extended XYZ comment line as
+/// (name, column count), in column order.
+fn properties(comment: &str) -> Option<Vec<(String, usize)>> {
+    let start = comment.find("Properties=")? + "Properties=".len();
+    let spec = comment[start..].split_whitespace().next()?.trim_matches('"');
+    let fields: Vec<&str> = spec.split(':').collect();
+    if fields.len() % 3 != 0 {
+        return None;
+    }
+    fields
+        .chunks(3)
+        .map(|c| Some((c[0].to_string(), c[2].parse().ok()?)))
+        .collect()
 }
 
 pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
@@ -104,20 +140,29 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
 
     // 2. Comment line: Write Lattice in Extended XYZ format
     // Lattice="ax ay az bx by bz cx cy cz"
+    // Moments go in a `magmoms` column (ASE's name): R:3 vectors, with 0
+    // for atoms that have none.
+    let with_moments = structure.atoms.iter().any(|a| a.magmom.is_some());
     let l = structure.lattice;
-    writeln!(file, "Lattice=\"{:.9} {:.9} {:.9} {:.9} {:.9} {:.9} {:.9} {:.9} {:.9}\" Properties=species:S:1:pos:R:3",
+    writeln!(file, "Lattice=\"{:.9} {:.9} {:.9} {:.9} {:.9} {:.9} {:.9} {:.9} {:.9}\" Properties=species:S:1:pos:R:3{}",
         l[0][0], l[0][1], l[0][2],
         l[1][0], l[1][1], l[1][2],
-        l[2][0], l[2][1], l[2][2]
+        l[2][0], l[2][1], l[2][2],
+        if with_moments { ":magmoms:R:3" } else { "" }
     )?;
 
     // 3. Atom lines
     for atom in &structure.atoms {
-        writeln!(
+        write!(
             file,
             "{:<4} {:15.9} {:15.9} {:15.9}",
             atom.element, atom.position[0], atom.position[1], atom.position[2]
         )?;
+        if with_moments {
+            let m = atom.magmom.unwrap_or([0.0; 3]);
+            write!(file, " {:10.5} {:10.5} {:10.5}", m[0], m[1], m[2])?;
+        }
+        writeln!(file)?;
     }
 
     Ok(())
@@ -166,6 +211,24 @@ mod tests {
     }
 
     #[test]
+    fn extended_xyz_magmoms_collinear_and_vector_roundtrip() {
+        let f = TmpFile::new(
+            "2\nLattice=\"3 0 0 0 3 0 0 0 3\" Properties=species:S:1:pos:R:3:forces:R:3:magmoms:R:1\n\
+             Fe 0 0 0  0 0 0  2.2\nFe 1.5 1.5 1.5  0 0 0  -2.2\n",
+        );
+        let s = parse(f.path()).unwrap();
+        assert_eq!(s.atoms[1].magmom, Some([0.0, 0.0, -2.2]));
+
+        let mut s2 = s.clone();
+        s2.atoms[0].magmom = Some([1.0, 0.5, 0.0]);
+        let out = TmpFile::new("");
+        write(out.path(), &s2).unwrap();
+        let back = parse(out.path()).unwrap();
+        assert_eq!(back.atoms[0].magmom, Some([1.0, 0.5, 0.0]));
+        assert_eq!(back.atoms[1].magmom, Some([0.0, 0.0, -2.2]));
+    }
+
+    #[test]
     fn extended_xyz_lattice_is_periodic() {
         let f = TmpFile::new(
             "1\nLattice=\"3.0 0.0 0.0 0.0 3.0 0.0 0.0 0.0 3.0\" Properties=species:S:1:pos:R:3\n\
@@ -197,6 +260,7 @@ mod tests {
                 original_index: 0,
                 oxidation: None,
                 occupancy: 1.0,
+                magmom: None,
             }],
             formula: String::new(),
             is_periodic: true,

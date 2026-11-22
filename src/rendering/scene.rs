@@ -228,20 +228,35 @@ pub fn calculate_scene(
                     // These are NEVER drawn, NEVER affect bounding box.
                     let is_coord_only = is_shift && !in_narrow;
 
-                    // Bounding box: exclude coord-only ghosts entirely
+                    // Bounding box: exclude coord-only ghosts entirely.
+                    // A moment arrow (centred on the atom) counts too, so
+                    // exports do not clip it.
                     if !is_coord_only
                         && (!is_ghost || include_ghosts_in_bounds) {
-                            if r_pos.x < min_x {
-                                min_x = r_pos.x;
-                            }
-                            if r_pos.x > max_x {
-                                max_x = r_pos.x;
-                            }
-                            if r_pos.y < min_y {
-                                min_y = r_pos.y;
-                            }
-                            if r_pos.y > max_y {
-                                max_y = r_pos.y;
+                            let mut extend = |x: f64, y: f64| {
+                                min_x = min_x.min(x);
+                                max_x = max_x.max(x);
+                                min_y = min_y.min(y);
+                                max_y = max_y.max(y);
+                            };
+                            extend(r_pos.x, r_pos.y);
+                            // Same length as `painter::MomentArrow`: atom
+                            // radius + ½·|m|·scale each way.
+                            if let Some(m) = atom.magmom.filter(|_| tab.style.show_moments) {
+                                let v = Vector3::new(m[0], m[1], m[2]);
+                                let len = v.norm();
+                                if len >= 0.01 {
+                                    let radius = if tab.style.moment_arrows_only {
+                                        0.0
+                                    } else {
+                                        tab.base_radius(element_ref)
+                                            * tab.style.atom_scale
+                                            * tab.override_radius_scale(i)
+                                    };
+                                    let h = rotation_matrix * v * ((radius + 0.5 * len * tab.style.moment_scale) / len);
+                                    extend(r_pos.x + h.x, r_pos.y + h.y);
+                                    extend(r_pos.x - h.x, r_pos.y - h.y);
+                                }
                             }
                         }
 
@@ -375,6 +390,7 @@ mod tests {
             original_index: 0,
             oxidation: None,
             occupancy: 1.0,
+            magmom: None,
         }
     }
 

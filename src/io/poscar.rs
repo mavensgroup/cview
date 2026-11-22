@@ -165,6 +165,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
                 original_index: atom_id,
                 oxidation: None,
                 occupancy: 1.0,
+                magmom: None,
             });
             atom_id += 1;
         }
@@ -184,6 +185,15 @@ pub fn parse(path: &str) -> io::Result<Structure> {
         formula,
         is_periodic: true,
     })
+}
+
+/// The order a written POSCAR lists the atoms in: grouped by element
+/// (stable, so atoms of one element keep their order). Anything written to
+/// go with the POSCAR, such as MAGMOM, must follow it.
+pub fn write_order(structure: &Structure) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..structure.atoms.len()).collect();
+    order.sort_by(|&a, &b| structure.atoms[a].element.cmp(&structure.atoms[b].element));
+    order
 }
 
 pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
@@ -210,8 +220,8 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
     if !structure.atoms.is_empty() {
         // Group consecutive atoms of same type
         // VASP expects grouped atoms - sort by element first
-        let mut temp_atoms = structure.atoms.clone();
-        temp_atoms.sort_by(|a, b| a.element.cmp(&b.element));
+        let temp_atoms: Vec<Atom> =
+            write_order(structure).into_iter().map(|i| structure.atoms[i].clone()).collect();
 
         let mut current_el = temp_atoms[0].element.clone();
         let mut count = 0;
@@ -365,6 +375,7 @@ mod tests {
                     original_index: 0,
                     oxidation: None,
                     occupancy: 1.0,
+                    magmom: None,
                 },
                 Atom {
                     element: "Cl".into(),
@@ -372,6 +383,7 @@ mod tests {
                     original_index: 1,
                     oxidation: None,
                     occupancy: 1.0,
+                    magmom: None,
                 },
             ],
             formula: String::new(),

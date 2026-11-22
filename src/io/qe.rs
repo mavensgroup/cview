@@ -88,14 +88,14 @@ fn parse_output_frames(content: &str) -> io::Result<Trajectory> {
             let mut k = i + 1;
             while let Some(l) = lines.get(k) {
                 let Some(v) = paren_vec3(l).filter(|_| l.contains("tau(")) else { break };
-                let el = l.split_whitespace().nth(1).unwrap_or("X").to_string();
+                let el = element_of_label(l.split_whitespace().nth(1).unwrap_or("X"));
                 species.push(el);
                 positions.push(v.map(|x| x * alat));
                 k += 1;
             }
             if let (Some(lat), false) = (lattice, positions.is_empty()) {
                 traj.species = species.clone();
-                traj.frames.push(Frame { lattice: lat, positions, energy: None, max_force: None, step: Some(0) });
+                traj.frames.push(Frame { lattice: lat, positions, energy: None, max_force: None, step: Some(0), magmoms: None });
             }
             i = k;
             continue;
@@ -113,6 +113,17 @@ fn parse_output_frames(content: &str) -> io::Result<Trajectory> {
                 };
                 lattice = Some([1, 2, 3].map(|k| parse_vec3(lines[i + k]).map(|x| x * factor)));
             }
+        } else if line.starts_with("Magnetic moment per site") {
+            // Printed every SCF iteration; the last block before the next
+            // geometry is the converged one, so later blocks overwrite.
+            let (m, next) = super::magmom::qe_site_moments(&lines, i);
+            if let Some(f) = traj.frames.last_mut() {
+                if !m.is_empty() && m.len() == f.positions.len() {
+                    f.magmoms = Some(m);
+                }
+            }
+            i = next;
+            continue;
         } else if line.starts_with('!') && ascii_contains_ci(line, "total energy") {
             if let (Some(e), Some(f)) = (extract_val(line, "="), traj.frames.last_mut()) {
                 f.energy = Some(e * RY_TO_EV);
@@ -159,7 +170,7 @@ fn parse_output_frames(content: &str) -> io::Result<Trajectory> {
                     "bohr" => c.map(|x| x * BOHR_TO_ANG),
                     _ => c,
                 });
-                els.push(parts[0].to_string());
+                els.push(element_of_label(parts[0]));
                 k += 1;
             }
             i = k;
@@ -167,7 +178,7 @@ fn parse_output_frames(content: &str) -> io::Result<Trajectory> {
                 // No header geometry found: this block starts the path.
                 traj.species = els.clone();
             }
-            let frame = Frame { lattice: lat, positions, energy: None, max_force: None, step: Some(traj.frames.len() as i64) };
+            let frame = Frame { lattice: lat, positions, energy: None, max_force: None, step: Some(traj.frames.len() as i64), magmoms: None };
             if in_final {
                 if let Some(last) = traj.frames.last() {
                     let same = last.positions.len() == frame.positions.len()
@@ -293,7 +304,7 @@ fn parse_input(content: &str) -> io::Result<Structure> {
 
                 let parts: Vec<&str> = atom_line.split_whitespace().collect();
                 if parts.len() >= 4 {
-                    let el = parts[0].to_string();
+                    let el = element_of_label(parts[0]);
                     let coords = parse_vec3(atom_line);
                     let (x, y, z) = (coords[0], coords[1], coords[2]);
 
@@ -319,6 +330,7 @@ fn parse_input(content: &str) -> io::Result<Structure> {
                         original_index: atoms.len(),
                         oxidation: None,
                         occupancy: 1.0,
+                        magmom: None,
                     });
                 }
                 i += 1;
@@ -558,11 +570,140 @@ fn contains_celldm_one(line: &str) -> bool {
     false
 }
 
+/// One pw.x species: a label and, when the structure has moments, the
+/// moment its atoms share.
+struct Species {
+    label: String,
+    element: String,
+    moment: [f64; 3],
+}
+
+/// pw.x's limit on the number of species (`ntypx` in Modules/parameters.f90).
+pub const MAX_SPECIES: usize = 10;
+
+/// Species for `structure`: one per element, split by moment when an
+/// element's atoms carry different moments (Fe1 up, Fe2 down), since pw.x
+/// sets the starting magnetization per species. A texture with more
+/// distinct moments than pw.x allows species (a skyrmion, a spiral) is
+/// grouped: each magnetic element gets a share of the free species, its
+/// moments are clustered into that many groups, and each group starts from
+/// its mean moment. Returns the species, the species index of each atom,
+/// and whether moments were grouped.
+fn species_of(structure: &Structure) -> (Vec<Species>, Vec<usize>, bool) {
+    let mut elements: Vec<String> = Vec::new();
+    for a in &structure.atoms {
+        if !elements.contains(&a.element) {
+            elements.push(a.element.clone());
+        }
+    }
+    let moment = |i: usize| structure.atoms[i].magmom.unwrap_or([0.0; 3]);
+    let key = |m: [f64; 3]| m.map(|x| (x * 1000.0).round() as i64);
+
+    // Distinct moments per element, in atom order.
+    let distinct: Vec<Vec<[i64; 3]>> = elements
+        .iter()
+        .map(|el| {
+            let mut d: Vec<[i64; 3]> = Vec::new();
+            for (i, a) in structure.atoms.iter().enumerate() {
+                if &a.element == el && !d.contains(&key(moment(i))) {
+                    d.push(key(moment(i)));
+                }
+            }
+            d
+        })
+        .collect();
+    let exact: usize = distinct.iter().map(Vec::len).sum();
+
+    // Groups per element: exact when it fits, else the free slots go to
+    // the elements with the most distinct moments, one at a time.
+    let mut groups: Vec<usize> = distinct.iter().map(Vec::len).collect();
+    let grouped = exact > MAX_SPECIES && elements.len() <= MAX_SPECIES;
+    if grouped {
+        groups = vec![1; elements.len()];
+        for _ in elements.len()..MAX_SPECIES {
+            let best = (0..elements.len())
+                .filter(|&e| groups[e] < distinct[e].len())
+                .max_by_key(|&e| (distinct[e].len() * 1000) / groups[e]);
+            match best {
+                Some(e) => groups[e] += 1,
+                None => break,
+            }
+        }
+    }
+
+    // Cluster each element's atoms into its groups: farthest-point centres
+    // over the moment vectors, then every atom to its nearest centre.
+    let dist2 = |a: [f64; 3], b: [f64; 3]| (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f64>();
+    let mut out: Vec<Species> = Vec::new();
+    let mut of_atom = vec![0usize; structure.atoms.len()];
+    for (e, el) in elements.iter().enumerate() {
+        let atoms: Vec<usize> = (0..structure.atoms.len()).filter(|&i| &structure.atoms[i].element == el).collect();
+        let mut centres: Vec<[f64; 3]> = Vec::new();
+        if groups[e] == distinct[e].len() {
+            // Exact: one centre per distinct moment, in order of appearance.
+            for &i in &atoms {
+                if !centres.iter().any(|c| key(*c) == key(moment(i))) {
+                    centres.push(moment(i));
+                }
+            }
+        } else {
+            centres.push(moment(atoms[0]));
+            while centres.len() < groups[e] {
+                let far = atoms
+                    .iter()
+                    .map(|&i| (i, centres.iter().map(|c| dist2(*c, moment(i))).fold(f64::MAX, f64::min)))
+                    .max_by(|a, b| a.1.total_cmp(&b.1));
+                match far {
+                    Some((i, d)) if d > 1e-12 => centres.push(moment(i)),
+                    _ => break,
+                }
+            }
+        }
+        let first = out.len();
+        let mut sums = vec![([0.0; 3], 0usize); centres.len()];
+        for &i in &atoms {
+            let c = (0..centres.len())
+                .min_by(|&a, &b| dist2(centres[a], moment(i)).total_cmp(&dist2(centres[b], moment(i))))
+                .unwrap_or(0);
+            of_atom[i] = first + c;
+            for (acc, x) in sums[c].0.iter_mut().zip(moment(i)) {
+                *acc += x;
+            }
+            sums[c].1 += 1;
+        }
+        let split = centres.len() > 1;
+        for (c, (sum, n)) in sums.iter().enumerate() {
+            out.push(Species {
+                label: if split { format!("{}{}", el, c + 1) } else { el.clone() },
+                element: el.clone(),
+                moment: if grouped { sum.map(|x| x / (*n).max(1) as f64) } else { centres[c] },
+            });
+        }
+    }
+    (out, of_atom, grouped)
+}
+
 pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
     if structure.atoms.iter().any(|a| a.occupancy < 0.99) {
         crate::utils::console::log_warn(
             "QE input format has no occupancy field — partial occupancies are discarded on export",
         );
+    }
+    let (species, of_atom, grouped) = species_of(structure);
+    if species.len() > MAX_SPECIES {
+        crate::utils::console::log_warn(&format!(
+            "QE input: {} species, but pw.x allows at most {} unless rebuilt with a larger ntypx",
+            species.len(),
+            MAX_SPECIES
+        ));
+    }
+    if grouped {
+        crate::utils::console::log_warn(&format!(
+            "QE input: more distinct moments than pw.x allows species ({}); grouped into {} species, \
+             each starting from its group's mean moment",
+            MAX_SPECIES,
+            species.len()
+        ));
     }
     let mut file = std::fs::File::create(path)?;
 
@@ -578,16 +719,18 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
     writeln!(file, "&SYSTEM")?;
     writeln!(file, "  ibrav = 0")?;
     writeln!(file, "  nat = {}", structure.atoms.len())?;
-
-    // Count unique types
-    let mut unique_els: Vec<String> = Vec::new();
-    for atom in &structure.atoms {
-        if !unique_els.contains(&atom.element) {
-            unique_els.push(atom.element.clone());
-        }
-    }
-    writeln!(file, "  ntyp = {}", unique_els.len())?;
+    writeln!(file, "  ntyp = {}", species.len())?;
     writeln!(file, "  ecutwfc = 60.0")?;
+    if grouped {
+        writeln!(
+            file,
+            "  ! Moments grouped into {} species (pw.x allows {}): each atom starts from its\n  \
+             ! group's mean moment. Run with a magnetic constraint or let the SCF relax it.",
+            species.len(),
+            MAX_SPECIES
+        )?;
+    }
+    write_magnetization(&mut file, structure, &species)?;
     writeln!(file, "/")?;
 
     // Electrons Block
@@ -595,10 +738,10 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
     writeln!(file, "  conv_thr = 1.0d-8")?;
     writeln!(file, "/")?;
 
-    // Atomic Species (Placeholder masses and pseudos)
+    // Atomic Species (placeholder masses and pseudos, as before)
     writeln!(file, "ATOMIC_SPECIES")?;
-    for el in &unique_els {
-        writeln!(file, " {:<3}  1.000  {}.UPF", el, el)?;
+    for sp in &species {
+        writeln!(file, " {:<4}  1.000  {}.UPF", sp.label, sp.element)?;
     }
 
     // Cell Parameters
@@ -609,15 +752,76 @@ pub fn write(path: &str, structure: &Structure) -> io::Result<()> {
 
     // Atomic Positions
     writeln!(file, "ATOMIC_POSITIONS (angstrom)")?;
-    for atom in &structure.atoms {
+    for (atom, &sp) in structure.atoms.iter().zip(&of_atom) {
         writeln!(
             file,
-            "  {:<3}  {:15.9} {:15.9} {:15.9}",
-            atom.element, atom.position[0], atom.position[1], atom.position[2]
+            "  {:<4}  {:15.9} {:15.9} {:15.9}",
+            species[sp].label, atom.position[0], atom.position[1], atom.position[2]
         )?;
     }
 
     Ok(())
+}
+
+/// The &SYSTEM magnetization: nspin = 2 and a signed starting_magnetization
+/// per species for collinear moments, noncolin with angle1/angle2 otherwise.
+/// starting_magnetization is a fraction (−1..1) of the species' valence
+/// charge, not μB, so the moments are scaled: the largest becomes 0.5.
+fn write_magnetization(file: &mut std::fs::File, structure: &Structure, species: &[Species]) -> io::Result<()> {
+    let Some(axis) = structure.magnetic_axis() else { return Ok(()) };
+    let norm = |m: [f64; 3]| (m[0] * m[0] + m[1] * m[1] + m[2] * m[2]).sqrt();
+    let max = species.iter().map(|s| norm(s.moment)).fold(0.0, f64::max);
+    if max < 1e-6 {
+        return Ok(());
+    }
+    let collinear = structure.moments_collinear();
+    writeln!(
+        file,
+        "  ! starting_magnetization: fraction of valence charge, not muB; CView scales the\n  \
+         ! largest moment ({:.2} muB) to 0.5 and keeps the others in proportion. Adjust.",
+        max
+    )?;
+    if collinear {
+        writeln!(file, "  nspin = 2")?;
+        if axis[2] < 1.0 - 1e-6 {
+            writeln!(
+                file,
+                "  ! moments collinear along ({:.4}, {:.4}, {:.4}); signs are along that axis",
+                axis[0], axis[1], axis[2]
+            )?;
+        }
+    } else {
+        writeln!(file, "  noncolin = .true.")?;
+    }
+    for (i, sp) in species.iter().enumerate() {
+        let m = sp.moment;
+        let n = norm(m);
+        if n < 1e-6 {
+            continue;
+        }
+        if collinear {
+            let along = m[0] * axis[0] + m[1] * axis[1] + m[2] * axis[2];
+            writeln!(file, "  starting_magnetization({}) = {:.3}", i + 1, 0.5 * along / max)?;
+        } else {
+            // angle1: from z; angle2: azimuth in the xy plane, degrees.
+            let theta = (m[2] / n).clamp(-1.0, 1.0).acos().to_degrees();
+            let phi = m[1].atan2(m[0]).to_degrees();
+            writeln!(file, "  starting_magnetization({}) = {:.3}", i + 1, 0.5 * n / max)?;
+            writeln!(file, "  angle1({}) = {:.2}", i + 1, theta)?;
+            writeln!(file, "  angle2({}) = {:.2}", i + 1, phi)?;
+        }
+    }
+    Ok(())
+}
+
+/// The element a pw.x species label stands for: "Fe1", "Fe_up", "Fe2" → Fe.
+/// Labels that start with no element symbol are kept as they are.
+fn element_of_label(label: &str) -> String {
+    use crate::physics::operations::spacegroup_build::normalize_element;
+    let letters: String = label.chars().take_while(|c| c.is_ascii_alphabetic()).collect();
+    normalize_element(&letters)
+        .or_else(|| letters.get(..1).and_then(normalize_element))
+        .unwrap_or_else(|| label.to_string())
 }
 
 #[cfg(test)]
@@ -709,6 +913,7 @@ mod tests {
                 original_index: 0,
                 oxidation: None,
                 occupancy: 1.0,
+                magmom: None,
             }],
             formula: String::new(),
             is_periodic: true,
@@ -774,5 +979,149 @@ End final coordinates
         // Fixed-cell relax has no CELL_PARAMETERS: the cell comes from the header.
         let s = parse_output(RELAX).unwrap();
         assert_eq!(s.atoms.len(), 2);
+        assert!(s.atoms[0].magmom.is_none(), "no moments printed");
+    }
+
+    #[test]
+    fn site_moments_go_to_the_geometry_being_computed_last_scf_wins() {
+        let block = |m1: f64, m2: f64| {
+            format!(
+                "     Magnetic moment per site  (integrated on atomic sphere of radius R)\n\
+                 \x20    atom   1 (R=0.177)  charge=  6.6  magn=  {m1}  constr=    0.0000\n\
+                 \x20    atom   2 (R=0.177)  charge=  6.6  magn=  {m2}  constr=    0.0000\n\n"
+            )
+        };
+        // Two SCF iterations for the first geometry, one for the second.
+        let text = RELAX
+            .replacen("!    total energy              =     -43.0", &format!("{}{}!    total energy              =     -43.0", block(1.0, -1.0), block(2.0, -2.0)), 1)
+            .replacen("!    total energy              =     -43.1", &format!("{}!    total energy              =     -43.1", block(2.5, -2.5)), 1);
+        let t = parse_output_frames(&text).unwrap();
+        assert_eq!(t.frames[0].magmoms.as_ref().unwrap()[1], [0.0, 0.0, -2.0]);
+        assert_eq!(t.frames[1].magmoms.as_ref().unwrap()[0], [0.0, 0.0, 2.5]);
+        let s = parse_output(&text).unwrap();
+        assert_eq!(s.atoms[1].magmom, Some([0.0, 0.0, -2.5]));
+    }
+
+    #[test]
+    fn afm_writes_split_species_with_opposite_magnetization_and_reads_back() {
+        let lat = [[4.0, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 4.0]];
+        let atom = |el: &str, x: f64, m: Option<[f64; 3]>| Atom {
+            element: el.into(),
+            position: [x, 0.0, 0.0],
+            original_index: 0,
+            oxidation: None,
+            occupancy: 1.0,
+            magmom: m,
+        };
+        let s = Structure {
+            lattice: lat,
+            atoms: vec![
+                atom("Fe", 0.0, Some([0.0, 0.0, 3.6])),
+                atom("O", 1.0, None),
+                atom("Fe", 2.0, Some([0.0, 0.0, -3.6])),
+            ],
+            formula: String::new(),
+            is_periodic: true,
+        };
+        let p = std::env::temp_dir().join(format!("cview_qe_afm_{}.in", std::process::id()));
+        let path = p.to_str().unwrap();
+        write(path, &s).unwrap();
+        let text = std::fs::read_to_string(path).unwrap();
+        assert!(text.contains("ntyp = 3"), "{text}");
+        assert!(text.contains("nspin = 2"));
+        assert!(text.contains("starting_magnetization(1) = 0.500"), "{text}");
+        // Species are listed per element: Fe1, Fe2, then O.
+        assert!(text.contains("starting_magnetization(2) = -0.500"), "{text}");
+        assert!(!text.contains("starting_magnetization(3)"), "O has none");
+        assert!(text.contains(" Fe1 ") && text.contains(" Fe2 "));
+
+        let back = parse(path).unwrap();
+        let _ = std::fs::remove_file(&p);
+        let els: Vec<&str> = back.atoms.iter().map(|a| a.element.as_str()).collect();
+        assert_eq!(els, vec!["Fe", "O", "Fe"], "labels Fe1/Fe2 read as Fe");
+    }
+
+    #[test]
+    fn labels_map_to_elements() {
+        assert_eq!(element_of_label("Fe1"), "Fe");
+        assert_eq!(element_of_label("Fe_up"), "Fe");
+        assert_eq!(element_of_label("O"), "O");
+        assert_eq!(element_of_label("Co2"), "Co");
+        assert_eq!(element_of_label("C1"), "C");
+    }
+
+    #[test]
+    fn a_texture_is_grouped_into_at_most_ten_species() {
+        // A 12×12 spiral of Fe in the xz plane on an O layer: 144 distinct
+        // Fe moments, far more than pw.x allows species.
+        let mut atoms = Vec::new();
+        for i in 0..144 {
+            let t = i as f64 * std::f64::consts::TAU / 12.0;
+            atoms.push(Atom {
+                element: "Fe".into(),
+                position: [(i % 12) as f64, (i / 12) as f64, 0.0],
+                original_index: i,
+                oxidation: None,
+                occupancy: 1.0,
+                magmom: Some([2.0 * t.sin(), 0.0, 2.0 * t.cos()]),
+            });
+        }
+        atoms.push(Atom {
+            element: "O".into(),
+            position: [0.5, 0.5, 1.0],
+            original_index: 144,
+            oxidation: None,
+            occupancy: 1.0,
+            magmom: None,
+        });
+        let s = Structure {
+            lattice: [[12.0, 0.0, 0.0], [0.0, 12.0, 0.0], [0.0, 0.0, 10.0]],
+            atoms,
+            formula: String::new(),
+            is_periodic: true,
+        };
+        let (species, of_atom, grouped) = species_of(&s);
+        assert!(grouped);
+        assert_eq!(species.len(), MAX_SPECIES);
+        assert_eq!(species.iter().filter(|sp| sp.element == "O").count(), 1);
+        // Every atom's group moment is within 45° of its own (9 Fe groups
+        // over a full circle of 12 directions).
+        for (i, a) in s.atoms.iter().enumerate().take(144) {
+            let m = a.magmom.unwrap();
+            let g = species[of_atom[i]].moment;
+            let cos = (m[0] * g[0] + m[2] * g[2]) / (2.0 * (g[0] * g[0] + g[2] * g[2]).sqrt());
+            assert!(cos > 0.7, "atom {i}: {:?} vs group {:?}", m, g);
+        }
+
+        let p = std::env::temp_dir().join(format!("cview_qe_tex_{}.in", std::process::id()));
+        write(p.to_str().unwrap(), &s).unwrap();
+        let text = std::fs::read_to_string(&p).unwrap();
+        let _ = std::fs::remove_file(&p);
+        assert!(text.contains("ntyp = 10"));
+        assert!(text.contains("noncolin = .true."));
+        assert!(text.contains("Moments grouped into 10 species"));
+    }
+
+    #[test]
+    fn few_moments_stay_exact() {
+        let atom = |el: &str, m: Option<[f64; 3]>| Atom {
+            element: el.into(),
+            position: [0.0; 3],
+            original_index: 0,
+            oxidation: None,
+            occupancy: 1.0,
+            magmom: m,
+        };
+        let s = Structure {
+            lattice: [[4.0, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 4.0]],
+            atoms: vec![atom("Fe", Some([0.0, 0.0, 3.0])), atom("Fe", Some([0.0, 0.0, -3.0])), atom("O", None)],
+            formula: String::new(),
+            is_periodic: true,
+        };
+        let (species, of_atom, grouped) = species_of(&s);
+        assert!(!grouped);
+        let labels: Vec<&str> = species.iter().map(|s| s.label.as_str()).collect();
+        assert_eq!(labels, vec!["Fe1", "Fe2", "O"]);
+        assert_eq!(of_atom, vec![0, 1, 2]);
     }
 }

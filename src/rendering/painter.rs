@@ -548,7 +548,35 @@ pub fn draw_structure(
         }
     };
 
-    let mut draw_atom = |atom: &RenderAtom| {
+    // Magnetic moments: an arrow through each drawn atom that has one, by
+    // index into `render_atoms`.
+    let rotation = tab.view.rotation_matrix();
+    let moment_axis = tab.structure.as_ref().and_then(|s| s.magnetic_axis());
+    let collinear = tab.structure.as_ref().map_or(true, |s| s.moments_collinear());
+    let arrows_only = tab.style.moment_arrows_only;
+    let arrows: Vec<Option<MomentArrow>> = render_atoms
+        .iter()
+        .map(|(_, atom)| {
+            if !tab.style.show_moments {
+                return None;
+            }
+            let m = tab.structure.as_ref()?.atoms.get(atom.original_index)?.magmom?;
+            // Arrows only: no sphere to stick out of, so the arrow is its
+            // full length.
+            let radius = if arrows_only {
+                0.0
+            } else {
+                tab.base_radius(&atom.element)
+                    * tab.style.atom_scale
+                    * tab.override_radius_scale(atom.original_index)
+                    * scale
+            };
+            let color = moment_color(m, moment_axis, collinear, &tab.style);
+            MomentArrow::new(m, &rotation, atom.screen_pos, radius, scale, color, tab)
+        })
+        .collect();
+
+    let mut draw_atom = |atom: &RenderAtom, arrow: Option<&MomentArrow>| {
         let raw_r = tab.base_radius(&atom.element);
         let override_rgb = tab.override_color(atom.original_index);
         let rgb = atom_rgb(atom.original_index, &atom.element);
@@ -568,6 +596,12 @@ pub fn draw_structure(
         let radius_mult = tab.override_radius_scale(atom.original_index);
         let target_atom_cov = raw_r * tab.style.atom_scale * radius_mult * scale;
 
+        // The half of the moment arrow pointing away from the viewer goes
+        // under the sphere; the near half is its own item in the depth sort.
+        if let Some(a) = arrow {
+            a.draw(cr, false);
+        }
+
         // Selection glow — keyed on per-instance unique_id so only the clicked
         // ghost copy lights up, not every symmetry-equivalent corner.
         if tab.interaction.selected.contains_key(&atom.unique_id) {
@@ -583,6 +617,11 @@ pub fn draw_structure(
             );
             cr.fill().ok();
             cr.restore().ok();
+        }
+
+        // Arrows only: the arrow stands for the atom.
+        if arrows_only && arrow.is_some() {
+            return;
         }
 
         // Draw Atom (Vector vs Sprite)
@@ -734,6 +773,7 @@ pub fn draw_structure(
         Face(usize),
         Bond(usize),
         Atom(usize),
+        Arrow(usize),
     }
     let mut order: Vec<(f64, u8, Item)> = Vec::new();
     if let Some(plan) = &plan {
@@ -755,6 +795,13 @@ pub fn draw_structure(
             .and_then(|p| p.centre_depth.get(idx).copied())
             .unwrap_or(a.screen_pos[2]);
         order.push((depth, 2, Item::Atom(i)));
+    }
+    // The near half of a moment arrow sorts at its tip, so a bond running
+    // the same way (a moment along a bond, as in rock salt) does not cover it.
+    for (i, a) in arrows.iter().enumerate() {
+        if let Some(depth) = a.as_ref().and_then(|a| a.front_depth(render_atoms[i].1.screen_pos[2], scale)) {
+            order.push((depth, 3, Item::Arrow(i)));
+        }
     }
     order.sort_by(|a, b| {
         b.0.partial_cmp(&a.0)
@@ -795,13 +842,208 @@ pub fn draw_structure(
                     tab.style.transmission,
                 );
             }
-            Item::Atom(i) => draw_atom(render_atoms[*i].1),
+            Item::Atom(i) => draw_atom(render_atoms[*i].1, arrows[*i].as_ref()),
+            Item::Arrow(i) => {
+                if let Some(a) = &arrows[*i] {
+                    a.draw(cr, true);
+                }
+            }
         }
     }
 
     // Colour scale for property-coloured polyhedra, over everything else.
     if let Some(legend) = plan.as_ref().and_then(|p| p.legend.as_ref()) {
         draw_poly_legend(cr, legend, tab.style.background_color);
+    }
+}
+
+// ============================================================================
+// MAGNETIC MOMENT ARROWS
+// ============================================================================
+
+/// Arrow colour for moment `m` under the tab's colour mode. `axis` and
+/// `collinear` describe the whole structure (`Structure::magnetic_axis`,
+/// `moments_collinear`); Auto uses them to choose Up/Down or Direction.
+pub(crate) fn moment_color(
+    m: [f64; 3],
+    axis: Option<[f64; 3]>,
+    collinear: bool,
+    style: &crate::config::RenderStyle,
+) -> (f64, f64, f64) {
+    use crate::config::MomentColorMode;
+    let mode = match style.moment_color_mode {
+        MomentColorMode::Auto if collinear => MomentColorMode::UpDown,
+        MomentColorMode::Auto => MomentColorMode::Direction,
+        m => m,
+    };
+    match mode {
+        MomentColorMode::Single | MomentColorMode::Auto => style.moment_color,
+        MomentColorMode::UpDown => {
+            let a = axis.unwrap_or([0.0, 0.0, 1.0]);
+            // A tiny tolerance so a moment exactly perpendicular to the
+            // axis counts as up rather than flickering with rounding.
+            if m[0] * a[0] + m[1] * a[1] + m[2] * a[2] >= -1e-6 {
+                style.moment_color
+            } else {
+                style.moment_color_down
+            }
+        }
+        MomentColorMode::Direction => {
+            let n = (m[0] * m[0] + m[1] * m[1] + m[2] * m[2]).sqrt().max(1e-12);
+            let hue = m[1].atan2(m[0]).to_degrees().rem_euclid(360.0);
+            // White at +z, black at −z; held just short of pure white and
+            // black so the arrow's shading still shows.
+            let lightness = 0.5 + 0.45 * (m[2] / n);
+            hsl_to_rgb(hue, 0.85, lightness)
+        }
+    }
+}
+
+fn hsl_to_rgb(h: f64, s: f64, l: f64) -> (f64, f64, f64) {
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let hp = h / 60.0;
+    let x = c * (1.0 - (hp.rem_euclid(2.0) - 1.0).abs());
+    let (r, g, b) = match hp as u32 {
+        0 => (c, x, 0.0),
+        1 => (x, c, 0.0),
+        2 => (0.0, c, x),
+        3 => (0.0, x, c),
+        4 => (x, 0.0, c),
+        _ => (c, 0.0, x),
+    };
+    let m = l - c / 2.0;
+    (r + m, g + m, b + m)
+}
+
+/// One half of a moment arrow: from where it leaves the sphere to its end,
+/// in screen pixels along a direction `dir` (unit, rotated frame).
+struct ArrowHalf {
+    dir: [f64; 3],
+    /// Distance from the atom centre to the end, px (3D, before projection).
+    length: f64,
+    is_tip: bool,
+}
+
+/// An arrow through an atom's centre along its magnetic moment. Each end
+/// sticks out of the sphere by ½·|m|·`moment_scale` Å, so the visible length
+/// is |m|·`moment_scale` whatever the atom size, and a small induced moment
+/// still shows.
+struct MomentArrow {
+    centre: [f64; 2],
+    radius: f64,
+    halves: [ArrowHalf; 2],
+    shaft_r: f64,
+    head_r: f64,
+    head_len: f64,
+    color: (f64, f64, f64),
+    metallic: f64,
+    roughness: f64,
+}
+
+impl MomentArrow {
+    fn new(
+        m: [f64; 3],
+        rotation: &nalgebra::Rotation3<f64>,
+        screen_pos: [f64; 3],
+        radius: f64,
+        scale: f64,
+        color: (f64, f64, f64),
+        tab: &TabState,
+    ) -> Option<Self> {
+        let len = (m[0] * m[0] + m[1] * m[1] + m[2] * m[2]).sqrt();
+        if len < 0.01 {
+            return None;
+        }
+        let u = rotation * nalgebra::Vector3::new(m[0] / len, m[1] / len, m[2] / len);
+        let out = 0.5 * len * tab.style.moment_scale * scale;
+        let half = radius + out;
+        let shaft_r = (0.5 * tab.style.bond_radius * scale).max(1.2);
+        Some(Self {
+            centre: [screen_pos[0], screen_pos[1]],
+            radius,
+            halves: [
+                ArrowHalf { dir: [u.x, u.y, u.z], length: half, is_tip: true },
+                ArrowHalf { dir: [-u.x, -u.y, -u.z], length: half, is_tip: false },
+            ],
+            shaft_r,
+            head_r: shaft_r * 2.4,
+            head_len: (0.6 * out).min(0.5 * scale).max(shaft_r * 3.0),
+            color,
+            metallic: tab.style.metallic,
+            roughness: tab.style.roughness,
+        })
+    }
+
+    /// Depth (as `RenderAtom::screen_pos[2]`, Å) of the nearest end of the
+    /// half in front of the atom, or `None` when no half shows in front.
+    fn front_depth(&self, atom_depth: f64, scale: f64) -> Option<f64> {
+        self.halves
+            .iter()
+            .filter(|h| h.dir[2] <= 0.0 && h.length > self.radius)
+            .map(|h| atom_depth + h.dir[2] * h.length / scale)
+            .reduce(f64::min)
+    }
+
+    /// Draw the halves in front of the atom centre (`front`) or behind it.
+    /// Larger depth is farther, as in `RenderAtom::screen_pos`.
+    fn draw(&self, cr: &cairo::Context, front: bool) {
+        for h in &self.halves {
+            if (h.dir[2] <= 0.0) != front || h.length <= self.radius {
+                continue; // other pass, or wholly inside the sphere
+            }
+            let at = |t: f64| [self.centre[0] + t * h.dir[0], self.centre[1] + t * h.dir[1], 0.0];
+            let head_from = if h.is_tip { (h.length - self.head_len).max(self.radius) } else { h.length };
+            draw_cylinder_impostor(
+                cr,
+                at(self.radius),
+                at(head_from),
+                self.shaft_r,
+                self.color,
+                self.metallic,
+                self.roughness,
+                0.0,
+            );
+            if h.is_tip {
+                self.draw_head(cr, at(head_from), at(h.length));
+            }
+        }
+    }
+
+    /// A cone from `base` to `apex`, shaded across like the bonds. Seen
+    /// end-on it is a disc.
+    fn draw_head(&self, cr: &cairo::Context, base: [f64; 3], apex: [f64; 3]) {
+        let (r, g, b) = self.color;
+        let (dx, dy) = (apex[0] - base[0], apex[1] - base[1]);
+        let l = (dx * dx + dy * dy).sqrt();
+        cr.save().ok();
+        if l < 1.0 {
+            let grad = cairo::RadialGradient::new(
+                apex[0] - self.head_r * 0.3,
+                apex[1] - self.head_r * 0.3,
+                0.0,
+                apex[0],
+                apex[1],
+                self.head_r,
+            );
+            grad.add_color_stop_rgb(0.0, (r * 1.4).min(1.0), (g * 1.4).min(1.0), (b * 1.4).min(1.0));
+            grad.add_color_stop_rgb(1.0, r * 0.4, g * 0.4, b * 0.4);
+            cr.set_source(&grad).ok();
+            cr.arc(apex[0], apex[1], self.head_r, 0.0, 2.0 * PI);
+        } else {
+            let (nx, ny) = (-dy / l * self.head_r, dx / l * self.head_r);
+            let grad = cairo::LinearGradient::new(base[0] + nx, base[1] + ny, base[0] - nx, base[1] - ny);
+            grad.add_color_stop_rgb(0.0, r * 0.35, g * 0.35, b * 0.35);
+            grad.add_color_stop_rgb(0.4, r, g, b);
+            grad.add_color_stop_rgb(0.55, (r * 1.3).min(1.0), (g * 1.3).min(1.0), (b * 1.3).min(1.0));
+            grad.add_color_stop_rgb(1.0, r * 0.3, g * 0.3, b * 0.3);
+            cr.set_source(&grad).ok();
+            cr.move_to(apex[0], apex[1]);
+            cr.line_to(base[0] + nx, base[1] + ny);
+            cr.line_to(base[0] - nx, base[1] - ny);
+            cr.close_path();
+        }
+        cr.fill().ok();
+        cr.restore().ok();
     }
 }
 
@@ -1302,5 +1544,67 @@ pub fn draw_interstitial_sites(
         cr.arc(screen[0], screen[1], 1.5, 0.0, std::f64::consts::PI * 2.0);
         cr.set_source_rgba(0.0, 0.45, 0.42, 0.95);
         cr.fill().expect("Failed to fill interstitial centre");
+    }
+}
+
+#[cfg(test)]
+mod moment_color_tests {
+    use super::*;
+    use crate::config::{MomentColorMode, RenderStyle};
+    use crate::model::{Atom, Structure};
+
+    fn with_moments(ms: &[[f64; 3]]) -> Structure {
+        Structure {
+            lattice: [[4.0, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 4.0]],
+            atoms: ms
+                .iter()
+                .enumerate()
+                .map(|(i, m)| Atom {
+                    element: "Fe".into(),
+                    position: [i as f64, 0.0, 0.0],
+                    original_index: i,
+                    oxidation: None,
+                    occupancy: 1.0,
+                    magmom: Some(*m),
+                })
+                .collect(),
+            formula: String::new(),
+            is_periodic: true,
+        }
+    }
+
+    #[test]
+    fn up_is_along_plus_z_whichever_equal_moment_comes_first() {
+        let style = RenderStyle::default();
+        assert_eq!(style.moment_color_mode, MomentColorMode::Auto);
+        for order in [[[0.0, 0.0, -4.6], [0.0, 0.0, 4.6]], [[0.0, 0.0, 4.6], [0.0, 0.0, -4.6]]] {
+            let axis = with_moments(&order).magnetic_axis();
+            assert_eq!(moment_color([0.0, 0.0, 4.6], axis, true, &style), style.moment_color);
+            assert_eq!(moment_color([0.0, 0.0, -4.6], axis, true, &style), style.moment_color_down);
+        }
+    }
+
+    #[test]
+    fn ferrimagnet_splits_by_sign_along_an_in_plane_axis() {
+        let style = RenderStyle::default();
+        let s = with_moments(&[[-4.0, 0.0, 0.0], [2.5, 0.0, 0.0]]);
+        let axis = s.magnetic_axis();
+        assert_eq!(axis, Some([1.0, 0.0, 0.0]));
+        assert_eq!(moment_color([2.5, 0.0, 0.0], axis, true, &style), style.moment_color);
+        assert_eq!(moment_color([-4.0, 0.0, 0.0], axis, true, &style), style.moment_color_down);
+    }
+
+    #[test]
+    fn auto_switches_to_direction_for_a_noncollinear_texture() {
+        let style = RenderStyle::default();
+        let s = with_moments(&[[0.0, 0.0, 2.0], [2.0, 0.0, 0.0], [0.0, 0.0, -2.0]]);
+        assert!(!s.moments_collinear());
+        let axis = s.magnetic_axis();
+        let up = moment_color([0.0, 0.0, 2.0], axis, false, &style);
+        let down = moment_color([0.0, 0.0, -2.0], axis, false, &style);
+        // Direction: +z near white, −z near black.
+        assert!(up.0 > 0.9 && up.1 > 0.9 && up.2 > 0.9, "{:?}", up);
+        assert!(down.0 < 0.1 && down.1 < 0.1 && down.2 < 0.1, "{:?}", down);
+        assert_ne!(up, style.moment_color);
     }
 }

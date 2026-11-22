@@ -459,6 +459,7 @@ fn build_structure(data: SprkkrData) -> io::Result<Structure> {
                     original_index: atoms.len(),
                     oxidation: None,
                     occupancy: concentration.clamp(0.0, 1.0),
+                    magmom: None,
                 });
             }
         }
@@ -590,6 +591,7 @@ fn bravais_entry(lattice: [[f64; 3]; 3]) -> String {
             original_index: 0,
             oxidation: None,
             occupancy: 1.0,
+            magmom: None,
         }],
         formula: String::new(),
         is_periodic: true,
@@ -1451,6 +1453,7 @@ POTENTIAL
             original_index: 0,
             oxidation: None,
             occupancy: occ,
+            magmom: None,
         }
     }
 

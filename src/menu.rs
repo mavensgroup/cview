@@ -130,6 +130,7 @@ pub fn build_menu_and_actions(
     structure_menu.append(Some("Basis..."), Some("app.basis"));
     structure_menu.append(Some("Atoms..."), Some("app.atoms"));
     structure_menu.append(Some("Atom Instances..."), Some("app.atom_instances"));
+    structure_menu.append(Some("Magnetic Moments..."), Some("app.magnetic_order"));
     structure_menu.append(Some("Slab..."), Some("app.slab"));
     let structure_cell = gtk4::gio::Menu::new();
     structure_cell.append(

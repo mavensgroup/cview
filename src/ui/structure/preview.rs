@@ -139,6 +139,11 @@ fn fingerprint(st: &AppState) -> u64 {
                 for v in a.position {
                     v.to_bits().hash(&mut h);
                 }
+                if let Some(m) = a.magmom {
+                    for v in m {
+                        v.to_bits().hash(&mut h);
+                    }
+                }
             }
         }
         tab.interaction.selected.len().hash(&mut h);
@@ -149,6 +154,9 @@ fn fingerprint(st: &AppState) -> u64 {
             .hash(&mut h);
         tab.overrides.len().hash(&mut h);
         tab.style.element_colors.len().hash(&mut h);
+        tab.style.show_moments.hash(&mut h);
+        tab.style.moment_arrows_only.hash(&mut h);
+        (tab.style.moment_color_mode as u8).hash(&mut h);
     }
     h.finish()
 }
@@ -334,13 +342,30 @@ fn draw(st: &AppState, d: &PreviewData, cr: &gtk4::cairo::Context, w: i32, h: i3
 
     let colors = element_colors(st);
     let radius = if drawn.len() > 600 { 3.5 } else { 6.0 };
+
+    // Moment arrows: flat, through the dot, the largest one `arrow_max` px
+    // long, coloured as in the main view.
+    let show_moments = active.style.show_moments;
+    let axis = structure.magnetic_axis();
+    let collinear = structure.moments_collinear();
+    let arrows_only = show_moments && active.style.moment_arrows_only;
+    let max_moment = structure
+        .atoms
+        .iter()
+        .filter_map(|a| a.magmom)
+        .map(|m| (m[0] * m[0] + m[1] * m[1] + m[2] * m[2]).sqrt())
+        .fold(0.0, f64::max);
+    let arrow_max = radius * 5.5;
     for (x, y, _, i) in drawn {
         let el = &structure.atoms[i].element;
         // Elements only the candidate has (a builder or substitution
         // preview) take the colour-scheme default.
         let fallback = |el: &str| get_element_color(el, st.config.color_scheme);
         let (r, g, b) = colors.get(el).copied().unwrap_or_else(|| fallback(el));
+        // Arrows only: atoms with a moment are drawn as their arrow alone.
+        let hide_dot = arrows_only && structure.atoms[i].magmom.is_some_and(|m| m.iter().any(|x| x.abs() > 0.01));
         match sites.members(i) {
+            _ if hide_dot => {}
             // A mixed site: flat sectors sized by occupancy, clockwise from
             // 12 o'clock, any vacant share left white.
             Some(members) if members.len() > 1 || structure.atoms[i].occupancy < 0.999 => {
@@ -371,6 +396,44 @@ fn draw(st: &AppState, d: &PreviewData, cr: &gtk4::cairo::Context, w: i32, h: i3
                 cr.arc(x, y, radius, 0.0, 2.0 * PI);
                 cr.set_source_rgba(r, g, b, 0.85);
                 let _ = cr.fill();
+            }
+        }
+
+        if let Some(m) = structure.atoms[i].magmom.filter(|_| show_moments && max_moment > 1e-6) {
+            let len = (m[0] * m[0] + m[1] * m[1] + m[2] * m[2]).sqrt();
+            if len > 0.01 {
+                let (dx, dy, _) = iso(m);
+                let l2 = (dx * dx + dy * dy).sqrt();
+                let total = arrow_max * (len / max_moment).max(0.35);
+                let (r, g, b) =
+                    crate::rendering::painter::moment_color(m, axis, collinear, &active.style);
+                cr.set_source_rgb(r, g, b);
+                if l2 / len < 0.15 {
+                    // End-on: a dot when it points at the viewer (larger
+                    // depth is nearer here, as the draw order shows), a
+                    // ring when it points away.
+                    cr.new_path();
+                    cr.arc(x, y, radius * 0.45, 0.0, 2.0 * PI);
+                    if iso(m).2 > 0.0 {
+                        let _ = cr.fill();
+                    } else {
+                        cr.set_line_width(1.5);
+                        let _ = cr.stroke();
+                    }
+                } else {
+                    let (ux, uy) = (dx / l2, dy / l2);
+                    let h = total * (l2 / len) / 2.0;
+                    let (tx, ty) = (x + ux * h, y + uy * h);
+                    cr.set_line_width(2.0);
+                    cr.move_to(x - ux * h, y - uy * h);
+                    cr.line_to(tx - ux * 5.0, ty - uy * 5.0);
+                    let _ = cr.stroke();
+                    cr.move_to(tx, ty);
+                    cr.line_to(tx - ux * 7.0 - uy * 3.5, ty - uy * 7.0 + ux * 3.5);
+                    cr.line_to(tx - ux * 7.0 + uy * 3.5, ty - uy * 7.0 - ux * 3.5);
+                    cr.close_path();
+                    let _ = cr.fill();
+                }
             }
         }
 

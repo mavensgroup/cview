@@ -22,6 +22,9 @@ pub struct Frame {
     pub max_force: Option<f64>,
     /// MD timestep or ionic step number as written in the file.
     pub step: Option<i64>,
+    /// Magnetic moment per atom, μB, Cartesian (see `Atom::magmom`), when
+    /// the file reports them for this geometry.
+    pub magmoms: Option<Vec<[f64; 3]>>,
 }
 
 #[derive(Clone, Debug)]
@@ -72,6 +75,7 @@ impl Trajectory {
                 original_index: k,
                 oxidation: None,
                 occupancy: 1.0,
+                magmom: f.magmoms.as_ref().and_then(|m| m.get(k).copied()),
             })
             .collect();
         let formula = match f.step {
@@ -109,6 +113,7 @@ mod tests {
             energy: None,
             max_force: None,
             step: None,
+            magmoms: None,
         };
         let mut t = Trajectory {
             species: vec!["Fe".into()],

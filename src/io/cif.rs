@@ -46,6 +46,14 @@ pub fn parse(path: &str) -> io::Result<Structure> {
 
     let mut symmetry_ops: Vec<String> = Vec::new();
     let mut base_atoms: Vec<Atom> = Vec::new();
+    // magCIF (mCIF): magnetic operations and centring translations, each
+    // "x,y,z,+1" with a time-reversal flag; site moments by atom label, in
+    // μB along unit vectors parallel to a, b, c (`crystalaxis`).
+    let mut magn_ops: Vec<String> = Vec::new();
+    let mut magn_centering: Vec<String> = Vec::new();
+    let mut base_labels: Vec<String> = Vec::new();
+    let mut site_moments: std::collections::HashMap<String, [f64; 3]> =
+        std::collections::HashMap::new();
     // Optional `_atom_type_*` loop side-table:
     //   key   = `_atom_type_symbol` value as it appears in the CIF
     //           (may include charge, e.g. "Fe3+", or be bare "Fe")
@@ -171,6 +179,17 @@ pub fn parse(path: &str) -> io::Result<Structure> {
             h.contains("_symmetry_equiv_pos_as_xyz")
                 || h.contains("_space_group_symop_operation_xyz")
         });
+        // `_space_group_symop_magn_operation.xyz` (also the older
+        // `_space_group_symop.magn_operation_xyz`), and `..._centering...`.
+        let is_magn_op_loop = current_loop_headers
+            .iter()
+            .any(|h| h.contains("magn_operation") && h.contains("xyz"));
+        let is_magn_centering_loop = current_loop_headers
+            .iter()
+            .any(|h| h.contains("magn_centering") && h.contains("xyz"));
+        let is_moment_loop = current_loop_headers
+            .iter()
+            .any(|h| h.contains("_atom_site_moment") && h.contains("crystalaxis_x"));
 
         // _atom_type_* dictionary loop. Disambiguated from _atom_site_* by the
         // absence of any _atom_site_ headers — _atom_type_ loops describe
@@ -183,7 +202,19 @@ pub fn parse(path: &str) -> io::Result<Structure> {
                 .iter()
                 .any(|h| h.contains("_atom_type_oxidation_number"));
 
-        if is_sym_loop {
+        if is_magn_op_loop || is_magn_centering_loop {
+            if let Some(op) = extract_symop_string(trimmed) {
+                if is_magn_op_loop {
+                    magn_ops.push(op);
+                } else {
+                    magn_centering.push(op);
+                }
+            }
+        } else if is_moment_loop {
+            if let Some((label, m)) = parse_moment_row(trimmed, &current_loop_headers) {
+                site_moments.insert(label, m);
+            }
+        } else if is_sym_loop {
             if let Some(op) = extract_symop_string(trimmed) {
                 symmetry_ops.push(op);
             }
@@ -192,6 +223,7 @@ pub fn parse(path: &str) -> io::Result<Structure> {
                 if atom.occupancy < 0.99 {
                     partial_occupancy_sites += 1;
                 }
+                base_labels.push(row_label(trimmed, &current_loop_headers).unwrap_or_default());
                 base_atoms.push(atom);
             }
         } else if is_atom_type_loop {
@@ -219,14 +251,29 @@ pub fn parse(path: &str) -> io::Result<Structure> {
     }
 
     // --- Post-processing: symmetry ---
+    // A magnetic file lists its operations (with time reversal) and its
+    // centring translations separately; the full set is every centring
+    // after every operation. They replace any non-magnetic operations.
+    let magnetic = !magn_ops.is_empty();
+    let ops: Vec<SymOp> = if magnetic {
+        if magn_centering.is_empty() {
+            magn_centering.push("x,y,z,+1".to_string());
+        }
+        let ops: Vec<SymOp> = magn_ops.iter().filter_map(|o| SymOp::parse(o)).collect();
+        let cen: Vec<SymOp> = magn_centering.iter().filter_map(|o| SymOp::parse(o)).collect();
+        cen.iter().flat_map(|c| ops.iter().map(move |o| c.after(o))).collect()
+    } else {
+        Vec::new()
+    };
     if symmetry_ops.is_empty() {
         symmetry_ops.push("x,y,z".to_string());
     }
 
     // Bravais-centering fallback: if the H-M symbol starts with a centering
     // letter and the parsed ops don't already include the centering
-    // translations, synthesize them.
-    if let Some(hm) = &hm_symbol {
+    // translations, synthesize them. (Not for a magnetic file: its
+    // centring loop is explicit, and may carry time reversal.)
+    if let Some(hm) = hm_symbol.as_ref().filter(|_| !magnetic) {
         let centering_ops = centering_translations(hm);
         if !centering_ops.is_empty() && !ops_include_centering(&symmetry_ops, &centering_ops) {
             let primitive_ops = symmetry_ops.clone();
@@ -247,9 +294,25 @@ pub fn parse(path: &str) -> io::Result<Structure> {
     // same-element duplicates (symmetry images of a special position).
     let mut split_site_pairs = 0usize;
 
-    for atom in &base_atoms {
-        for op in &symmetry_ops {
-            let new_pos = apply_symmetry(atom.position, op);
+    let ops: Vec<SymOp> = if magnetic {
+        ops
+    } else {
+        symmetry_ops.iter().filter_map(|o| SymOp::parse(o)).collect()
+    };
+    let cell_lengths = [a, b, c];
+    let mut sites_with_moment = 0usize;
+
+    for (k, atom) in base_atoms.iter().enumerate() {
+        // Moment in lattice-vector components: crystalaxis_i / |a_i|.
+        let m_frac = base_labels
+            .get(k)
+            .and_then(|l| site_moments.get(l))
+            .map(|m| [0, 1, 2].map(|i| if cell_lengths[i] > 0.0 { m[i] / cell_lengths[i] } else { 0.0 }));
+        if m_frac.is_some() {
+            sites_with_moment += 1;
+        }
+        for op in &ops {
+            let new_pos = op.apply(atom.position);
 
             let wx = new_pos[0].rem_euclid(1.0);
             let wy = new_pos[1].rem_euclid(1.0);
@@ -284,6 +347,9 @@ pub fn parse(path: &str) -> io::Result<Structure> {
                     original_index: idx,
                     oxidation: atom.oxidation,
                     occupancy: atom.occupancy,
+                    // Still in lattice-vector components; made Cartesian
+                    // with the positions below.
+                    magmom: m_frac.map(|m| op.apply_axial(m)),
                 });
             }
         }
@@ -297,6 +363,23 @@ pub fn parse(path: &str) -> io::Result<Structure> {
 
     for atom in &mut final_atoms {
         atom.position = frac_to_cart(atom.position, lattice);
+        if let Some(m) = atom.magmom {
+            atom.magmom = Some(frac_to_cart(m, lattice));
+        }
+    }
+
+    if magnetic {
+        crate::utils::console::log_info(&format!(
+            "mCIF: {} magnetic operation(s) × {} centring(s); moments on {} of {} site(s) in the asymmetric unit",
+            magn_ops.len(),
+            magn_centering.len(),
+            sites_with_moment,
+            base_atoms.len()
+        ));
+    } else if !site_moments.is_empty() {
+        crate::utils::console::log_warn(
+            "CIF has _atom_site_moment but no magnetic symmetry operations; moments expanded with the ordinary operations (no time reversal)",
+        );
     }
 
     if partial_occupancy_sites > 0 {
@@ -349,6 +432,92 @@ fn extract_symop_string(line: &str) -> Option<String> {
     }
 
     Some(s.to_string())
+}
+
+/// A symmetry operation x' = W·x + t on fractional coordinates, with a
+/// time-reversal flag (+1 or −1; +1 for non-magnetic operations).
+#[derive(Clone, Copy, Debug)]
+struct SymOp {
+    w: [[f64; 3]; 3],
+    t: [f64; 3],
+    theta: f64,
+}
+
+impl SymOp {
+    /// From "x,y,z" or the magnetic "x,y,z,+1" / "-x,y+1/2,z,-1".
+    fn parse(op: &str) -> Option<Self> {
+        let parts: Vec<&str> = op.split(',').map(str::trim).collect();
+        let theta = match parts.len() {
+            3 => 1.0,
+            4 => match parts[3].trim_start_matches('+') {
+                "1" => 1.0,
+                "-1" => -1.0,
+                _ => return None,
+            },
+            _ => return None,
+        };
+        let mut w = [[0.0; 3]; 3];
+        let mut t = [0.0; 3];
+        for i in 0..3 {
+            t[i] = evaluate_expr(parts[i], [0.0; 3]);
+            for j in 0..3 {
+                let mut e = [0.0; 3];
+                e[j] = 1.0;
+                w[i][j] = evaluate_expr(parts[i], e) - t[i];
+            }
+        }
+        Some(Self { w, t, theta })
+    }
+
+    fn rotate(&self, v: [f64; 3]) -> [f64; 3] {
+        [0, 1, 2].map(|i| (0..3).map(|j| self.w[i][j] * v[j]).sum())
+    }
+
+    fn apply(&self, p: [f64; 3]) -> [f64; 3] {
+        let r = self.rotate(p);
+        [r[0] + self.t[0], r[1] + self.t[1], r[2] + self.t[2]]
+    }
+
+    /// An axial vector (magnetic moment) in lattice-vector components:
+    /// m' = θ · det(W) · W · m. Translations do not act on it.
+    fn apply_axial(&self, m: [f64; 3]) -> [f64; 3] {
+        let w = &self.w;
+        let det = w[0][0] * (w[1][1] * w[2][2] - w[1][2] * w[2][1])
+            - w[0][1] * (w[1][0] * w[2][2] - w[1][2] * w[2][0])
+            + w[0][2] * (w[1][0] * w[2][1] - w[1][1] * w[2][0]);
+        self.rotate(m).map(|x| x * det * self.theta)
+    }
+
+    /// `self` applied after `first`.
+    fn after(&self, first: &SymOp) -> SymOp {
+        let mut w = [[0.0; 3]; 3];
+        for i in 0..3 {
+            for j in 0..3 {
+                w[i][j] = (0..3).map(|k| self.w[i][k] * first.w[k][j]).sum();
+            }
+        }
+        SymOp { w, t: self.apply(first.t), theta: self.theta * first.theta }
+    }
+}
+
+/// `_atom_site_label` of an atom-site row, to match moment rows against.
+fn row_label(line: &str, headers: &[String]) -> Option<String> {
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    headers
+        .iter()
+        .position(|h| h.trim() == "_atom_site_label")
+        .and_then(|i| parts.get(i))
+        .map(|s| s.to_string())
+}
+
+/// One `_atom_site_moment` row: (label, crystalaxis x/y/z in μB). Accepts
+/// the DDLm (`_atom_site_moment.crystalaxis_x`) and older underscore tags.
+fn parse_moment_row(line: &str, headers: &[String]) -> Option<(String, [f64; 3])> {
+    let parts: Vec<&str> = line.split_whitespace().collect();
+    let col = |suffix: &str| headers.iter().position(|h| h.trim().ends_with(suffix));
+    let label = parts.get(col("label")?)?.to_string();
+    let get = |s: &str| col(s).and_then(|i| parts.get(i)).map(|v| parse_cif_float(v));
+    Some((label, [get("crystalaxis_x")?, get("crystalaxis_y")?, get("crystalaxis_z")?]))
 }
 
 fn apply_symmetry(p: [f64; 3], op: &str) -> [f64; 3] {
@@ -564,6 +733,7 @@ fn parse_atom_row(line: &str, headers: &[String]) -> Option<Atom> {
         original_index: 0,
         oxidation,
         occupancy: occupancy.unwrap_or(1.0).clamp(0.0, 1.0),
+        magmom: None,
     })
 }
 
@@ -929,6 +1099,7 @@ mod tests {
             original_index: 0,
             oxidation: ox,
             occupancy: occ,
+            magmom: None,
         };
         let original = Structure {
             lattice: [[4.0, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 4.0]],
@@ -962,5 +1133,130 @@ mod tests {
                 a.element
             );
         }
+    }
+
+    fn parse_text(name: &str, text: &str) -> Structure {
+        let p = std::env::temp_dir().join(format!("cview_mcif_{}_{}.mcif", std::process::id(), name));
+        std::fs::write(&p, text).unwrap();
+        let s = parse(p.to_str().unwrap()).unwrap();
+        let _ = std::fs::remove_file(&p);
+        s
+    }
+
+    const MNF2: &str = r#"# MnF2, rutile, antiferromagnetic with moments along c.
+# Magnetic space group P4_2'/mnm' (BNS 136.499). Mn at 2a; the operations
+# that move (0,0,0) to (1/2,1/2,1/2) reverse the moment.
+data_MnF2
+_cell_length_a 4.8734
+_cell_length_b 4.8734
+_cell_length_c 3.3099
+_cell_angle_alpha 90
+_cell_angle_beta 90
+_cell_angle_gamma 90
+_space_group_magn.name_BNS "P4_2'/mnm'"
+loop_
+_space_group_symop_magn_operation.id
+_space_group_symop_magn_operation.xyz
+1 x,y,z,+1
+2 -x,-y,z,+1
+3 -y+1/2,x+1/2,z+1/2,-1
+4 y+1/2,-x+1/2,z+1/2,-1
+5 -x+1/2,y+1/2,-z+1/2,+1
+6 x+1/2,-y+1/2,-z+1/2,+1
+7 y,x,-z,-1
+8 -y,-x,-z,-1
+9 -x,-y,-z,+1
+10 x,y,-z,+1
+11 y+1/2,-x+1/2,-z+1/2,-1
+12 -y+1/2,x+1/2,-z+1/2,-1
+13 x+1/2,-y+1/2,z+1/2,+1
+14 -x+1/2,y+1/2,z+1/2,+1
+15 -y,-x,z,-1
+16 y,x,z,-1
+loop_
+_space_group_symop_magn_centering.id
+_space_group_symop_magn_centering.xyz
+1 x,y,z,+1
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+Mn1 Mn 0.0 0.0 0.0
+F1 F 0.3050 0.3050 0.0
+loop_
+_atom_site_moment.label
+_atom_site_moment.crystalaxis_x
+_atom_site_moment.crystalaxis_y
+_atom_site_moment.crystalaxis_z
+Mn1 0.0 0.0 4.6
+"#;
+
+    #[test]
+    fn mcif_antiferromagnet_time_reversal_flips_the_body_centre() {
+        let s = parse_text("mnf2", MNF2);
+        let mn: Vec<_> = s.atoms.iter().filter(|a| a.element == "Mn").collect();
+        assert_eq!(mn.len(), 2);
+        assert_eq!(s.atoms.iter().filter(|a| a.element == "F").count(), 4);
+        let m: Vec<[f64; 3]> = mn.iter().map(|a| a.magmom.expect("Mn has a moment")).collect();
+        assert!((m[0][2] - 4.6).abs() < 1e-9 && (m[1][2] + 4.6).abs() < 1e-9, "{:?}", m);
+        assert!(s.atoms.iter().filter(|a| a.element == "F").all(|a| a.magmom.is_none()));
+    }
+
+    #[test]
+    fn mcif_anti_translation_centring_and_crystalaxis_units() {
+        // Cell doubled along a; the centring x+1/2 carries time reversal, so
+        // the second Fe is reversed. The in-plane moment is given along b
+        // (a unit vector), and must come out as 2 muB whatever |b| is.
+        let text = "data_t
+_cell_length_a 6.0
+_cell_length_b 3.0
+_cell_length_c 3.0
+_cell_angle_alpha 90
+_cell_angle_beta 90
+_cell_angle_gamma 90
+loop_
+_space_group_symop_magn_operation.id
+_space_group_symop_magn_operation.xyz
+1 x,y,z,+1
+loop_
+_space_group_symop_magn_centering.id
+_space_group_symop_magn_centering.xyz
+1 x,y,z,+1
+2 x+1/2,y,z,-1
+loop_
+_atom_site_label
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+Fe1 0 0 0
+loop_
+_atom_site_moment.label
+_atom_site_moment.crystalaxis_x
+_atom_site_moment.crystalaxis_y
+_atom_site_moment.crystalaxis_z
+Fe1 0 2.0 0
+";
+        let s = parse_text("anti", text);
+        assert_eq!(s.atoms.len(), 2);
+        let close = |m: Option<[f64; 3]>, want: [f64; 3]| {
+            let m = m.expect("moment");
+            assert!((0..3).all(|k| (m[k] - want[k]).abs() < 1e-9), "{:?} vs {:?}", m, want);
+        };
+        close(s.atoms[0].magmom, [0.0, 2.0, 0.0]);
+        close(s.atoms[1].magmom, [0.0, -2.0, 0.0]);
+        assert!((s.atoms[1].position[0] - 3.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn mirror_reverses_an_axial_moment_along_its_normal_unless_primed() {
+        // Axial vector under a mirror x -> -x: m_x kept, m_y and m_z reversed.
+        let m = SymOp::parse("-x,y,z,+1").unwrap().apply_axial([1.0, 2.0, 3.0]);
+        assert_eq!(m, [1.0, -2.0, -3.0]);
+        let m = SymOp::parse("-x,y,z,-1").unwrap().apply_axial([1.0, 2.0, 3.0]);
+        assert_eq!(m, [-1.0, 2.0, 3.0]);
+        // Inversion leaves an axial vector alone.
+        assert_eq!(SymOp::parse("-x,-y,-z").unwrap().apply_axial([1.0, 2.0, 3.0]), [1.0, 2.0, 3.0]);
     }
 }

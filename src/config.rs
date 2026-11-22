@@ -43,6 +43,23 @@ pub enum ExportFormat {
     Pdf,
 }
 
+/// How moment arrows are coloured.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+pub enum MomentColorMode {
+    /// Up/Down when the moments are collinear, Direction when they are not
+    /// (canted, spirals, skyrmions).
+    #[default]
+    Auto,
+    /// Up or down along the structure's magnetic axis (the direction of
+    /// its largest moment): sublattices of an antiferro- or ferrimagnet.
+    UpDown,
+    /// Hue from the in-plane angle; white at +z, black at −z (the usual
+    /// spin-texture colouring).
+    Direction,
+    /// One colour for every arrow.
+    Single,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
 pub enum ColorMode {
     #[default]
@@ -157,6 +174,19 @@ pub struct RenderStyle {
     // SOTA LRU sprite cache (not serialized)
     pub atom_cache: Rc<RefCell<SpriteCache>>,
     pub show_labels: bool,
+
+    // Magnetic moment arrows. Session-only, like `show_labels`: they only
+    // matter for structures that carry moments.
+    pub show_moments: bool,
+    /// Arrow length per μB, Å.
+    pub moment_scale: f64,
+    pub moment_color_mode: MomentColorMode,
+    /// Hide the spheres of atoms that carry a moment, leaving the arrows
+    /// (spin textures, where the spheres hide the pattern).
+    pub moment_arrows_only: bool,
+    /// Up arrows, and every arrow in `Single` mode.
+    pub moment_color: (f64, f64, f64),
+    pub moment_color_down: (f64, f64, f64),
 }
 
 // Manual Serialize implementation (skip atom_cache)
@@ -222,6 +252,12 @@ impl<'de> Deserialize<'de> for RenderStyle {
             polyhedra_style: data.polyhedra_style,
             atom_cache: Rc::new(RefCell::new(SpriteCache::default())),
             show_labels: false,
+            show_moments: true,
+            moment_scale: DEFAULT_MOMENT_SCALE,
+            moment_color_mode: MomentColorMode::default(),
+            moment_arrows_only: false,
+            moment_color: DEFAULT_MOMENT_COLOR,
+            moment_color_down: DEFAULT_MOMENT_COLOR_DOWN,
         })
     }
 }
@@ -254,9 +290,21 @@ impl Default for RenderStyle {
             polyhedra_style: PolyhedraStyle::default(),
             atom_cache: Rc::new(RefCell::new(SpriteCache::default())),
             show_labels: false,
+            show_moments: true,
+            moment_scale: DEFAULT_MOMENT_SCALE,
+            moment_color_mode: MomentColorMode::default(),
+            moment_arrows_only: false,
+            moment_color: DEFAULT_MOMENT_COLOR,
+            moment_color_down: DEFAULT_MOMENT_COLOR_DOWN,
         }
     }
 }
+
+/// Visible arrow length (outside the atom, both ends together) per μB, Å:
+/// 3.6 μB on Fe in FeO sticks out 0.9 Å each way.
+pub const DEFAULT_MOMENT_SCALE: f64 = 0.5;
+pub const DEFAULT_MOMENT_COLOR: (f64, f64, f64) = (0.80, 0.10, 0.10);
+pub const DEFAULT_MOMENT_COLOR_DOWN: (f64, f64, f64) = (0.10, 0.30, 0.85);
 
 // ============================================================================
 // MAIN CONFIG

@@ -988,6 +988,7 @@ mod tests {
                 energy: None,
                 max_force: None,
                 step: None,
+                magmoms: None,
             }],
             is_periodic: true,
             format: "test",

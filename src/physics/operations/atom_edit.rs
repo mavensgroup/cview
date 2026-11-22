@@ -19,6 +19,7 @@ pub fn add_atom(structure: &Structure, element: &str, cart: [f64; 3]) -> Structu
         original_index: atoms.len(),
         oxidation: None,
         occupancy: 1.0,
+        magmom: None,
     });
     rebuilt(structure, atoms)
 }
@@ -93,6 +94,7 @@ mod tests {
                 original_index: i,
                 oxidation: None,
                 occupancy: 1.0,
+                magmom: None,
             })
             .collect();
         Structure {

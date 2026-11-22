@@ -104,6 +104,7 @@ mod tests {
             original_index: 0,
             oxidation: None,
             occupancy,
+            magmom: None,
         }
     }
 

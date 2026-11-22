@@ -310,6 +310,7 @@ mod tests {
                 original_index: 0,
                 oxidation: None,
                 occupancy: 1.0,
+                magmom: None,
             }],
             formula: "Po".into(),
             is_periodic: true,

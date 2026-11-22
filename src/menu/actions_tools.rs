@@ -24,6 +24,7 @@ pub fn setup(
         ("basis", StructureTab::Basis),
         ("atoms", StructureTab::Atoms),
         ("atom_instances", StructureTab::Instances),
+        ("magnetic_order", StructureTab::Magnetic),
         ("slab", StructureTab::Slab),
     ] {
         let action = gtk4::gio::SimpleAction::new(name, None);
