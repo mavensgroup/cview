@@ -57,6 +57,21 @@ log = "0.4"
 glow = "0.16"
 libloading = "0.8"
 
+# Local RPM build only: `cargo build --release && cargo generate-rpm`
+# (output in target/generate-rpm/). Not a release channel — Flatpak is the
+# Linux package, because RPMs pin the build host's library versions and fail
+# to install on older distributions (e.g. EL9).
+[package.metadata.generate-rpm]
+summary = "Crystal structure visualization and analysis"
+license = "MIT"
+assets = [
+    { source = "target/release/cview", dest = "/usr/bin/cview", mode = "755" },
+    { source = "assets/org.mavensgroup.cview.desktop", dest = "/usr/share/applications/org.mavensgroup.cview.desktop", mode = "644" },
+    { source = "assets/org.mavensgroup.cview.svg", dest = "/usr/share/icons/hicolor/scalable/apps/org.mavensgroup.cview.svg", mode = "644" },
+    { source = "LICENSE", dest = "/usr/share/licenses/cview/LICENSE", mode = "644", doc = true },
+    { source = "README.md", dest = "/usr/share/doc/cview/README.md", mode = "644", doc = true },
+]
+
 [profile.release]
 opt-level = 3
 lto = true
