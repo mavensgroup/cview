@@ -3,25 +3,33 @@
 // A sequence of configurations of the same atoms: a geometry optimisation
 // (vasprun.xml, QE relax/vc-relax output) or an MD run (LAMMPS dump).
 //
+// A micromagnetic series (OVF snapshots) is a trajectory too: the cells
+// stay put and only `magmoms` changes.
+//
 // The main view shows one frame as an ordinary `Structure`; the GPU
 // trajectory player reads the frames directly. Atom count and species are
 // the same in every frame; readers stop at the first frame where they are
 // not, and say so.
 
 use crate::model::{Atom, Structure};
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub struct Frame {
     /// Lattice vectors as rows, Å. Changes between frames in vc-relax and NPT.
     pub lattice: [[f64; 3]; 3],
     /// Cartesian positions, Å, one per entry of `Trajectory::species`.
-    pub positions: Vec<[f64; 3]>,
+    /// Shared between frames that do not move (a micromagnetic series:
+    /// only the moments change).
+    pub positions: Arc<Vec<[f64; 3]>>,
     /// Total energy, eV, when the file reports one for this geometry.
     pub energy: Option<f64>,
     /// Largest force on any atom, eV/Å, when the file reports forces.
     pub max_force: Option<f64>,
     /// MD timestep or ionic step number as written in the file.
     pub step: Option<i64>,
+    /// Simulation time, s, when the file records it (mumax3/OOMMF snapshots).
+    pub time: Option<f64>,
     /// Magnetic moment per atom, μB, Cartesian (see `Atom::magmom`), when
     /// the file reports them for this geometry.
     pub magmoms: Option<Vec<[f64; 3]>>,
@@ -109,10 +117,11 @@ mod tests {
     fn frame_choice_and_structure() {
         let f = |x: f64| Frame {
             lattice: [[5.0, 0.0, 0.0], [0.0, 5.0, 0.0], [0.0, 0.0, 5.0]],
-            positions: vec![[x, 0.0, 0.0]],
+            positions: Arc::new(vec![[x, 0.0, 0.0]]),
             energy: None,
             max_force: None,
             step: None,
+            time: None,
             magmoms: None,
         };
         let mut t = Trajectory {
@@ -123,7 +132,7 @@ mod tests {
         };
         assert!(t.push_checked(f(0.0)));
         assert!(t.push_checked(f(1.0)));
-        assert!(!t.push_checked(Frame { positions: vec![], ..f(2.0) }));
+        assert!(!t.push_checked(Frame { positions: Arc::new(vec![]), ..f(2.0) }));
         assert_eq!(t.index_of(FrameChoice::Last), 1);
         let s = t.structure_at(1).unwrap();
         assert_eq!(s.atoms[0].position, [1.0, 0.0, 0.0]);

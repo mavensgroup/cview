@@ -95,7 +95,7 @@ fn parse_output_frames(content: &str) -> io::Result<Trajectory> {
             }
             if let (Some(lat), false) = (lattice, positions.is_empty()) {
                 traj.species = species.clone();
-                traj.frames.push(Frame { lattice: lat, positions, energy: None, max_force: None, step: Some(0), magmoms: None });
+                traj.frames.push(Frame { lattice: lat, positions: positions.into(), energy: None, max_force: None, step: Some(0), time: None, magmoms: None });
             }
             i = k;
             continue;
@@ -178,11 +178,11 @@ fn parse_output_frames(content: &str) -> io::Result<Trajectory> {
                 // No header geometry found: this block starts the path.
                 traj.species = els.clone();
             }
-            let frame = Frame { lattice: lat, positions, energy: None, max_force: None, step: Some(traj.frames.len() as i64), magmoms: None };
+            let frame = Frame { lattice: lat, positions: positions.into(), energy: None, max_force: None, step: Some(traj.frames.len() as i64), time: None, magmoms: None };
             if in_final {
                 if let Some(last) = traj.frames.last() {
                     let same = last.positions.len() == frame.positions.len()
-                        && last.positions.iter().zip(&frame.positions).all(|(a, b)| (0..3).all(|d| (a[d] - b[d]).abs() < 1e-6));
+                        && last.positions.iter().zip(frame.positions.iter()).all(|(a, b)| (0..3).all(|d| (a[d] - b[d]).abs() < 1e-6));
                     if same {
                         continue;
                     }

@@ -57,6 +57,14 @@ fn show_document(ctx: &OpenContext, filename: &str, doc: io::Document, took: std
     };
 
     console::log_info(&format!("Loaded: {} ({:.2} s)", filename, took.as_secs_f64()));
+    if trajectory.is_some() && std::env::var_os("CVIEW_PLAYER_SNAPSHOT").is_some() {
+        // Debugging aid: open the player straight away (it saves itself).
+        gtk4::glib::idle_add_local_once(|| {
+            if let Some(app) = gtk4::gio::Application::default() {
+                app.activate_action("trajectory_player", None);
+            }
+        });
+    }
     if let Some(t) = &trajectory {
         console::log_info(&format!(
             "{}: {} frames ({}); showing frame {}. Structure \u{2192} Trajectory Player to play them.",

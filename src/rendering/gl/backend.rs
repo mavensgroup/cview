@@ -5,6 +5,8 @@
 //   - atoms as instanced sphere impostors: one screen-aligned quad per atom,
 //     ray-cast in the fragment shader with exact depth;
 //   - bonds as instanced cylinder impostors;
+//   - arrows (magnetic moments) as an instanced shaft-and-cone mesh, real
+//     geometry so an arrow pointing at the viewer still shows as a disc;
 //   - line segments (the cell) as screen-space quads of a set pixel width,
 //     so lines keep a physical width in high-resolution exports;
 //   - indexed triangle meshes (isosurfaces), opaque or transparent, with
@@ -41,6 +43,17 @@ pub struct BondInstance {
     pub radius: f32,
     pub color_a: [f32; 3],
     pub color_b: [f32; 3],
+}
+
+/// One arrow from `base` to `base + axis`: a shaft of radius `shaft_r` and
+/// a cone head 2.4× as wide.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct ArrowInstance {
+    pub base: [f32; 3],
+    pub axis: [f32; 3],
+    pub shaft_r: f32,
+    pub color: [f32; 3],
 }
 
 /// An indexed triangle mesh to upload (an isosurface).
@@ -89,6 +102,9 @@ pub struct Section {
 pub trait GpuBackend {
     fn set_atoms(&mut self, atoms: &[AtomInstance]);
     fn set_bonds(&mut self, bonds: &[BondInstance]);
+    fn set_arrows(&mut self, arrows: &[ArrowInstance]);
+    /// Draw atoms unlit in their flat colour (tiles of a colour map).
+    fn set_flat_atoms(&mut self, flat: bool);
     /// Pairs of endpoints, drawn as lines `set_line_width` pixels wide.
     fn set_lines(&mut self, segments: &[[f32; 3]], color: [f32; 3]);
     fn set_line_width(&mut self, px: f32);
@@ -155,6 +171,7 @@ in vec3 v_center;
 in float v_radius;
 in vec3 v_color;
 uniform mat4 proj;
+uniform int flat_shade;
 layout(location = 0) out vec4 frag;
 void main() {
     float r2 = dot(v_uv, v_uv);
@@ -162,7 +179,7 @@ void main() {
     vec3 n = vec3(v_uv, sqrt(1.0 - r2));
     vec4 clip = proj * vec4(v_center + n * v_radius, 1.0);
     gl_FragDepth = clip.z / clip.w * 0.5 + 0.5;
-    frag = vec4(shade(v_color, n), 1.0);
+    frag = vec4(flat_shade == 1 ? v_color : shade(v_color, n), 1.0);
 }
 "#;
 
@@ -225,6 +242,94 @@ void main() {
     frag = vec4(shade(v_t < 0.5 ? v_ca : v_cb, n), 1.0);
 }
 "#;
+
+/// Arrows: each vertex of the unit arrow is (cos, sin, part); the part
+/// says which ring it sits on and how its normal is formed (see
+/// `arrow_mesh`). Shaft radius r, head radius R = 2.4 r, head length up to
+/// 3R but at most 40% of the arrow.
+const ARROW_VS: &str = r#"#version 330 core
+layout(location = 0) in vec3 vert;
+layout(location = 1) in vec3 base;
+layout(location = 2) in vec3 axis;
+layout(location = 3) in float shaft_r;
+layout(location = 4) in vec3 color;
+uniform mat4 view;
+uniform mat4 proj;
+out vec3 v_n;
+out vec3 v_pos;
+out vec3 v_color;
+void main() {
+    float L = length(axis);
+    vec3 w = L > 1e-6 ? axis / L : vec3(0.0, 0.0, 1.0);
+    vec3 h = abs(w.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    vec3 u = normalize(cross(h, w));
+    vec3 v = cross(w, u);
+    float R = 2.4 * shaft_r;
+    float hl = min(0.4 * L, 3.0 * R);
+    float zh = L - hl;
+    int part = int(vert.z + 0.5);
+    vec2 c = vert.xy;
+    float r = 0.0;
+    float z = 0.0;
+    vec3 nl = vec3(0.0, 0.0, -1.0);
+    if (part == 0) { r = shaft_r; z = 0.0; nl = vec3(c, 0.0); }
+    else if (part == 1) { r = shaft_r; z = zh; nl = vec3(c, 0.0); }
+    else if (part == 2) { r = R; z = zh; nl = normalize(vec3(c * hl, R)); }
+    else if (part == 3) { r = 0.0; z = L; nl = normalize(vec3(c * hl, R)); }
+    else if (part == 4) { r = shaft_r; z = 0.0; }
+    else if (part == 5) { r = 0.0; z = 0.0; }
+    else if (part == 6) { r = R; z = zh; }
+    else { r = 0.0; z = zh; }
+    vec3 p = base + u * (c.x * r) + v * (c.y * r) + w * z;
+    vec4 pv = view * vec4(p, 1.0);
+    v_pos = pv.xyz;
+    v_n = mat3(view) * (u * nl.x + v * nl.y + w * nl.z);
+    v_color = color;
+    gl_Position = proj * pv;
+}
+"#;
+
+const ARROW_FS: &str = r#"
+in vec3 v_n;
+in vec3 v_pos;
+in vec3 v_color;
+uniform vec4 clip;
+layout(location = 0) out vec4 frag;
+void main() {
+    if (dot(clip.xyz, clip.xyz) > 0.0 && dot(clip.xyz, v_pos) > clip.w) discard;
+    vec3 n = normalize(v_n);
+    if (!gl_FrontFacing) n = -n;
+    frag = vec4(shade(v_color, n), 1.0);
+}
+"#;
+
+/// Segments around an arrow.
+const ARROW_SEGMENTS: usize = 16;
+
+/// The unit arrow as triangles of (cos, sin, part) vertices: shaft side
+/// (parts 0–1), cone side (2–3), the shaft's bottom cap (4–5) and the
+/// underside of the cone (6–7).
+fn arrow_mesh() -> Vec<[f32; 3]> {
+    let mut v = Vec::with_capacity(ARROW_SEGMENTS * 12);
+    let at = |k: usize| {
+        let a = std::f32::consts::TAU * k as f32 / ARROW_SEGMENTS as f32;
+        (a.cos(), a.sin())
+    };
+    for k in 0..ARROW_SEGMENTS {
+        let (c0, s0) = at(k);
+        let (c1, s1) = at(k + 1);
+        let (cm, sm) = {
+            let a = std::f32::consts::TAU * (k as f32 + 0.5) / ARROW_SEGMENTS as f32;
+            (a.cos(), a.sin())
+        };
+        v.extend([[c0, s0, 0.0], [c1, s1, 0.0], [c1, s1, 1.0]]);
+        v.extend([[c0, s0, 0.0], [c1, s1, 1.0], [c0, s0, 1.0]]);
+        v.extend([[c0, s0, 2.0], [c1, s1, 2.0], [cm, sm, 3.0]]);
+        v.extend([[c1, s1, 4.0], [c0, s0, 4.0], [0.0, 0.0, 5.0]]);
+        v.extend([[c1, s1, 6.0], [c0, s0, 6.0], [0.0, 0.0, 7.0]]);
+    }
+    v
+}
 
 /// Lines as screen-space quads: `width_px` wide whatever the resolution.
 const LINE_VS: &str = r#"#version 330 core
@@ -459,6 +564,7 @@ pub struct GlBackend {
     pub(super) gl: glow::Context,
     pub(super) sphere: Program,
     pub(super) bond: Program,
+    pub(super) arrow: Program,
     pub(super) line: Program,
     pub(super) mesh_prog: Program,
     pub(super) section_prog: Program,
@@ -470,12 +576,18 @@ pub struct GlBackend {
     sphere_vbo: glow::Buffer,
     bond_vao: glow::VertexArray,
     bond_vbo: glow::Buffer,
+    arrow_vao: glow::VertexArray,
+    arrow_mesh_vbo: glow::Buffer,
+    arrow_vbo: glow::Buffer,
+    arrow_verts: i32,
     line_vao: glow::VertexArray,
     line_vbo: glow::Buffer,
     section_vao: glow::VertexArray,
     pub(super) empty_vao: glow::VertexArray,
     n_atoms: i32,
+    flat_atoms: bool,
     n_bonds: i32,
+    n_arrows: i32,
     n_lines: i32,
     line_color: [f32; 3],
     pub(super) line_width: f32,
@@ -552,6 +664,7 @@ impl GlBackend {
             let lit = |fs: &str| format!("#version 330 core\n{SHADE}{fs}");
             let sphere = compile(&gl, SPHERE_VS, &lit(SPHERE_FS))?;
             let bond = compile(&gl, BOND_VS, &lit(BOND_FS))?;
+            let arrow = compile(&gl, ARROW_VS, &lit(ARROW_FS))?;
             let line = compile(&gl, LINE_VS, LINE_FS)?;
             let mesh_prog = compile(&gl, MESH_VS, &lit(MESH_FS))?;
             let section_prog = compile(&gl, SECTION_VS, SECTION_FS)?;
@@ -588,6 +701,26 @@ impl GlBackend {
             gl.bind_vertex_array(Some(bond_vao));
             instance_attribs(&gl, quad, bond_vbo, &[3, 3, 1, 3, 3]);
 
+            // Arrows: the unit mesh per vertex, the instances per arrow.
+            let arrow_vao = gl.create_vertex_array()?;
+            let arrow_mesh_vbo = gl.create_buffer()?;
+            let arrow_vbo = gl.create_buffer()?;
+            let unit_arrow = arrow_mesh();
+            gl.bind_vertex_array(Some(arrow_vao));
+            gl.bind_buffer(glow::ARRAY_BUFFER, Some(arrow_mesh_vbo));
+            gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, as_bytes(&unit_arrow), glow::STATIC_DRAW);
+            gl.enable_vertex_attrib_array(0);
+            gl.vertex_attrib_pointer_f32(0, 3, glow::FLOAT, false, 12, 0);
+            gl.bind_buffer(glow::ARRAY_BUFFER, Some(arrow_vbo));
+            let mut offset = 0;
+            for (k, n) in [3, 3, 1, 3].into_iter().enumerate() {
+                let loc = k as u32 + 1;
+                gl.enable_vertex_attrib_array(loc);
+                gl.vertex_attrib_pointer_f32(loc, n, glow::FLOAT, false, 40, offset);
+                gl.vertex_attrib_divisor(loc, 1);
+                offset += n * 4;
+            }
+
             let line_vao = gl.create_vertex_array()?;
             let line_vbo = gl.create_buffer()?;
             gl.bind_vertex_array(Some(line_vao));
@@ -607,6 +740,7 @@ impl GlBackend {
                 gl,
                 sphere,
                 bond,
+                arrow,
                 line,
                 mesh_prog,
                 section_prog,
@@ -618,12 +752,18 @@ impl GlBackend {
                 sphere_vbo,
                 bond_vao,
                 bond_vbo,
+                arrow_vao,
+                arrow_mesh_vbo,
+                arrow_vbo,
+                arrow_verts: unit_arrow.len() as i32,
                 line_vao,
                 line_vbo,
                 section_vao,
                 empty_vao,
                 n_atoms: 0,
+                flat_atoms: false,
                 n_bonds: 0,
+                n_arrows: 0,
                 n_lines: 0,
                 line_color: [0.3, 0.3, 0.3],
                 line_width: 1.5,
@@ -746,6 +886,7 @@ impl GlBackend {
         let gl = &self.gl;
         if self.n_atoms > 0 {
             self.use_camera(&self.sphere, f);
+            gl.uniform_1_i32(self.sphere.loc(gl, "flat_shade").as_ref(), self.flat_atoms as i32);
             gl.bind_vertex_array(Some(self.sphere_vao));
             gl.draw_arrays_instanced(glow::TRIANGLE_STRIP, 0, 4, self.n_atoms);
         }
@@ -753,6 +894,11 @@ impl GlBackend {
             self.use_camera(&self.bond, f);
             gl.bind_vertex_array(Some(self.bond_vao));
             gl.draw_arrays_instanced(glow::TRIANGLE_STRIP, 0, 4, self.n_bonds);
+        }
+        if self.n_arrows > 0 {
+            self.use_camera(&self.arrow, f);
+            gl.bind_vertex_array(Some(self.arrow_vao));
+            gl.draw_arrays_instanced(glow::TRIANGLES, 0, self.arrow_verts, self.n_arrows);
         }
         if self.n_lines > 0 {
             self.use_camera(&self.line, f);
@@ -914,6 +1060,18 @@ impl GpuBackend for GlBackend {
             self.gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, as_bytes(bonds), glow::STREAM_DRAW);
         }
         self.n_bonds = bonds.len() as i32;
+    }
+
+    fn set_flat_atoms(&mut self, flat: bool) {
+        self.flat_atoms = flat;
+    }
+
+    fn set_arrows(&mut self, arrows: &[ArrowInstance]) {
+        unsafe {
+            self.gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.arrow_vbo));
+            self.gl.buffer_data_u8_slice(glow::ARRAY_BUFFER, as_bytes(arrows), glow::STREAM_DRAW);
+        }
+        self.n_arrows = arrows.len() as i32;
     }
 
     fn set_lines(&mut self, segments: &[[f32; 3]], color: [f32; 3]) {
@@ -1092,6 +1250,7 @@ impl GpuBackend for GlBackend {
             for p in [
                 &self.sphere,
                 &self.bond,
+                &self.arrow,
                 &self.line,
                 &self.mesh_prog,
                 &self.section_prog,
@@ -1101,10 +1260,10 @@ impl GpuBackend for GlBackend {
             ] {
                 gl.delete_program(p.program);
             }
-            for b in [self.quad, self.sphere_vbo, self.bond_vbo, self.line_vbo] {
+            for b in [self.quad, self.sphere_vbo, self.bond_vbo, self.arrow_mesh_vbo, self.arrow_vbo, self.line_vbo] {
                 gl.delete_buffer(b);
             }
-            for v in [self.sphere_vao, self.bond_vao, self.line_vao, self.section_vao, self.empty_vao] {
+            for v in [self.sphere_vao, self.bond_vao, self.arrow_vao, self.line_vao, self.section_vao, self.empty_vao] {
                 gl.delete_vertex_array(v);
             }
             for m in self.meshes.drain(..).flatten() {

@@ -199,10 +199,11 @@ fn read_frames(path: &str, limit: Option<usize>) -> io::Result<Trajectory> {
             let s = or_stop!(read_atoms(&mut lines, &roles, n, b, step));
             let frame = Frame {
                 lattice: s.lattice,
-                positions: s.atoms.iter().map(|a| a.position).collect(),
+                positions: std::sync::Arc::new(s.atoms.iter().map(|a| a.position).collect()),
                 energy: None,
                 max_force: None,
                 step: Some(step),
+                time: None,
                 magmoms: None,
             };
             match traj.as_mut() {

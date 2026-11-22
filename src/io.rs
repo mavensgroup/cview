@@ -38,7 +38,11 @@ pub struct Document {
 
 /// Load `path` for display. Multi-frame files (vasprun.xml, QE relax/MD
 /// output, LAMMPS dump) are read in full, and `choice` picks the frame shown.
+/// An OVF file brings the rest of its numbered series (`ovf::load_document`).
 pub fn load_document(path: &str, choice: FrameChoice) -> io::Result<Document> {
+    if is_ovf_path(&path.to_lowercase()) {
+        return ovf::load_document(path, choice);
+    }
     let traj = if lammps_dump::sniff(path) {
         Some(lammps_dump::parse_trajectory(path)?)
     } else if vasprun::sniff(path) {
@@ -59,6 +63,10 @@ pub fn load_document(path: &str, choice: FrameChoice) -> io::Result<Document> {
         }
         None => load_structure(path).map(|structure| Document { structure, trajectory: None, frame: 0 }),
     }
+}
+
+fn is_ovf_path(lower: &str) -> bool {
+    [".ovf", ".omf", ".ohf"].iter().any(|e| lower.ends_with(e))
 }
 
 fn is_qe_path(lower: &str) -> bool {
@@ -82,7 +90,7 @@ pub fn load_structure(path: &str) -> io::Result<Structure> {
         return cif::parse(path);
     }
     // OOMMF vector fields (mumax3, OOMMF, Spirit): a magnetization texture.
-    if p.ends_with(".ovf") || p.ends_with(".omf") || p.ends_with(".ohf") {
+    if is_ovf_path(&p) {
         return ovf::parse(path);
     }
     if p.ends_with(".xyz") {

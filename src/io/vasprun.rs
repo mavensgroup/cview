@@ -140,7 +140,7 @@ pub fn parse_trajectory(path: &str) -> io::Result<Trajectory> {
             traj.species = species.to_vec();
         }
         let step = Some(traj.frames.len() as i64 + 1);
-        traj.push_checked(Frame { lattice, positions, energy, max_force, step, magmoms: None })
+        traj.push_checked(Frame { lattice, positions: positions.into(), energy, max_force, step, time: None, magmoms: None })
     };
 
     while let Some(line) = lines.next() {
