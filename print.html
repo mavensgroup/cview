@@ -57,7 +57,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-43b60893.js";
+            window.path_to_searchindex_js = "searchindex-0a6c3b2f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f492e3cf.js"></script>
@@ -213,7 +213,7 @@
 
 <p><a href="https://mavens-group.github.io/">The Mavens Group</a></p>
 
-<p class="version">v1.3.3 (2026)</p>
+<p class="version">v1.3.4 (2026)</p>
 
 </div>
 
@@ -648,11 +648,13 @@ CView automatically detects the file type based on extension and content. You ca
 <p><strong>Why LAMMPS, in a DFT-oriented tool?</strong> A LAMMPS dump is, at its core, the same data CView already parses for every other trajectory: a box plus a per-atom coordinate list, one frame after another — structurally the same problem as an Extended XYZ trajectory or a QE <code>vc-relax</code> log, just with LAMMPS’s own column layout. Reading it slots into the trajectory machinery built for <code>vasprun.xml</code>/QE/MD output rather than opening a new area of the code. CView does not run LAMMPS, does not know about force fields, and writes no LAMMPS input — it is a geometry viewer for a dump file someone already produced, exactly as it is for a VASP or QE run.</p>
 </blockquote>
 <h3 id="trajectories-relaxation-and-md"><a class="header" href="#trajectories-relaxation-and-md">Trajectories (Relaxation and MD)</a></h3>
-<p>Files with several frames — <code>vasprun.xml</code>, Quantum Espresso relax/MD output, LAMMPS dumps — open as one structure in the main view: the <strong>first</strong> or <strong>last</strong> frame, set in <code>Preferences → General → Relaxation / MD files open at</code>. All frames are kept.</p>
+<p>Files with several frames — <code>vasprun.xml</code>, Quantum Espresso relax/MD output, LAMMPS dumps — open as one structure in the main view: the <strong>first</strong> or <strong>last</strong> frame, set in <code>Preferences → General → Relaxation / MD files open at</code>. All frames are kept. A series of OVF magnetization snapshots (mumax3, OOMMF, Spirit) is a trajectory too, and opens at the snapshot you chose; see <a href="#snapshot-series-movies">Magnetism</a>.</p>
 <p><code>Structure → Trajectory Player… (Ctrl + Shift + P)</code> plays them in a separate window drawn on the GPU:</p>
 <ul>
 <li>Play, step and jump with the buttons or <strong>Space</strong>, <strong>, / .</strong> (or <strong>← / →</strong>), <strong>Home / End</strong>; set the speed in frames per second.</li>
-<li>For relaxations, the energy of every step is plotted under the view (click to jump), with the energy, ΔE and largest force of the current step on screen.</li>
+<li>For relaxations, the energy of every step is plotted under the view (click to jump), with the energy, ΔE and largest force of the current step on screen. Without energies (an OVF series), the plot shows the mean moment ⟨m_x⟩, ⟨m_y⟩, ⟨m_z⟩ per frame instead, and the simulation time is shown.</li>
+<li><strong>View x / y / z</strong> looks down a Cartesian axis and refits the view.</li>
+<li>When the frames carry magnetic moments, a row of moment controls appears: <strong>Arrows</strong> on/off, <strong>Length</strong>, <strong>Width</strong>, and <strong>Colour</strong> (<em>Direction</em>: hue from the in-plane angle, white at +z, black at −z, as in mumax3; <em>m_z</em> on a blue–white–red scale; <em>Up / down</em>; or one colour). For a magnetization mesh there are also <strong>Every</strong> (an arrow on every n-th cell in the plane, the arrows growing to match) and <strong>Colour map</strong> (every cell drawn as a flat tile in its moment’s colour, with grey arrows on top). A large mesh opens with the colour map on and the arrows thinned to about 48 along the longest side.</li>
 <li><strong>Show in Main View</strong> copies the current frame into the main window for measurements, analysis and vector export; <strong>Undo</strong> restores the previous structure.</li>
 <li><strong>Save Image…</strong> writes the 3D view as a PNG.</li>
 </ul>
@@ -1673,11 +1675,19 @@ The Bilbao <strong>MAGNDATA</strong> database provides published structures in t
 <li>Cells where the magnetization is zero (outside the magnet in a mumax3 geometry) are left out, so a disc reads as a disc.</li>
 <li>A magnetization in A/m is divided by its largest magnitude, so you always see <strong>m = M/Ms</strong>. Structure Info shows the sum and the average of m, without a μB unit.</li>
 <li>Meshes above 40 000 cells are thinned (every k-th cell in x and y) to keep the CPU renderer fast; the System Log reports it.</li>
-<li>Only the first segment is read, and only vector fields: a scalar field (an energy density) is refused with a message.</li>
+<li>Only vector fields are read: a scalar field (an energy density) is refused with a message.</li>
 <li>Opening a mesh switches on <strong>Arrows only</strong> and sets the arrow length to about one cell spacing, with bonds and periodic images off.</li>
 </ul>
 <p><img src="images/magnetism_skyrmion.png" alt="A Néel skyrmion in Direction colouring, arrows only"></p>
-<p>A mumax3 run’s <code>m000000.ovf, m000001.ovf, …</code> open as separate tabs.</p>
+<h4 id="snapshot-series-movies"><a class="header" href="#snapshot-series-movies">Snapshot series (movies)</a></h4>
+<p>A mumax3 or OOMMF run writes one file per snapshot: <code>m000000.ovf</code>, <code>m000001.ovf</code>, …. Open <strong>any one of them</strong> and CView loads the whole series from the same folder — every file whose name is the same up to a trailing number, with the same extension — in numeric order. The main view shows the file you opened; <code>Structure → Trajectory Player…</code> plays them all (see <a href="#trajectories-relaxation-and-md">Trajectories</a>). A Spirit file holding several snapshots as segments is played the same way.</p>
+<ul>
+<li>The simulation time (<code>Total simulation time</code> in the header) is shown for each snapshot; the step is OOMMF’s iteration number, otherwise the number in the file name.</li>
+<li>Which cells are kept, and how a magnetization in A/m is scaled, is decided from the opened snapshot and applied to all of them, so the frames are comparable.</li>
+<li>All snapshots are kept in memory. A long series of a large mesh is thinned further, to about 6 million cell moments in all (at least 2 000 cells per snapshot); the System Log says when it is.</li>
+<li>A file in the folder with a different mesh, or one that cannot be read, is left out with a warning.</li>
+<li>Other quantities in the same folder (<code>B_ext000000.ovf</code>) and unnumbered files (<code>m.ovf</code>) are not part of the series.</li>
+</ul>
 <hr>
 <h2 id="showing-the-moments"><a class="header" href="#showing-the-moments">Showing the moments</a></h2>
 <p>The <strong>Magnetic Moments</strong> group in the sidebar (under <strong>Appearance</strong>) controls the arrows for the active tab. The settings are per tab and are not saved between sessions.</p>
@@ -1797,7 +1807,7 @@ MAGMOM = 2*3.6 2*-3.6 4*0
 <hr>
 <h2 id="limits"><a class="header" href="#limits">Limits</a></h2>
 <ul>
-<li>The arrows are drawn in the main view and in the Structure window preview only; the GPU windows (Trajectory Player, 3D charge density) do not show them.</li>
+<li>The arrows are drawn in the main view, the Structure window preview and the Trajectory Player; the 3D charge density window does not show them.</li>
 <li>Antiferromagnetic orders on a larger cell are only built from a single propagation vector. Searching all magnetic subgroups is not done: take a published structure from MAGNDATA as an mCIF instead.</li>
 <li>There is no topological charge or skyrmion builder yet; see the <a href="#to-do">To Do</a> list.</li>
 </ul>
@@ -1830,9 +1840,10 @@ without atoms, and Quantum Espresso input that stays within pw.x’s
 species limit.</li>
 <li><input disabled="" type="checkbox" checked=""> <strong>OVF files</strong> (mumax3, OOMMF, Spirit): magnetization textures shown
 as arrows.</li>
-<li><input disabled="" type="checkbox"> Topological charge of a spin texture; build skyrmion lattices; play a
-series of OVF snapshots.</li>
-<li><input disabled="" type="checkbox"> Magnetic moment arrows in the 3D windows.</li>
+<li><input disabled="" type="checkbox" checked=""> <strong>OVF snapshot series</strong> play in the Trajectory Player, with moment
+arrows and a colour map.</li>
+<li><input disabled="" type="checkbox"> Topological charge of a spin texture; build skyrmion lattices.</li>
+<li><input disabled="" type="checkbox"> Magnetic moment arrows in the 3D charge density window.</li>
 <li><input disabled="" type="checkbox"> <strong>Thermal ellipsoids</strong> from anisotropic displacement parameters in CIF.</li>
 <li><input disabled="" type="checkbox"> Overlay two structures in one view.</li>
 </ul>

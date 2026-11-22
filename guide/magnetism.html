@@ -56,7 +56,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-43b60893.js";
+            window.path_to_searchindex_js = "../searchindex-0a6c3b2f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f492e3cf.js"></script>
@@ -246,11 +246,19 @@ The Bilbao <strong>MAGNDATA</strong> database provides published structures in t
 <li>Cells where the magnetization is zero (outside the magnet in a mumax3 geometry) are left out, so a disc reads as a disc.</li>
 <li>A magnetization in A/m is divided by its largest magnitude, so you always see <strong>m = M/Ms</strong>. Structure Info shows the sum and the average of m, without a μB unit.</li>
 <li>Meshes above 40 000 cells are thinned (every k-th cell in x and y) to keep the CPU renderer fast; the System Log reports it.</li>
-<li>Only the first segment is read, and only vector fields: a scalar field (an energy density) is refused with a message.</li>
+<li>Only vector fields are read: a scalar field (an energy density) is refused with a message.</li>
 <li>Opening a mesh switches on <strong>Arrows only</strong> and sets the arrow length to about one cell spacing, with bonds and periodic images off.</li>
 </ul>
 <p><img src="../images/magnetism_skyrmion.png" alt="A Néel skyrmion in Direction colouring, arrows only"></p>
-<p>A mumax3 run’s <code>m000000.ovf, m000001.ovf, …</code> open as separate tabs.</p>
+<h4 id="snapshot-series-movies"><a class="header" href="#snapshot-series-movies">Snapshot series (movies)</a></h4>
+<p>A mumax3 or OOMMF run writes one file per snapshot: <code>m000000.ovf</code>, <code>m000001.ovf</code>, …. Open <strong>any one of them</strong> and CView loads the whole series from the same folder — every file whose name is the same up to a trailing number, with the same extension — in numeric order. The main view shows the file you opened; <code>Structure → Trajectory Player…</code> plays them all (see <a href="visualization.html#trajectories-relaxation-and-md">Trajectories</a>). A Spirit file holding several snapshots as segments is played the same way.</p>
+<ul>
+<li>The simulation time (<code>Total simulation time</code> in the header) is shown for each snapshot; the step is OOMMF’s iteration number, otherwise the number in the file name.</li>
+<li>Which cells are kept, and how a magnetization in A/m is scaled, is decided from the opened snapshot and applied to all of them, so the frames are comparable.</li>
+<li>All snapshots are kept in memory. A long series of a large mesh is thinned further, to about 6 million cell moments in all (at least 2 000 cells per snapshot); the System Log says when it is.</li>
+<li>A file in the folder with a different mesh, or one that cannot be read, is left out with a warning.</li>
+<li>Other quantities in the same folder (<code>B_ext000000.ovf</code>) and unnumbered files (<code>m.ovf</code>) are not part of the series.</li>
+</ul>
 <hr>
 <h2 id="showing-the-moments"><a class="header" href="#showing-the-moments">Showing the moments</a></h2>
 <p>The <strong>Magnetic Moments</strong> group in the sidebar (under <strong>Appearance</strong>) controls the arrows for the active tab. The settings are per tab and are not saved between sessions.</p>
@@ -370,7 +378,7 @@ MAGMOM = 2*3.6 2*-3.6 4*0
 <hr>
 <h2 id="limits"><a class="header" href="#limits">Limits</a></h2>
 <ul>
-<li>The arrows are drawn in the main view and in the Structure window preview only; the GPU windows (Trajectory Player, 3D charge density) do not show them.</li>
+<li>The arrows are drawn in the main view, the Structure window preview and the Trajectory Player; the 3D charge density window does not show them.</li>
 <li>Antiferromagnetic orders on a larger cell are only built from a single propagation vector. Searching all magnetic subgroups is not done: take a published structure from MAGNDATA as an mCIF instead.</li>
 <li>There is no topological charge or skyrmion builder yet; see the <a href="../todo.html">To Do</a> list.</li>
 </ul>

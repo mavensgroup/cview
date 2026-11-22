@@ -56,7 +56,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-43b60893.js";
+            window.path_to_searchindex_js = "../searchindex-0a6c3b2f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f492e3cf.js"></script>
@@ -229,11 +229,13 @@ CView automatically detects the file type based on extension and content. You ca
 <p><strong>Why LAMMPS, in a DFT-oriented tool?</strong> A LAMMPS dump is, at its core, the same data CView already parses for every other trajectory: a box plus a per-atom coordinate list, one frame after another — structurally the same problem as an Extended XYZ trajectory or a QE <code>vc-relax</code> log, just with LAMMPS’s own column layout. Reading it slots into the trajectory machinery built for <code>vasprun.xml</code>/QE/MD output rather than opening a new area of the code. CView does not run LAMMPS, does not know about force fields, and writes no LAMMPS input — it is a geometry viewer for a dump file someone already produced, exactly as it is for a VASP or QE run.</p>
 </blockquote>
 <h3 id="trajectories-relaxation-and-md"><a class="header" href="#trajectories-relaxation-and-md">Trajectories (Relaxation and MD)</a></h3>
-<p>Files with several frames — <code>vasprun.xml</code>, Quantum Espresso relax/MD output, LAMMPS dumps — open as one structure in the main view: the <strong>first</strong> or <strong>last</strong> frame, set in <code>Preferences → General → Relaxation / MD files open at</code>. All frames are kept.</p>
+<p>Files with several frames — <code>vasprun.xml</code>, Quantum Espresso relax/MD output, LAMMPS dumps — open as one structure in the main view: the <strong>first</strong> or <strong>last</strong> frame, set in <code>Preferences → General → Relaxation / MD files open at</code>. All frames are kept. A series of OVF magnetization snapshots (mumax3, OOMMF, Spirit) is a trajectory too, and opens at the snapshot you chose; see <a href="magnetism.html#snapshot-series-movies">Magnetism</a>.</p>
 <p><code>Structure → Trajectory Player… (Ctrl + Shift + P)</code> plays them in a separate window drawn on the GPU:</p>
 <ul>
 <li>Play, step and jump with the buttons or <strong>Space</strong>, <strong>, / .</strong> (or <strong>← / →</strong>), <strong>Home / End</strong>; set the speed in frames per second.</li>
-<li>For relaxations, the energy of every step is plotted under the view (click to jump), with the energy, ΔE and largest force of the current step on screen.</li>
+<li>For relaxations, the energy of every step is plotted under the view (click to jump), with the energy, ΔE and largest force of the current step on screen. Without energies (an OVF series), the plot shows the mean moment ⟨m_x⟩, ⟨m_y⟩, ⟨m_z⟩ per frame instead, and the simulation time is shown.</li>
+<li><strong>View x / y / z</strong> looks down a Cartesian axis and refits the view.</li>
+<li>When the frames carry magnetic moments, a row of moment controls appears: <strong>Arrows</strong> on/off, <strong>Length</strong>, <strong>Width</strong>, and <strong>Colour</strong> (<em>Direction</em>: hue from the in-plane angle, white at +z, black at −z, as in mumax3; <em>m_z</em> on a blue–white–red scale; <em>Up / down</em>; or one colour). For a magnetization mesh there are also <strong>Every</strong> (an arrow on every n-th cell in the plane, the arrows growing to match) and <strong>Colour map</strong> (every cell drawn as a flat tile in its moment’s colour, with grey arrows on top). A large mesh opens with the colour map on and the arrows thinned to about 48 along the longest side.</li>
 <li><strong>Show in Main View</strong> copies the current frame into the main window for measurements, analysis and vector export; <strong>Undo</strong> restores the previous structure.</li>
 <li><strong>Save Image…</strong> writes the 3D view as a PNG.</li>
 </ul>
