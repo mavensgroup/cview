@@ -30,7 +30,8 @@ open an issue before starting on one so work isn't duplicated.
   as arrows.
 - [x] **OVF snapshot series** play in the Trajectory Player, with moment
   arrows and a colour map.
-- [ ] Topological charge of a spin texture; build skyrmion lattices.
+- [x] Topological charge Q and skyrmion radius per frame in the Trajectory Player.
+- [ ] Build skyrmion lattices; m_z = 0 isosurface for thick films.
 - [ ] Magnetic moment arrows in the 3D charge density window.
 - [ ] **Thermal ellipsoids** from anisotropic displacement parameters in CIF.
 - [ ] Overlay two structures in one view.

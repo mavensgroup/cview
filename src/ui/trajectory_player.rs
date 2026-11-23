@@ -16,6 +16,7 @@
 
 use crate::model::elements::get_element_color;
 use crate::model::trajectory::Trajectory;
+use crate::physics::analysis::spin_texture::{self, TextureStats};
 use crate::rendering::gl::{loader, ArrowInstance, AtomInstance, BondInstance, Camera, GlBackend, GpuBackend};
 use crate::state::AppState;
 use crate::utils::console;
@@ -75,6 +76,8 @@ struct Grid {
     idx: Vec<[i64; 3]>,
     /// Smallest cell edge, Å.
     spacing: f64,
+    /// Cell edge along each axis, Å (0 along an axis with one cell).
+    step: [f64; 3],
     /// Sites along each axis.
     counts: [i64; 3],
     /// The axis with fewest sites (a film's normal).
@@ -116,11 +119,16 @@ impl Grid {
             })
             .collect();
         let normal = (0..3).min_by_key(|&d| counts[d]).unwrap_or(2);
-        Some(Grid { idx, spacing, counts, normal })
+        Some(Grid { idx, spacing, step, counts, normal })
     }
 
     /// Arrow pitch that leaves about `n` arrows along the longest in-plane
     /// side.
+    fn cell_area(&self) -> f64 {
+        let s: Vec<f64> = (0..3).filter(|&d| d != self.normal).map(|d| self.step[d]).collect();
+        s.iter().map(|x| if *x > 0.0 { *x } else { self.spacing }).product()
+    }
+
     fn stride_for(&self, n: i64) -> usize {
         let longest = (0..3).filter(|&d| d != self.normal).map(|d| self.counts[d]).max().unwrap_or(1);
         (longest + n - 1).div_euclid(n).max(1) as usize
@@ -150,16 +158,25 @@ struct MomentLook {
     grid: Option<Grid>,
     /// Arrows on every `stride`-th cell in-plane, scaled up to match.
     stride: usize,
-    /// Colour every cell by its moment (a colour map), arrows in grey on top.
+    /// Colour every cell by its moment, faded towards the background, as an
+    /// underlay for the (full-colour) arrows.
     cells: bool,
+    /// Longest moment in the trajectory.
+    largest: f64,
 }
+
+/// Arrows along the longest side of a mesh by default: a glyph field still
+/// readable when the film is tilted, where out-of-plane arrows overlap the
+/// next row.
+const ARROWS_ACROSS: i64 = 24;
 
 /// Colour-map tile radius, in cell spacings: a flat disc this size covers
 /// its square cell, corners included (½√2 ≈ 0.71).
 const TILE: f64 = 0.72;
 
-/// Arrow colour over the colour map: readable on black, white and hues.
-const ARROW_OVER_MAP: [f32; 3] = [0.62, 0.62, 0.64];
+/// How far colour-map tiles are faded towards the background, so the
+/// arrows on top, in the same colours at full strength, stand out.
+const UNDERLAY_FADE: f32 = 0.3;
 
 impl MomentLook {
     fn new(traj: &Trajectory, style: &crate::config::RenderStyle, bond_radius: f64) -> Option<Self> {
@@ -184,7 +201,7 @@ impl MomentLook {
         // A big mesh reads as a colour map with sparse arrows; a small one
         // as arrows on every cell.
         let (stride, cells) = match &grid {
-            Some(g) if g.stride_for(48) > 1 => (g.stride_for(48), true),
+            Some(g) if g.stride_for(ARROWS_ACROSS) > 1 => (g.stride_for(ARROWS_ACROSS), true),
             _ => (1, false),
         };
         let mut look = MomentLook {
@@ -205,6 +222,7 @@ impl MomentLook {
             grid,
             stride,
             cells,
+            largest,
         };
         look.set_color(color);
         Some(look)
@@ -248,6 +266,8 @@ struct Player {
     /// Mean moment per frame (None for frames without moments), for the
     /// ⟨m⟩ strip and readout.
     mean_m: Vec<Option<[f64; 3]>>,
+    /// Topological charge and core size per frame, on a magnetization mesh.
+    texture: Vec<Option<TextureStats>>,
     file_name: String,
     look: Look,
     idx: usize,
@@ -377,7 +397,7 @@ fn build_frame(traj: &Trajectory, look: &Look, idx: usize, images: bool, bonds: 
                 base: [0, 1, 2].map(|d| (p[d] + lift[d] - u[d] * half) as f32),
                 axis: [0, 1, 2].map(|d| (2.0 * u[d] * half) as f32),
                 shaft_r: shaft_r as f32,
-                color: if map_on { ARROW_OVER_MAP } else { ml.rgb_of(m) },
+                color: ml.rgb_of(m),
             });
         }
     }
@@ -396,7 +416,10 @@ fn build_frame(traj: &Trajectory, look: &Look, idx: usize, images: bool, bonds: 
                 pos: [p[0] as f32, p[1] as f32, p[2] as f32],
                 radius: (TILE * ml.grid.as_ref().map_or(1.0, |g| g.spacing)) as f32,
                 color: match moment(*k).filter(|m| norm(*m) >= MIN_ARROW) {
-                    Some(m) => ml.rgb_of(m),
+                    Some(m) => {
+                        let c = ml.rgb_of(m);
+                        [0, 1, 2].map(|d| c[d] + (look.background[d] - c[d]) * UNDERLAY_FADE)
+                    }
                     None => look.colors[*k],
                 },
             },
@@ -469,7 +492,8 @@ fn build_frame(traj: &Trajectory, look: &Look, idx: usize, images: bool, bonds: 
         ((1., 0., 1.), (1., 1., 1.)),
         ((0., 1., 1.), (1., 1., 1.)),
     ] {
-        if traj.is_periodic {
+        // A magnetization mesh fills its box: the outline adds nothing.
+        if traj.is_periodic && !look.moments.as_ref().is_some_and(|ml| ml.grid.is_some()) {
             lines.push(corner(a.0, a.1, a.2));
             lines.push(corner(b.0, b.1, b.2));
         }
@@ -488,6 +512,29 @@ fn mean_moments(traj: &Trajectory) -> Vec<Option<[f64; 3]>> {
             Some(m.iter().fold([0.0; 3], |s, v| [s[0] + v[0], s[1] + v[1], s[2] + v[2]]).map(|x| x / n))
         })
         .collect()
+}
+
+/// Q and core size of every frame, when the moments sit on a mesh.
+fn texture_stats(traj: &Trajectory, look: &Look) -> Vec<Option<TextureStats>> {
+    let Some(g) = look.moments.as_ref().and_then(|ml| ml.grid.as_ref()) else {
+        return vec![None; traj.len()];
+    };
+    traj.frames
+        .iter()
+        .map(|f| {
+            let m = f.magmoms.as_ref().filter(|m| m.len() == g.idx.len())?;
+            spin_texture::analyse(&g.idx, g.counts, g.normal, g.cell_area(), m)
+        })
+        .collect()
+}
+
+/// A length in Å, or nm once it is long.
+fn format_length(a: f64) -> String {
+    if a >= 10.0 {
+        format!("{:.2} nm", a / 10.0)
+    } else {
+        format!("{a:.2} Å")
+    }
 }
 
 /// A simulation time in the unit that suits it.
@@ -674,8 +721,34 @@ fn view_buttons(player: &Rc<RefCell<Player>>, ui: &Ui) -> gtk4::Box {
         });
         b.append(&btn);
     }
+    let tilt = gtk4::Button::with_label("Tilt");
+    tilt.set_tooltip_text(Some(
+        "Look at the film from 55° off its normal, the usual angle for skyrmion figures, and refit",
+    ));
+    let (player, ui) = (player.clone(), ui.clone());
+    tilt.connect_clicked(move |_| {
+        {
+            let mut p = player.borrow_mut();
+            let normal = p.look.moments.as_ref().and_then(|ml| ml.grid.as_ref()).map_or(2, |g| g.normal);
+            p.camera.rotation = tilted(normal);
+            p.needs_fit = true;
+        }
+        refresh(&ui, &player);
+    });
+    b.append(&tilt);
     b
 }
+
+/// Looking down `axis`, then tipped back 55° so the near edge of a film is
+/// at the bottom of the screen.
+fn tilted(axis: usize) -> nalgebra::UnitQuaternion<f64> {
+    // About screen x, the far (+in-plane up) edge going away from the viewer.
+    let tip = nalgebra::UnitQuaternion::from_axis_angle(&Vector3::x_axis(), -TILT_DEG.to_radians());
+    tip * look_along(axis)
+}
+
+/// Tilt of the "Tilt" view from the film normal.
+const TILT_DEG: f64 = 55.0;
 
 /// Moment controls, for a trajectory whose frames carry moments.
 fn moments_row(player: &Rc<RefCell<Player>>, ui: &Ui) -> Option<gtk4::Box> {
@@ -755,7 +828,7 @@ fn moments_row(player: &Rc<RefCell<Player>>, ui: &Ui) -> Option<gtk4::Box> {
         let map = gtk4::CheckButton::with_label("Colour map");
         map.set_active(cells);
         map.set_tooltip_text(Some(
-            "Colour every cell by its moment; arrows are drawn in grey on top",
+            "Colour every cell by its moment, faded so the arrows on top stand out",
         ));
         let (player, ui) = (player.clone(), ui.clone());
         map.connect_toggled(move |b| restyle(&ui, &player, |ml| ml.cells = b.is_active()));
@@ -815,6 +888,13 @@ fn draw_hud(cr: &gtk4::cairo::Context, player: &Player) {
     if let Some(m) = player.mean_m[player.idx] {
         lines.push((13.0, format!("<m> = ({:+.3}, {:+.3}, {:+.3})", m[0], m[1], m[2])));
     }
+    if let Some(t) = player.texture[player.idx] {
+        let mut text = format!("Q = {:+.3}", t.q);
+        if let Some(r) = spin_texture::core_radius(&t) {
+            text += &format!("    R = {}", format_length(r));
+        }
+        lines.push((13.0, text));
+    }
     let mut y = 26.0;
     for (size, text) in lines {
         cr.set_font_size(size);
@@ -844,7 +924,7 @@ fn robust_top(energies: &[f64]) -> f64 {
 
 /// Left and right margins of the strip plot, px (the click mapping uses them).
 const STRIP_LEFT: f64 = 60.0;
-const STRIP_RIGHT: f64 = 14.0;
+const STRIP_RIGHT: f64 = 44.0;
 
 /// Energy per frame when the file has energies, else ⟨m⟩ per frame.
 fn draw_strip(cr: &gtk4::cairo::Context, w: f64, h: f64, player: &Player) {
@@ -857,6 +937,7 @@ fn draw_strip(cr: &gtk4::cairo::Context, w: f64, h: f64, player: &Player) {
 
 /// The three components of the mean moment per frame, on an axis symmetric
 /// about zero (±1 for an OVF magnetization), with the current frame marked.
+/// On a mesh also the topological charge Q, on its own axis at the right.
 fn draw_moment_strip(cr: &gtk4::cairo::Context, w: f64, h: f64, player: &Player) {
     let top = player.mean_m.iter().flatten().flatten().fold(0.0f64, |a, x| a.max(x.abs()));
     if top <= 0.0 {
@@ -894,6 +975,30 @@ fn draw_moment_strip(cr: &gtk4::cairo::Context, w: f64, h: f64, player: &Player)
         cr.stroke().ok();
     }
 
+    // Q: an integer axis wide enough for the largest |Q|.
+    const Q_COLOR: (f64, f64, f64) = (0.45, 0.20, 0.55);
+    let q_top = player.texture.iter().flatten().fold(1.0f64, |a, t| a.max(t.q.abs().ceil()));
+    let yq = |q: f64| t + (b - t) * 0.5 * (1.0 - q / q_top);
+    let has_q = player.texture.iter().any(Option::is_some);
+    if has_q {
+        cr.set_source_rgb(Q_COLOR.0, Q_COLOR.1, Q_COLOR.2);
+        cr.set_line_width(2.0);
+        cr.set_dash(&[5.0, 3.0], 0.0);
+        let mut started = false;
+        for (i, s) in player.texture.iter().enumerate() {
+            match s {
+                Some(s) if started => cr.line_to(xf(i), yq(s.q)),
+                Some(s) => {
+                    cr.move_to(xf(i), yq(s.q));
+                    started = true;
+                }
+                None => started = false,
+            }
+        }
+        cr.stroke().ok();
+        cr.set_dash(&[], 0.0);
+    }
+
     let x = xf(player.idx);
     cr.set_source_rgba(0.0, 0.0, 0.0, 0.55);
     cr.set_line_width(1.2);
@@ -906,6 +1011,11 @@ fn draw_moment_strip(cr: &gtk4::cairo::Context, w: f64, h: f64, player: &Player)
             cr.arc(x, yf(m[d]), 3.0, 0.0, std::f64::consts::TAU);
             cr.fill().ok();
         }
+    }
+    if let Some(s) = player.texture[player.idx] {
+        cr.set_source_rgb(Q_COLOR.0, Q_COLOR.1, Q_COLOR.2);
+        cr.arc(x, yq(s.q), 3.0, 0.0, std::f64::consts::TAU);
+        cr.fill().ok();
     }
 
     cr.select_font_face("Sans", gtk4::cairo::FontSlant::Normal, gtk4::cairo::FontWeight::Normal);
@@ -923,6 +1033,16 @@ fn draw_moment_strip(cr: &gtk4::cairo::Context, w: f64, h: f64, player: &Player)
         cr.move_to(xl, h - 4.0);
         let _ = cr.show_text(&format!("m{name}"));
         xl += 26.0;
+    }
+    if has_q {
+        cr.set_source_rgb(Q_COLOR.0, Q_COLOR.1, Q_COLOR.2);
+        cr.move_to(xl, h - 4.0);
+        let _ = cr.show_text("Q (right axis)");
+        xl += 72.0;
+        cr.move_to(r + 6.0, t + 8.0);
+        let _ = cr.show_text(&format!("Q {:+}", q_top));
+        cr.move_to(r + 6.0, b);
+        let _ = cr.show_text(&format!("Q −{}", q_top));
     }
     cr.set_source_rgba(0.0, 0.0, 0.0, 0.7);
     cr.move_to(xl + 4.0, h - 4.0);
@@ -1051,11 +1171,18 @@ pub fn show(parent: &ApplicationWindow, state: Rc<RefCell<AppState>>, notebook: 
             moments: MomentLook::new(&traj, &tab.style, tab.style.bond_radius),
         };
         let (center, radius) = framing(&traj, &look);
+        // A magnetization mesh opens tilted, the way textures are usually
+        // shown; anything else starts from the main view's orientation.
+        let rotation = match look.moments.as_ref().and_then(|ml| ml.grid.as_ref()) {
+            Some(g) => tilted(g.normal),
+            None => tab.view.rotation,
+        };
         Player {
             mean_m: mean_moments(&traj),
+            texture: texture_stats(&traj, &look),
             idx: tab.trajectory_frame.min(traj.len() - 1),
             file_name: tab.file_name.clone(),
-            camera: Camera::new(center, radius, tab.view.rotation),
+            camera: Camera::new(center, radius, rotation),
             look,
             traj,
             playing: false,
@@ -1200,8 +1327,10 @@ pub fn show(parent: &ApplicationWindow, state: Rc<RefCell<AppState>>, notebook: 
                 None => loader::create_context().and_then(GlBackend::new),
             };
             match result {
-                Ok(b) => {
+                Ok(mut b) => {
                     let mut p = player.borrow_mut();
+                    // MSAA: thin mesh arrows alias badly without it.
+                    b.set_antialias(true);
                     p.backend = Some(b);
                     p.uploaded = None;
                     // Debugging aid: save the first frame drawn, to check the
@@ -1269,7 +1398,12 @@ pub fn show(parent: &ApplicationWindow, state: Rc<RefCell<AppState>>, notebook: 
                 if p.traj.is_periodic {
                     pts.extend((0..8).map(|c| m * Vector3::new((c & 1) as f64, ((c >> 1) & 1) as f64, ((c >> 2) & 1) as f64)));
                 }
-                let pad = p.look.radii.iter().cloned().fold(0.0f32, f32::max) as f64;
+                let mut pad = p.look.radii.iter().cloned().fold(0.0f32, f32::max) as f64;
+                if let Some(ml) = p.look.moments.as_ref().filter(|ml| ml.show_arrows) {
+                    // Half an arrow, which a tilted film shows sticking up.
+                    let r = if ml.arrows_only { 0.0 } else { pad };
+                    pad = pad.max(r + 0.5 * ml.largest * ml.scale * ml.length * ml.stride as f64);
+                }
                 p.camera.fit(&pts, pad, w as f64 / h as f64);
                 p.needs_fit = false;
             }

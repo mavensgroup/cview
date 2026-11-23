@@ -14,7 +14,8 @@
 //   - a section plane coloured by a 3D density texture, with contours;
 //   - an optional clip plane that cuts atoms, bonds and meshes away.
 //
-// Without meshes it draws straight into the target (the trajectory player).
+// Without meshes it draws straight into the target, unless antialiasing is
+// asked for (the trajectory player on a magnetization mesh).
 // With meshes it renders offscreen with 4x MSAA and weighted blended
 // order-independent transparency, then composites. `gl::export` adds a
 // tiled, supersampled, depth-peeled path for publication images.
@@ -105,6 +106,9 @@ pub trait GpuBackend {
     fn set_arrows(&mut self, arrows: &[ArrowInstance]);
     /// Draw atoms unlit in their flat colour (tiles of a colour map).
     fn set_flat_atoms(&mut self, flat: bool);
+    /// Render through the multisampled offscreen path even without meshes,
+    /// so thin geometry (mesh arrows) has smooth edges.
+    fn set_antialias(&mut self, on: bool);
     /// Pairs of endpoints, drawn as lines `set_line_width` pixels wide.
     fn set_lines(&mut self, segments: &[[f32; 3]], color: [f32; 3]);
     fn set_line_width(&mut self, px: f32);
@@ -586,6 +590,7 @@ pub struct GlBackend {
     pub(super) empty_vao: glow::VertexArray,
     n_atoms: i32,
     flat_atoms: bool,
+    antialias: bool,
     n_bonds: i32,
     n_arrows: i32,
     n_lines: i32,
@@ -762,6 +767,7 @@ impl GlBackend {
                 empty_vao,
                 n_atoms: 0,
                 flat_atoms: false,
+                antialias: false,
                 n_bonds: 0,
                 n_arrows: 0,
                 n_lines: 0,
@@ -1066,6 +1072,10 @@ impl GpuBackend for GlBackend {
         self.flat_atoms = flat;
     }
 
+    fn set_antialias(&mut self, on: bool) {
+        self.antialias = on && self.samples > 1;
+    }
+
     fn set_arrows(&mut self, arrows: &[ArrowInstance]) {
         unsafe {
             self.gl.bind_buffer(glow::ARRAY_BUFFER, Some(self.arrow_vbo));
@@ -1209,7 +1219,7 @@ impl GpuBackend for GlBackend {
             viewport: (width, height),
         };
         unsafe {
-            if self.meshes.iter().any(Option::is_some) || self.section.is_some() {
+            if self.antialias || self.meshes.iter().any(Option::is_some) || self.section.is_some() {
                 if let Err(e) = self.draw_pipeline(&frame, bg) {
                     crate::utils::console::log_error(&format!("3D view: {e}"));
                 }

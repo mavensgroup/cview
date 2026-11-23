@@ -64,6 +64,16 @@ A mumax3 or OOMMF run writes one file per snapshot: `m000000.ovf`, `m000001.ovf`
 * A file in the folder with a different mesh, or one that cannot be read, is left out with a warning.
 * Other quantities in the same folder (`B_ext000000.ovf`) and unnumbered files (`m.ovf`) are not part of the series.
 
+#### Topological charge and skyrmion radius
+
+For a magnetization mesh, the Trajectory Player shows the topological charge of the current frame and plots it for every frame:
+
+$$Q = \frac{1}{4\pi}\int \mathbf{m}\cdot\left(\partial_a \mathbf{m}\times\partial_b \mathbf{m}\right)\,da\,db$$
+
+It is computed on the lattice after Berg and Lüscher: each plaquette of four cells is split into two triangles, and the solid angles their unit vectors span are summed. No derivatives are needed, and Q lands on an integer for a smooth texture. (a, b) are the in-plane axes taken right-handed about the film normal (the axis with the fewest cells), so a skyrmion whose core points along +z in a −z background has Q = +1, and one with the opposite polarity has Q = −1. Bloch and Néel skyrmions give the same Q. Cells outside the magnet (zero moment) are skipped. For a film several cells thick, Q is averaged over the layers.
+
+When |Q| rounds to 1, the radius **R** is shown too: the radius of a disc with the same area as the reversed core (cells whose normal component is opposite to the background's). It follows the m_z = 0 contour to within about half a cell. For several skyrmions, no radius is given.
+
 ---
 
 ## Showing the moments
