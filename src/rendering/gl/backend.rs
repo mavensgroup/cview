@@ -104,8 +104,8 @@ pub trait GpuBackend {
     fn set_atoms(&mut self, atoms: &[AtomInstance]);
     fn set_bonds(&mut self, bonds: &[BondInstance]);
     fn set_arrows(&mut self, arrows: &[ArrowInstance]);
-    /// Draw atoms unlit in their flat colour (tiles of a colour map).
-    fn set_flat_atoms(&mut self, flat: bool);
+    /// Draw atoms unlit as world-space rectangular tiles of `(e1, e2)` (half-edge vectors), or `None` for normal 3D spheres.
+    fn set_flat_atoms(&mut self, tile_axes: Option<([f32; 3], [f32; 3])>);
     /// Render through the multisampled offscreen path even without meshes,
     /// so thin geometry (mesh arrows) has smooth edges.
     fn set_antialias(&mut self, on: bool);
@@ -137,16 +137,30 @@ layout(location = 3) in vec3 color;
 uniform mat4 view;
 uniform mat4 proj;
 uniform vec4 clip;
+uniform int flat_shade;
+uniform vec3 tile_e1;
+uniform vec3 tile_e2;
 out vec2 v_uv;
 out vec3 v_center;
 out float v_radius;
 out vec3 v_color;
 void main() {
-    vec4 c = view * vec4(center, 1.0);
     v_uv = corner;
-    v_center = c.xyz;
     v_radius = radius;
     v_color = color;
+    if (flat_shade == 1) {
+        vec3 wp = center + corner.x * tile_e1 + corner.y * tile_e2;
+        vec4 c = view * vec4(wp, 1.0);
+        v_center = c.xyz;
+        if (dot(clip.xyz, clip.xyz) > 0.0 && dot(clip.xyz, c.xyz) > clip.w) {
+            gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+            return;
+        }
+        gl_Position = proj * c;
+        return;
+    }
+    vec4 c = view * vec4(center, 1.0);
+    v_center = c.xyz;
     // A clipped atom is removed whole: half-spheres read as artefacts.
     if (dot(clip.xyz, clip.xyz) > 0.0 && dot(clip.xyz, c.xyz) > clip.w) {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
@@ -178,12 +192,17 @@ uniform mat4 proj;
 uniform int flat_shade;
 layout(location = 0) out vec4 frag;
 void main() {
+    if (flat_shade == 1) {
+        gl_FragDepth = gl_FragCoord.z;
+        frag = vec4(v_color, 1.0);
+        return;
+    }
     float r2 = dot(v_uv, v_uv);
     if (r2 > 1.0) discard;
     vec3 n = vec3(v_uv, sqrt(1.0 - r2));
     vec4 clip = proj * vec4(v_center + n * v_radius, 1.0);
     gl_FragDepth = clip.z / clip.w * 0.5 + 0.5;
-    frag = vec4(flat_shade == 1 ? v_color : shade(v_color, n), 1.0);
+    frag = vec4(shade(v_color, n), 1.0);
 }
 "#;
 
@@ -249,8 +268,8 @@ void main() {
 
 /// Arrows: each vertex of the unit arrow is (cos, sin, part); the part
 /// says which ring it sits on and how its normal is formed (see
-/// `arrow_mesh`). Shaft radius r, head radius R = 2.4 r, head length up to
-/// 3R but at most 40% of the arrow.
+/// `arrow_mesh`). Shaft radius r, head radius R = 1.95 r, head length up to
+/// 3.2 R (or 45% of the arrow) for sleek publication cones.
 const ARROW_VS: &str = r#"#version 330 core
 layout(location = 0) in vec3 vert;
 layout(location = 1) in vec3 base;
@@ -268,8 +287,8 @@ void main() {
     vec3 h = abs(w.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
     vec3 u = normalize(cross(h, w));
     vec3 v = cross(w, u);
-    float R = 2.4 * shaft_r;
-    float hl = min(0.4 * L, 3.0 * R);
+    float R = 1.95 * shaft_r;
+    float hl = min(0.45 * L, 3.2 * R);
     float zh = L - hl;
     int part = int(vert.z + 0.5);
     vec2 c = vert.xy;
@@ -303,12 +322,19 @@ void main() {
     if (dot(clip.xyz, clip.xyz) > 0.0 && dot(clip.xyz, v_pos) > clip.w) discard;
     vec3 n = normalize(v_n);
     if (!gl_FrontFacing) n = -n;
-    frag = vec4(shade(v_color, n), 1.0);
+    vec3 L1 = normalize(vec3(-0.45, 0.55, 1.0));
+    vec3 L2 = normalize(vec3(0.45, -0.45, 0.75));
+    vec3 H = normalize(L1 + vec3(0.0, 0.0, 1.0));
+    float diff = 0.75 * max(dot(n, L1), 0.0) + 0.35 * max(dot(n, L2), 0.0);
+    float spec = pow(max(dot(n, H), 0.0), 36.0);
+    float rim = mix(0.65, 1.0, smoothstep(0.0, 0.45, n.z));
+    vec3 c = (v_color * (0.38 + 0.62 * diff) + vec3(0.32) * spec) * rim;
+    frag = vec4(c, 1.0);
 }
 "#;
 
 /// Segments around an arrow.
-const ARROW_SEGMENTS: usize = 16;
+const ARROW_SEGMENTS: usize = 24;
 
 /// The unit arrow as triangles of (cos, sin, part) vertices: shaft side
 /// (parts 0–1), cone side (2–3), the shaft's bottom cap (4–5) and the
@@ -589,7 +615,7 @@ pub struct GlBackend {
     section_vao: glow::VertexArray,
     pub(super) empty_vao: glow::VertexArray,
     n_atoms: i32,
-    flat_atoms: bool,
+    flat_atoms: Option<([f32; 3], [f32; 3])>,
     antialias: bool,
     n_bonds: i32,
     n_arrows: i32,
@@ -766,7 +792,7 @@ impl GlBackend {
                 section_vao,
                 empty_vao,
                 n_atoms: 0,
-                flat_atoms: false,
+                flat_atoms: None,
                 antialias: false,
                 n_bonds: 0,
                 n_arrows: 0,
@@ -892,7 +918,11 @@ impl GlBackend {
         let gl = &self.gl;
         if self.n_atoms > 0 {
             self.use_camera(&self.sphere, f);
-            gl.uniform_1_i32(self.sphere.loc(gl, "flat_shade").as_ref(), self.flat_atoms as i32);
+            gl.uniform_1_i32(self.sphere.loc(gl, "flat_shade").as_ref(), self.flat_atoms.is_some() as i32);
+            if let Some((e1, e2)) = self.flat_atoms {
+                gl.uniform_3_f32(self.sphere.loc(gl, "tile_e1").as_ref(), e1[0], e1[1], e1[2]);
+                gl.uniform_3_f32(self.sphere.loc(gl, "tile_e2").as_ref(), e2[0], e2[1], e2[2]);
+            }
             gl.bind_vertex_array(Some(self.sphere_vao));
             gl.draw_arrays_instanced(glow::TRIANGLE_STRIP, 0, 4, self.n_atoms);
         }
@@ -1068,8 +1098,8 @@ impl GpuBackend for GlBackend {
         self.n_bonds = bonds.len() as i32;
     }
 
-    fn set_flat_atoms(&mut self, flat: bool) {
-        self.flat_atoms = flat;
+    fn set_flat_atoms(&mut self, tile_axes: Option<([f32; 3], [f32; 3])>) {
+        self.flat_atoms = tile_axes;
     }
 
     fn set_antialias(&mut self, on: bool) {

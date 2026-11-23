@@ -280,6 +280,10 @@ pub struct TabState {
     pub bond_overrides: HashMap<(String, String), crate::model::bonds::BondRule>,
     /// Undo/redo of structure edits. Written only by `commit`, `undo`, `redo`.
     pub history: History,
+    /// The grid of an OVF mesh structure, with the fingerprint of the
+    /// positions it was found from: checked on use, so no edit or load path
+    /// has to remember to clear it.
+    mesh_grid: std::cell::RefCell<Option<(u64, std::rc::Rc<crate::model::mesh_grid::MeshGrid>)>>,
 }
 
 impl TabState {
@@ -303,7 +307,26 @@ impl TabState {
             trajectory_frame: 0,
             bond_overrides: HashMap::new(),
             history: History::default(),
+            mesh_grid: Default::default(),
         }
+    }
+
+    /// The grid of the structure, when it is an OVF magnetization mesh.
+    /// Cached: the main view asks on every redraw.
+    pub fn mesh_grid(&self) -> Option<std::rc::Rc<crate::model::mesh_grid::MeshGrid>> {
+        use crate::model::mesh_grid::{positions_fingerprint, MeshGrid};
+        let s = self.structure.as_ref().filter(|s| s.is_ovf_mesh())?;
+        let key = positions_fingerprint(s.atoms.iter().map(|a| a.position));
+        let mut cache = self.mesh_grid.borrow_mut();
+        if let Some((k, g)) = cache.as_ref() {
+            if *k == key {
+                return Some(g.clone());
+            }
+        }
+        let positions: Vec<[f64; 3]> = s.atoms.iter().map(|a| a.position).collect();
+        let g = std::rc::Rc::new(MeshGrid::of(&positions)?);
+        *cache = Some((key, g.clone()));
+        Some(g)
     }
 
     /// Replace the structure with `new` as one undoable step called `op`.
@@ -481,7 +504,15 @@ impl TabState {
             .max(1e-9);
         self.style.moment_arrows_only = true;
         self.style.show_moments = true;
+        self.style.moment_color_mode = crate::config::MomentColorMode::MzRainbow;
         self.style.moment_scale = 0.9 * spacing / largest;
+        let n_atoms = s.atoms.len();
+        // Thin dense meshes in the main view so arrows don't clutter on top
+        // of the colour map: about 24 along the longest side, as the player.
+        // A bulk mesh gets no map (only its surface layer would show).
+        let (stride, bulk) = self.mesh_grid().map_or((1, false), |g| (g.stride_for(24), g.bulk));
+        self.style.moment_color_map = n_atoms > 64 && !bulk;
+        self.style.moment_stride = stride;
         self.style.element_colors.insert(SITE_NAME.to_string(), (0.6, 0.6, 0.6));
         self.species_radius.insert(SITE_NAME.to_string(), 0.12 * spacing);
         self.view.show_bonds = false;

@@ -48,9 +48,10 @@ That is what makes a body-centred antiferromagnet such as MnF₂ come out with o
 
 * Cells where the magnetization is zero (outside the magnet in a mumax3 geometry) are left out, so a disc reads as a disc.
 * A magnetization in A/m is divided by its largest magnitude, so you always see **m = M/Ms**. Structure Info shows the sum and the average of m, without a μB unit.
-* Meshes above 40 000 cells are thinned (every k-th cell in x and y) to keep the CPU renderer fast; the System Log reports it.
+* Meshes above 40 000 cells are thinned (every k-th cell in x and y, and in z too for a bulk mesh whose thickness is comparable to its width) to keep the CPU renderer fast; the System Log reports it.
 * Only vector fields are read: a scalar field (an energy density) is refused with a message.
-* Opening a mesh switches on **Arrows only** and sets the arrow length to about one cell spacing, with bonds and periodic images off.
+* Opening a mesh switches on **Arrows only**, colours by **m_z (rainbow)**, and sets the arrow length to about one cell spacing, with bonds, periodic images and the cell outline off. A mesh of more than 64 cells (a film, not a bulk mesh) gets the **Mesh colour map** under the arrows, and a large one is thinned to about 24 arrows along its longest side (**Arrow every n-th cell**).
+* A single snapshot opens in the Trajectory Player too (`Structure → Trajectory Player…`), for the tilted GPU view and its topological charge readout.
 
 ![A Néel skyrmion in Direction colouring, arrows only](../images/magnetism_skyrmion.png)
 
@@ -59,7 +60,7 @@ That is what makes a body-centred antiferromagnet such as MnF₂ come out with o
 A mumax3 or OOMMF run writes one file per snapshot: `m000000.ovf`, `m000001.ovf`, …. Open **any one of them** and CView loads the whole series from the same folder — every file whose name is the same up to a trailing number, with the same extension — in numeric order. The main view shows the file you opened; `Structure → Trajectory Player…` plays them all (see [Trajectories](visualization.md#trajectories-relaxation-and-md)). A Spirit file holding several snapshots as segments is played the same way.
 
 * The simulation time (`Total simulation time` in the header) is shown for each snapshot; the step is OOMMF's iteration number, otherwise the number in the file name.
-* Which cells are kept, and how a magnetization in A/m is scaled, is decided from the opened snapshot and applied to all of them, so the frames are comparable.
+* Which cells are kept, and how a magnetization in A/m is scaled, is the same for every snapshot, so the frames are comparable: a cell is kept when it is non-zero in any snapshot, and A/m is divided by the largest |M| of the whole series. Each file is thinned as it is read, so a long series of a large mesh takes no more memory than its thinned frames.
 * All snapshots are kept in memory. A long series of a large mesh is thinned further, to about 6 million cell moments in all (at least 2 000 cells per snapshot); the System Log says when it is.
 * A file in the folder with a different mesh, or one that cannot be read, is left out with a warning.
 * Other quantities in the same folder (`B_ext000000.ovf`) and unnumbered files (`m.ovf`) are not part of the series.
@@ -86,6 +87,8 @@ The **Magnetic Moments** group in the sidebar (under **Appearance**) controls th
 | **Arrows only** | Hide the spheres of atoms that carry a moment, leaving the arrows at their full length. Use it for spin textures, where the spheres hide the pattern. Atoms without a moment (a substrate, say) stay visible. |
 | **Length (Å/μB)** | Arrow length per μB. Each end of an arrow sticks out of the atom by half of |m| times this value, so small induced moments stay visible and large ones do not reach the next atom. |
 | **Color by** | How the arrows are coloured (below). |
+| **Mesh colour map** | OVF meshes only: every cell drawn as a flat tile in its moment's colour, faded towards the background, under the arrows. With the map on, only the layer of cells facing you is drawn. |
+| **Arrow every n-th cell** | OVF meshes only: an arrow on every n-th cell in the plane (centred, the same margin on both edges), the arrows growing to match. |
 | **Up / Down** colours | The two colours used by the Up / Down mode (**Color** in Single mode). |
 
 **Color by:**
@@ -94,11 +97,15 @@ The **Magnetic Moments** group in the sidebar (under **Appearance**) controls th
 | :--- | :--- |
 | **Auto** (default) | Up / Down when all moments are collinear, Direction otherwise. |
 | **Up / Down** | Red along the structure's magnetic axis, blue against it. The axis is the line of the largest moment (oriented towards +z), so antiferromagnets and ferrimagnets split into their sublattices whichever way the spins point. |
-| **Direction** | Hue from the in-plane angle, white at +z and black at −z, the usual spin-texture colouring. |
+| **Direction** | Hue from the in-plane angle, white at +z and charcoal at −z, the usual spin-texture colouring. Moments along ±z are grey, with no hue. |
+| **m_z (rainbow)** | m_z alone, blue (−1) through cyan, green, yellow and orange to red (+1). The default for OVF meshes. It does not show the in-plane angle, so Néel and Bloch textures look alike; use Direction to see chirality. |
+| **m_z (blue–white–red)** | m_z on the diverging scale of the charge density plots: blue at −1, white at 0, red at +1. |
 | **Single** | One colour for every arrow. |
 
 >[!TIP]
 >Near-white arrows (moments close to +z in Direction mode) are hard to see on the default light background. A grey or dark background helps.
+
+In Direction and both m_z modes a colour legend is drawn in the bottom-right corner of the view and of exported images: a wheel for the in-plane angle with an m_z bar, or an m_z bar.
 
 **Structure Info** lists a moment column and the total moment: `m_z` when every moment is collinear along z, the full vector otherwise. An antiferromagnet shows a total of 0; a ferrimagnet shows its net moment.
 
@@ -197,4 +204,4 @@ Species labels such as `Fe1`, `Fe_up` are read back as the element, so a file wr
 
 * The arrows are drawn in the main view, the Structure window preview and the Trajectory Player; the 3D charge density window does not show them.
 * Antiferromagnetic orders on a larger cell are only built from a single propagation vector. Searching all magnetic subgroups is not done: take a published structure from MAGNDATA as an mCIF instead.
-* There is no topological charge or skyrmion builder yet; see the [To Do](../todo.md) list.
+* There is no skyrmion builder yet (topological charge $Q$ and core radius $R$ are computed in the Trajectory Player); see the [To Do](../todo.md) list.

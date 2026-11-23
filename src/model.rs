@@ -2,6 +2,7 @@
 pub mod bonds;
 pub mod bvs;
 pub mod elements;
+pub mod mesh_grid;
 pub mod miller;
 pub mod structure;
 pub mod trajectory;

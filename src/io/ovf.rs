@@ -257,21 +257,114 @@ fn parse_segments(bytes: &[u8]) -> io::Result<Vec<Segment>> {
     }
 }
 
-/// The cells shown and how vectors are scaled, fixed from one snapshot and
-/// applied to every snapshot of a series.
-struct Mesh {
+/// One vector per cell.
+type Vectors = Vec<[f64; 3]>;
+
+/// Which cells of a mesh are read, fixed from the first snapshot: every
+/// cell, thinned (in-plane, and along z for a bulk mesh) until the mesh
+/// fits the budget. Each snapshot is sampled on these cells as it is read,
+/// so a series never holds more than its thinned frames in memory.
+struct Plan {
     irregular: bool,
     nodes: [usize; 3],
     n_nodes: usize,
-    /// Data index of each kept cell.
-    cells: Vec<usize>,
+    /// (data index, position in mesh units) of each sampled cell.
+    sites: Vec<(usize, [f64; 3])>,
+    stride: usize,
+}
+
+impl Plan {
+    fn new(seg: &Segment, max_sites: usize) -> Plan {
+        let h = &seg.h;
+        let mut sites = Vec::new();
+        let mut stride = 1usize;
+        if h.irregular {
+            for (i, c) in seg.values.chunks_exact(6).enumerate() {
+                sites.push((i, [c[0], c[1], c[2]]));
+            }
+        } else {
+            let [nx, ny, nz] = h.nodes;
+            // A bulk mesh (z comparable to x and y) is thinned along z too.
+            let thin_z = nz > 1 && nx.min(ny) <= 4 * nz;
+            let count = |s: usize| nx.div_ceil(s) * ny.div_ceil(s) * if thin_z { nz.div_ceil(s) } else { nz };
+            while count(stride) > max_sites && stride < nx.max(ny).max(if thin_z { nz } else { 1 }) {
+                stride += 1;
+            }
+            let z_stride = if thin_z { stride } else { 1 };
+            for k in (0..nz).step_by(z_stride) {
+                for j in (0..ny).step_by(stride) {
+                    for i in (0..nx).step_by(stride) {
+                        let p = [
+                            h.base[0] + i as f64 * h.step[0],
+                            h.base[1] + j as f64 * h.step[1],
+                            h.base[2] + k as f64 * h.step[2],
+                        ];
+                        sites.push((i + nx * (j + ny * k), p));
+                    }
+                }
+            }
+        }
+        Plan { irregular: h.irregular, nodes: h.nodes, n_nodes: h.n_nodes(), sites, stride }
+    }
+
+    /// Whether `seg` is a snapshot on this mesh.
+    fn fits(&self, seg: &Segment) -> bool {
+        seg.h.irregular == self.irregular && seg.h.n_nodes() == self.n_nodes && (self.irregular || seg.h.nodes == self.nodes)
+    }
+
+    /// The vector (times the segment's multiplier) at every sampled cell of
+    /// `seg`, which must `fit`.
+    fn sample(&self, seg: &Segment) -> Vec<[f64; 3]> {
+        let (per, off) = if self.irregular { (6, 3) } else { (3, 0) };
+        let f = seg.h.multiplier;
+        self.sites
+            .iter()
+            .map(|&(n, _)| {
+                let o = per * n + off;
+                [seg.values[o] * f, seg.values[o + 1] * f, seg.values[o + 2] * f]
+            })
+            .collect()
+    }
+}
+
+/// What a pass over the snapshots learns: which sampled cells are ever
+/// non-zero, and the largest |M| of all.
+struct Scan {
+    nonzero: Vec<bool>,
+    largest: f64,
+}
+
+impl Scan {
+    fn new(plan: &Plan) -> Scan {
+        Scan { nonzero: vec![false; plan.sites.len()], largest: 0.0 }
+    }
+
+    fn add(&mut self, sample: &[[f64; 3]]) {
+        for (nz, v) in self.nonzero.iter_mut().zip(sample) {
+            let n = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+            if n > 0.0 {
+                *nz = true;
+                self.largest = self.largest.max(n);
+            }
+        }
+    }
+}
+
+/// The cells shown and how vectors are scaled, the same for every snapshot
+/// of a series: a cell is kept when it is non-zero in any snapshot (outside
+/// the magnet it is zero in all), and a magnetization in A/m is divided by
+/// the largest |M| of the whole series.
+struct Mesh {
+    /// Index into the sampled cells of each kept cell.
+    keep: Vec<usize>,
     /// Cartesian position of each kept cell, Å.
     positions: Vec<[f64; 3]>,
     lattice: [[f64; 3]; 3],
-    /// Applied to every raw vector.
-    factor: f64,
+    /// Applied to every sampled vector.
+    scale: f64,
+    nodes: [usize; 3],
     stride: usize,
-    /// Cells before thinning-out empty ones / after thinning in-plane.
+    /// Sampled cells / those left out as empty in every snapshot.
     total: usize,
     empty: usize,
     /// Set when vectors were divided by the largest |M|.
@@ -282,58 +375,25 @@ struct Mesh {
 }
 
 impl Mesh {
-    fn new(seg: &Segment, max_sites: usize) -> io::Result<Mesh> {
-        let h = &seg.h;
-        let values = &seg.values;
-        let s = h.unit_to_ang;
-        // Sites: (data index, position in mesh units, vector).
-        let mut sites: Vec<(usize, [f64; 3], [f64; 3])> = Vec::new();
-        let mut stride = 1usize;
-        if h.irregular {
-            for (i, c) in values.chunks_exact(6).enumerate() {
-                sites.push((i, [c[0], c[1], c[2]], [c[3], c[4], c[5]]));
-            }
-        } else {
-            let [nx, ny, nz] = h.nodes;
-            // Thin in-plane (x and y) until the mesh fits.
-            while (nx.div_ceil(stride)) * (ny.div_ceil(stride)) * nz > max_sites && stride < nx.max(ny) {
-                stride += 1;
-            }
-            for k in 0..nz {
-                for j in (0..ny).step_by(stride) {
-                    for i in (0..nx).step_by(stride) {
-                        let n = i + nx * (j + ny * k);
-                        let p = [
-                            h.base[0] + i as f64 * h.step[0],
-                            h.base[1] + j as f64 * h.step[1],
-                            h.base[2] + k as f64 * h.step[2],
-                        ];
-                        sites.push((n, p, [values[3 * n], values[3 * n + 1], values[3 * n + 2]]));
-                    }
-                }
-            }
-        }
-
-        let norm = |v: [f64; 3]| (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
-        let total = sites.len();
-        sites.retain(|(_, _, v)| norm(*v) > 0.0);
-        let empty = total - sites.len();
-        if sites.is_empty() {
+    /// `h` is the header of the snapshot the plan was made from.
+    fn new(plan: &Plan, h: &Header, scan: &Scan) -> io::Result<Mesh> {
+        let keep: Vec<usize> = (0..plan.sites.len()).filter(|&i| scan.nonzero[i]).collect();
+        if keep.is_empty() {
             return Err(bad("every cell of the OVF field is zero"));
         }
-
         // m stays as it is; a magnetization (A/m) is divided by its largest
         // magnitude.
-        let largest = sites.iter().map(|(_, _, v)| norm(*v) * h.multiplier.abs()).fold(0.0, f64::max);
-        let normalise = largest > 10.0 || h.value_unit.eq_ignore_ascii_case("a/m");
-        let factor = if normalise { h.multiplier / largest } else { h.multiplier };
+        let normalise = scan.largest > 10.0 || h.value_unit.eq_ignore_ascii_case("a/m");
+        let scale = if normalise && scan.largest > 0.0 { 1.0 / scan.largest } else { 1.0 };
 
         // The box: the mesh extent (xmin..xmax) when given, else the node span.
+        let s = h.unit_to_ang;
         let mut lo = h.min;
         let mut hi = h.max;
         for a in 0..3 {
             if hi[a] <= lo[a] {
-                let (mn, mx) = sites.iter().map(|(_, p, _)| p[a]).fold((f64::MAX, f64::MIN), |(l, u), x| (l.min(x), u.max(x)));
+                let (mn, mx) =
+                    keep.iter().map(|&i| plan.sites[i].1[a]).fold((f64::MAX, f64::MIN), |(l, u), x| (l.min(x), u.max(x)));
                 let pad = if h.irregular { 0.0 } else { h.step[a] / 2.0 };
                 lo[a] = mn - pad;
                 hi[a] = mx + pad;
@@ -347,48 +407,55 @@ impl Mesh {
             [0.0, (hi[1] - lo[1]) * s, 0.0],
             [0.0, 0.0, (hi[2] - lo[2]) * s],
         ];
-
+        let positions = keep
+            .iter()
+            .map(|&i| {
+                let p = plan.sites[i].1;
+                [(p[0] - lo[0]) * s, (p[1] - lo[1]) * s, (p[2] - lo[2]) * s]
+            })
+            .collect();
         Ok(Mesh {
-            irregular: h.irregular,
-            nodes: h.nodes,
-            n_nodes: h.n_nodes(),
-            cells: sites.iter().map(|(n, _, _)| *n).collect(),
-            positions: sites.iter().map(|(_, p, _)| [(p[0] - lo[0]) * s, (p[1] - lo[1]) * s, (p[2] - lo[2]) * s]).collect(),
+            total: plan.sites.len(),
+            empty: plan.sites.len() - keep.len(),
+            keep,
+            positions,
             lattice,
-            factor,
-            stride,
-            total,
-            empty,
-            largest: normalise.then_some(largest),
+            scale,
+            nodes: plan.nodes,
+            stride: plan.stride,
+            largest: normalise.then_some(scan.largest),
             value_unit: h.value_unit.clone(),
             version: h.version,
             title: h.title.clone(),
         })
     }
 
-    /// Whether `seg` is a snapshot on this mesh.
-    fn fits(&self, seg: &Segment) -> bool {
-        seg.h.irregular == self.irregular && seg.h.n_nodes() == self.n_nodes && (self.irregular || seg.h.nodes == self.nodes)
+    /// The scaled vectors of the kept cells, from a sample of all cells.
+    fn vectors(&self, sample: &[[f64; 3]]) -> Vec<[f64; 3]> {
+        let f = self.scale;
+        self.keep.iter().map(|&i| sample[i].map(|x| x * f)).collect()
     }
 
-    /// The scaled vector at every kept cell of `seg` (which must `fit`).
-    fn vectors(&self, seg: &Segment) -> Vec<[f64; 3]> {
-        let (per, off) = if self.irregular { (6, 3) } else { (3, 0) };
-        let f = self.factor;
-        self.cells
-            .iter()
-            .map(|&n| {
-                let o = per * n + off;
-                [seg.values[o] * f, seg.values[o + 1] * f, seg.values[o + 2] * f]
-            })
-            .collect()
+    /// Mesh and shown vectors of `segs` (all of them, in memory): for a
+    /// single file. Segments on another mesh get no vectors.
+    fn of_segments(segs: &[Segment], max_sites: usize) -> io::Result<(Mesh, Vec<Option<Vectors>>)> {
+        let plan = Plan::new(&segs[0], max_sites);
+        let mut scan = Scan::new(&plan);
+        let samples: Vec<Option<Vectors>> =
+            segs.iter().map(|s| plan.fits(s).then(|| plan.sample(s))).collect();
+        for s in samples.iter().flatten() {
+            scan.add(s);
+        }
+        let mesh = Mesh::new(&plan, &segs[0].h, &scan)?;
+        let vectors = samples.iter().map(|s| s.as_ref().map(|s| mesh.vectors(s))).collect();
+        Ok((mesh, vectors))
     }
 
     fn describe(&self) -> String {
         format!(
             "OVF {}: {} cell(s){}{}{}",
             if self.version == 2 { "2.0" } else { "1.0" },
-            self.cells.len(),
+            self.keep.len(),
             if self.empty > 0 { format!(", {} empty cell(s) left out", self.empty) } else { String::new() },
             if self.stride > 1 {
                 format!(
@@ -405,11 +472,11 @@ impl Mesh {
         )
     }
 
-    fn structure(&self, seg: &Segment) -> Structure {
+    fn structure(&self, vectors: Vec<[f64; 3]>) -> Structure {
         let atoms = self
             .positions
             .iter()
-            .zip(self.vectors(seg))
+            .zip(vectors)
             .enumerate()
             .map(|(i, (p, v))| Atom {
                 element: SITE_NAME.to_string(),
@@ -437,9 +504,9 @@ pub fn parse(path: &str) -> io::Result<Structure> {
 /// The first snapshot in `bytes`.
 pub fn parse_bytes(bytes: &[u8]) -> io::Result<Structure> {
     let segs = parse_segments(bytes)?;
-    let mesh = Mesh::new(&segs[0], MAX_SITES)?;
+    let (mesh, mut vectors) = Mesh::of_segments(&segs[..1], MAX_SITES)?;
     log_info(&mesh.describe());
-    Ok(mesh.structure(&segs[0]))
+    Ok(mesh.structure(vectors.remove(0).unwrap_or_default()))
 }
 
 /// The files of the numbered series `path` belongs to (same directory,
@@ -486,59 +553,76 @@ pub fn load_document(path: &str, choice: FrameChoice) -> io::Result<Document> {
     let members = series_members(path);
     let segs = parse_segments(&std::fs::read(path)?)?;
     if members.len() == 1 && segs.len() == 1 {
-        let mesh = Mesh::new(&segs[0], MAX_SITES)?;
+        let (mesh, mut vectors) = Mesh::of_segments(&segs, MAX_SITES)?;
         log_info(&mesh.describe());
-        return Ok(Document { structure: mesh.structure(&segs[0]), trajectory: None, frame: 0 });
+        let structure = mesh.structure(vectors.remove(0).unwrap_or_default());
+        return Ok(Document { structure, trajectory: None, frame: 0 });
     }
 
     let opened = members.iter().position(|(p, _)| p.file_name() == path.file_name()).unwrap_or(0);
     let estimate = members.len() * segs.len();
     let max_sites = (SERIES_BUDGET / estimate.max(1)).clamp(SERIES_MIN_SITES, MAX_SITES);
-    let mesh = Mesh::new(&segs[0], max_sites)?;
-    let positions = Arc::new(mesh.positions.clone());
-    let mut traj = Trajectory {
-        species: vec![SITE_NAME.to_string(); mesh.cells.len()],
-        frames: Vec::with_capacity(estimate),
-        is_periodic: true,
-        format: "OVF",
-    };
 
+    // One pass: each file is read, sampled on the thinned cells and dropped,
+    // while the scan learns which cells are ever non-zero and the series'
+    // largest |M|. Only thinned samples are kept, never a whole raw file.
+    let plan = Plan::new(&segs[0], max_sites);
+    let header = segs[0].h.clone();
+    let mut scan = Scan::new(&plan);
+    // (sample, step, time) per snapshot, in order.
+    let mut samples: Vec<(Vectors, Option<i64>, Option<f64>)> = Vec::with_capacity(estimate);
     let mut opened_frame = 0;
     let mut skipped: Vec<String> = Vec::new();
-    let add = |traj: &mut Trajectory, segs: &[Segment], number: Option<u64>| -> bool {
+    let mut opened_segs = Some(segs);
+    for (i, (p, number)) in members.iter().enumerate() {
+        let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let member_segs = if i == opened {
+            opened_frame = samples.len();
+            opened_segs.take().unwrap_or_default()
+        } else {
+            match std::fs::read(p).map_err(|e| e.to_string()).and_then(|b| parse_segments(&b).map_err(|e| e.to_string())) {
+                Ok(s) => s,
+                Err(e) => {
+                    skipped.push(format!("{name} ({e})"));
+                    continue;
+                }
+            }
+        };
         let mut any = false;
-        for (k, seg) in segs.iter().enumerate() {
-            if !mesh.fits(seg) {
+        for (k, seg) in member_segs.iter().enumerate() {
+            if !plan.fits(seg) {
                 continue;
             }
             any = true;
-            traj.frames.push(Frame {
-                lattice: mesh.lattice,
-                positions: positions.clone(),
-                energy: None,
-                max_force: None,
-                step: seg.h.iteration.or(number.map(|n| n as i64)).or(Some(k as i64)),
-                time: seg.h.time,
-                magmoms: Some(mesh.vectors(seg)),
-            });
+            let sample = plan.sample(seg);
+            scan.add(&sample);
+            let step = seg.h.iteration.or(number.map(|n| n as i64)).or(Some(k as i64));
+            samples.push((sample, step, seg.h.time));
         }
-        any
+        if !any {
+            skipped.push(format!("{name} (different mesh)"));
+        }
+    }
+
+    let mesh = Mesh::new(&plan, &header, &scan)?;
+    drop(plan);
+    let positions = Arc::new(mesh.positions.clone());
+    let mut traj = Trajectory {
+        species: vec![SITE_NAME.to_string(); mesh.keep.len()],
+        frames: Vec::with_capacity(samples.len()),
+        is_periodic: true,
+        format: "OVF",
     };
-    for (i, (p, number)) in members.iter().enumerate() {
-        let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        if i == opened {
-            opened_frame = traj.frames.len();
-            add(&mut traj, &segs, *number);
-            continue;
-        }
-        match std::fs::read(p).map_err(|e| e.to_string()).and_then(|b| parse_segments(&b).map_err(|e| e.to_string())) {
-            Ok(other) => {
-                if !add(&mut traj, &other, *number) {
-                    skipped.push(format!("{name} (different mesh)"));
-                }
-            }
-            Err(e) => skipped.push(format!("{name} ({e})")),
-        }
+    for (sample, step, time) in samples {
+        traj.frames.push(Frame {
+            lattice: mesh.lattice,
+            positions: positions.clone(),
+            energy: None,
+            max_force: None,
+            step,
+            time,
+            magmoms: Some(mesh.vectors(&sample)),
+        });
     }
 
     log_info(&mesh.describe());
@@ -735,8 +819,8 @@ mod tests {
         let segs = parse_segments(t.as_bytes()).unwrap();
         assert_eq!(segs.len(), 2);
         assert_eq!(segs[1].h.time, Some(1e-12));
-        let mesh = Mesh::new(&segs[0], MAX_SITES).unwrap();
-        close(mesh.vectors(&segs[1])[3], [1.0, 0.0, 0.0]);
+        let (_, v) = Mesh::of_segments(&segs, MAX_SITES).unwrap();
+        close(v[1].as_ref().unwrap()[3], [1.0, 0.0, 0.0]);
         // Binary segments one after another too.
         let mut b = Vec::new();
         for z in [1.0f32, -1.0] {
@@ -751,7 +835,8 @@ mod tests {
         }
         let segs = parse_segments(&b).unwrap();
         assert_eq!(segs.len(), 2);
-        close(Mesh::new(&segs[0], MAX_SITES).unwrap().vectors(&segs[1])[0], [0.0, 0.0, -1.0]);
+        let (_, v) = Mesh::of_segments(&segs, MAX_SITES).unwrap();
+        close(v[1].as_ref().unwrap()[0], [0.0, 0.0, -1.0]);
     }
 
     #[test]
@@ -785,5 +870,49 @@ mod tests {
         let doc = load_document(dir.join("m.ovf").to_str().unwrap(), FrameChoice::First).unwrap();
         assert!(doc.trajectory.is_none());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_series_on_disk_keeps_cells_set_later_and_scales_by_the_series_max() {
+        let dir = std::env::temp_dir().join(format!("cview_ovf_stream_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // Cell 1 is empty in the opened (first) file and set in the second;
+        // |M| peaks at 8e5 A/m in the second file.
+        for (i, data) in ["0 0 400000\n0 0 0\n0 0 0\n0 0 0\n", "0 0 800000\n0 800000 0\n0 0 0\n0 0 0\n"].iter().enumerate() {
+            let mut t = header(" OVF 2.0", "# valueunit: A/m\n# valuedim: 3\n", "Text");
+            t.push_str(data);
+            t.push_str("# End: Data Text\n# End: Segment\n");
+            std::fs::write(dir.join(format!("m{i:06}.ovf")), t).unwrap();
+        }
+        let doc = load_document(dir.join("m000000.ovf").to_str().unwrap(), FrameChoice::First).unwrap();
+        let t = doc.trajectory.expect("two snapshots");
+        assert_eq!(doc.structure.atoms.len(), 2);
+        close(doc.structure.atoms[0].magmom.unwrap(), [0.0, 0.0, 0.5]);
+        close(doc.structure.atoms[1].magmom.unwrap(), [0.0, 0.0, 0.0]);
+        let last = t.frames[1].magmoms.as_ref().unwrap();
+        close(last[0], [0.0, 0.0, 1.0]);
+        close(last[1], [0.0, 1.0, 0.0]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn series_keeps_cells_nonzero_in_later_snapshots_and_scales_by_series_max() {
+        let mut s0 = header(" OVF 2.0", "# valueunit: A/m\n# valuedim: 3\n", "Text");
+        s0.push_str("0 0 400000\n0 0 0\n0 0 0\n0 0 0\n# End: Data Text\n# End: Segment\n");
+        let mut s1 = header(" OVF 2.0", "# valueunit: A/m\n# valuedim: 3\n", "Text");
+        s1.push_str("0 0 800000\n0 800000 0\n0 0 0\n0 0 0\n# End: Data Text\n# End: Segment\n");
+        let mut combined = s0;
+        combined.push_str(&s1[s1.find('\n').unwrap() + 1..]);
+        let segs = parse_segments(combined.as_bytes()).unwrap();
+        let (mesh, v) = Mesh::of_segments(&segs, MAX_SITES).unwrap();
+        // Both cell 0 and cell 1 are kept (even though cell 1 was 0 in s0),
+        // and |M|_max = 8e5 across the series scales cell 0 in s0 to 0.5.
+        assert_eq!(mesh.keep.len(), 2);
+        let (v0, v1) = (v[0].as_ref().unwrap(), v[1].as_ref().unwrap());
+        close(v0[0], [0.0, 0.0, 0.5]);
+        close(v0[1], [0.0, 0.0, 0.0]);
+        close(v1[0], [0.0, 0.0, 1.0]);
+        close(v1[1], [0.0, 1.0, 0.0]);
     }
 }

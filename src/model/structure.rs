@@ -62,6 +62,11 @@ fn default_periodic() -> bool {
 }
 
 impl Structure {
+    /// Whether every site is an OVF magnetization mesh cell.
+    pub fn is_ovf_mesh(&self) -> bool {
+        !self.atoms.is_empty() && self.atoms.iter().all(|a| a.element == crate::io::ovf::SITE_NAME)
+    }
+
     /// The magnetic axis: the line of the largest moment, oriented towards
     /// +z (or +y, then +x, when it lies perpendicular), so that "up" does not
     /// depend on which of two equal antiparallel moments comes first. A

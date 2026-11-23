@@ -554,11 +554,35 @@ pub fn draw_structure(
     let moment_axis = tab.structure.as_ref().and_then(|s| s.magnetic_axis());
     let collinear = tab.structure.as_ref().map_or(true, |s| s.moments_collinear());
     let arrows_only = tab.style.moment_arrows_only;
+    // An OVF mesh: arrows thinned to `moment_stride`, and optionally a
+    // colour map of cell tiles under them. With the map on, only the layer
+    // facing the viewer is drawn (tiles and arrows), as the depth test does
+    // in the Trajectory Player.
+    let ovf_grid = tab.mesh_grid();
+    let is_ovf = ovf_grid.is_some();
+    let ovf_cmap = tab.style.moment_color_map && is_ovf && tab.style.show_moments;
+    let ovf_stride = if is_ovf { tab.style.moment_stride.max(1) } else { 1 };
+    let surface = ovf_grid.as_ref().filter(|_| ovf_cmap).map(|g| {
+        let mut n = nalgebra::Vector3::zeros();
+        n[g.normal] = 1.0;
+        // Larger view z is farther: +normal pointing away puts the viewer
+        // on the − side.
+        g.surface_layer((rotation * n).z <= 0.0)
+    });
+    let on_surface = |k: usize| match (&ovf_grid, surface) {
+        (Some(g), Some(layer)) => g.idx.get(k).is_some_and(|i| i[g.normal] == layer),
+        _ => true,
+    };
     let arrows: Vec<Option<MomentArrow>> = render_atoms
         .iter()
         .map(|(_, atom)| {
             if !tab.style.show_moments {
                 return None;
+            }
+            if let Some(g) = &ovf_grid {
+                if !g.on_pitch(atom.original_index, ovf_stride) || !on_surface(atom.original_index) {
+                    return None;
+                }
             }
             let m = tab.structure.as_ref()?.atoms.get(atom.original_index)?.magmom?;
             // Arrows only: no sphere to stick out of, so the arrow is its
@@ -572,7 +596,8 @@ pub fn draw_structure(
                     * scale
             };
             let color = moment_color(m, moment_axis, collinear, &tab.style);
-            MomentArrow::new(m, &rotation, atom.screen_pos, radius, scale, color, tab)
+            let grow = (ovf_stride as f64).powf(0.75);
+            MomentArrow::new(m, &rotation, atom.screen_pos, radius, scale, color, tab, is_ovf, grow)
         })
         .collect();
 
@@ -619,8 +644,8 @@ pub fn draw_structure(
             cr.restore().ok();
         }
 
-        // Arrows only: the arrow stands for the atom.
-        if arrows_only && arrow.is_some() {
+        // Arrows only: the arrow (or colour-map tile) stands for the atom.
+        if arrows_only && (arrow.is_some() || ovf_cmap) {
             return;
         }
 
@@ -809,6 +834,34 @@ pub fn draw_structure(
             .then(a.1.cmp(&b.1))
     });
 
+    // Colour-map tiles first, under everything: drawn among the atoms, a
+    // nearer cell's tile would cover the part of a farther arrow standing
+    // out of the film in a tilted view. One layer, so they never overlap.
+    if let (true, Some(g)) = (ovf_cmap, &ovf_grid) {
+        let [e1, e2] = g.tile_half_edges().map(|e| {
+            let r = rotation * nalgebra::Vector3::new(e[0], e[1], e[2]) * scale;
+            [r.x, r.y]
+        });
+        let bg = tab.style.background_color;
+        let atoms = tab.structure.as_ref().map(|s| s.atoms.as_slice()).unwrap_or(&[]);
+        for (_, atom) in render_atoms.iter() {
+            let Some(m) = atoms.get(atom.original_index).and_then(|a| a.magmom) else { continue };
+            if (m[0] * m[0] + m[1] * m[1] + m[2] * m[2]).sqrt() < 0.01 || !on_surface(atom.original_index) {
+                continue;
+            }
+            let c = moment_color(m, moment_axis, collinear, &tab.style);
+            let fade = MOMENT_MAP_FADE;
+            cr.set_source_rgb(c.0 + (bg.0 - c.0) * fade, c.1 + (bg.1 - c.1) * fade, c.2 + (bg.2 - c.2) * fade);
+            let (cx, cy) = (atom.screen_pos[0], atom.screen_pos[1]);
+            cr.move_to(cx - e1[0] - e2[0], cy - e1[1] - e2[1]);
+            cr.line_to(cx + e1[0] - e2[0], cy + e1[1] - e2[1]);
+            cr.line_to(cx + e1[0] + e2[0], cy + e1[1] + e2[1]);
+            cr.line_to(cx - e1[0] + e2[0], cy - e1[1] + e2[1]);
+            cr.close_path();
+            cr.fill().ok();
+        }
+    }
+
     let poly_style = &tab.style.polyhedra_style;
     for (_, _, item) in &order {
         match item {
@@ -854,12 +907,194 @@ pub fn draw_structure(
     // Colour scale for property-coloured polyhedra, over everything else.
     if let Some(legend) = plan.as_ref().and_then(|p| p.legend.as_ref()) {
         draw_poly_legend(cr, legend, tab.style.background_color);
+    } else if tab.style.show_moments
+        && tab.structure.as_ref().is_some_and(|s| s.atoms.iter().any(|a| a.magmom.is_some()))
+    {
+        draw_moment_legend(cr, tab, collinear);
     }
+}
+
+/// Colour legend for the main view's moment arrows (bottom-right), when
+/// they are coloured by direction or m_z.
+pub fn draw_moment_legend(cr: &cairo::Context, tab: &TabState, collinear: bool) {
+    use crate::config::MomentColorMode;
+    let mode = match tab.style.moment_color_mode {
+        MomentColorMode::Auto if collinear => MomentColorMode::UpDown,
+        MomentColorMode::Auto => MomentColorMode::Direction,
+        m => m,
+    };
+    let Ok((x0, y0, x1, y1)) = cr.clip_extents() else { return };
+    let bg = tab.style.background_color;
+    let lum = 0.299 * bg.0 + 0.587 * bg.1 + 0.114 * bg.2;
+    let ink = if lum > 0.5 { (0.12, 0.12, 0.14) } else { (0.92, 0.92, 0.94) };
+    draw_moment_color_legend(cr, x0, y0, x1, y1, mode, ink);
+}
+
+/// The legend of a moment colour `mode` in the bottom-right corner of the
+/// box (x0, y0)–(x1, y1): a bar for m_z scales; for Direction, a wheel for
+/// the in-plane angle (centre +z, rim in-plane) and a bar for m_z. Every
+/// swatch comes from `moment_color`, so the legend is the arrows' scale by
+/// construction. Shared by the main view, its exports and the Trajectory
+/// Player. Nothing for Up / Down and Single, or in a box too small for it.
+pub fn draw_moment_color_legend(
+    cr: &cairo::Context,
+    x0: f64,
+    y0: f64,
+    x1: f64,
+    y1: f64,
+    mode: crate::config::MomentColorMode,
+    ink: (f64, f64, f64),
+) {
+    use crate::config::MomentColorMode;
+    if !matches!(mode, MomentColorMode::Direction | MomentColorMode::MzRainbow | MomentColorMode::Mz)
+        || x1 - x0 < 180.0
+        || y1 - y0 < 120.0
+    {
+        return;
+    }
+    let style = crate::config::RenderStyle { moment_color_mode: mode, ..Default::default() };
+    let color = |m: [f64; 3]| moment_color(m, None, false, &style);
+    let margin = 16.0;
+    cr.save().ok();
+    cr.select_font_face("Sans", cairo::FontSlant::Normal, cairo::FontWeight::Normal);
+    cr.set_font_size(11.0);
+
+    if mode != MomentColorMode::Direction {
+        // Horizontal m_z bar, −1 … +1.
+        let (bar_w, bar_h) = (130.0, 10.0);
+        let bx = x1 - margin - bar_w;
+        let by = y1 - margin - 16.0 - bar_h;
+        cr.set_source_rgb(ink.0, ink.1, ink.2);
+        cr.move_to(bx, by - 6.0);
+        let _ = cr.show_text("m_z");
+        let steps = 64;
+        for i in 0..steps {
+            let mz = -1.0 + 2.0 * (i as f64 / (steps - 1) as f64);
+            let (r, g, b) = color([(1.0 - mz * mz).max(0.0).sqrt(), 0.0, mz]);
+            cr.set_source_rgb(r, g, b);
+            cr.rectangle(bx + bar_w * i as f64 / steps as f64, by, bar_w / steps as f64 + 0.5, bar_h);
+            let _ = cr.fill();
+        }
+        cr.set_source_rgba(ink.0, ink.1, ink.2, 0.6);
+        cr.set_line_width(0.8);
+        cr.rectangle(bx, by, bar_w, bar_h);
+        let _ = cr.stroke();
+        cr.set_source_rgb(ink.0, ink.1, ink.2);
+        for (frac, lbl) in [(0.0, "−1"), (0.5, "0"), (1.0, "+1")] {
+            let tw = cr.text_extents(lbl).map(|e| e.width()).unwrap_or(0.0);
+            cr.move_to(bx + bar_w * frac - tw * frac, by + bar_h + 12.0);
+            let _ = cr.show_text(lbl);
+        }
+        cr.restore().ok();
+        return;
+    }
+
+    let r_wheel = 24.0;
+    let bar_w = 9.0;
+    let bar_h = 2.0 * r_wheel;
+    let bx = x1 - margin - 18.0 - bar_w;
+    let by = y1 - margin - bar_h - 6.0;
+    let cx = bx - 18.0 - r_wheel;
+    let cy = by + r_wheel;
+
+    // Wheel: the upper hemisphere seen from +z (centre +z, rim in-plane).
+    // Screen y points down, so world +y is up: m_y = −sin of the screen angle.
+    let (n_ang, n_rad) = (48, 6);
+    for ir in 0..n_rad {
+        let r0 = r_wheel * (ir as f64 / n_rad as f64);
+        let r1 = r_wheel * ((ir + 1) as f64 / n_rad as f64) + 0.4;
+        let rho = (ir as f64 + 0.5) / n_rad as f64;
+        let mz = (1.0 - rho * rho).max(0.0).sqrt();
+        for ia in 0..n_ang {
+            let a0 = (ia as f64 / n_ang as f64) * 2.0 * PI;
+            let a1 = ((ia + 1) as f64 / n_ang as f64) * 2.0 * PI + 0.03;
+            let am = 0.5 * (a0 + a1);
+            let (r, g, b) = color([rho * am.cos(), -rho * am.sin(), mz]);
+            cr.set_source_rgb(r, g, b);
+            cr.new_sub_path();
+            cr.arc(cx, cy, r1, a0, a1);
+            cr.arc_negative(cx, cy, r0, a1, a0);
+            cr.close_path();
+            let _ = cr.fill();
+        }
+    }
+    cr.set_source_rgba(ink.0, ink.1, ink.2, 0.65);
+    cr.set_line_width(0.9);
+    cr.arc(cx, cy, r_wheel, 0.0, 2.0 * PI);
+    let _ = cr.stroke();
+
+    cr.set_font_size(10.0);
+    cr.set_source_rgb(ink.0, ink.1, ink.2);
+    let tw = cr.text_extents("m_xy").map(|e| e.width()).unwrap_or(20.0);
+    cr.move_to(cx - 0.5 * tw, by - 5.0);
+    let _ = cr.show_text("m_xy");
+
+    // m_z bar, +1 at the top.
+    let steps = 32;
+    for i in 0..steps {
+        let mz = 1.0 - 2.0 * (i as f64 / (steps - 1) as f64);
+        let (r, g, b) = color([0.0, 0.0, mz]);
+        cr.set_source_rgb(r, g, b);
+        cr.rectangle(bx, by + bar_h * (i as f64 / steps as f64), bar_w, bar_h / steps as f64 + 0.5);
+        let _ = cr.fill();
+    }
+    cr.set_source_rgba(ink.0, ink.1, ink.2, 0.65);
+    cr.set_line_width(0.8);
+    cr.rectangle(bx, by, bar_w, bar_h);
+    let _ = cr.stroke();
+    cr.set_source_rgb(ink.0, ink.1, ink.2);
+    cr.move_to(bx - 2.0, by - 5.0);
+    let _ = cr.show_text("m_z");
+    cr.move_to(bx + bar_w + 3.0, by + 8.0);
+    let _ = cr.show_text("+1");
+    cr.move_to(bx + bar_w + 3.0, by + bar_h);
+    let _ = cr.show_text("−1");
+    cr.restore().ok();
 }
 
 // ============================================================================
 // MAGNETIC MOMENT ARROWS
+
+/// How far colour-map tiles under mesh arrows are faded towards the
+/// background, so the arrows on top, in the same colours, stand out.
+/// Shared with the Trajectory Player.
+pub(crate) const MOMENT_MAP_FADE: f64 = 0.3;
 // ============================================================================
+
+/// Diverging Blue–White–Red scale matching the CHGCAR 2D plotter
+/// (`Colormap::BlueWhiteRed`): pure blue at `mz = -1`, crisp white at `0`,
+/// pure red at `+1`.
+pub(crate) fn mz_color(mz: f64) -> (f64, f64, f64) {
+    let t = 0.5 * (mz.clamp(-1.0, 1.0) + 1.0);
+    crate::rendering::colormap::colormap_rgb(crate::rendering::colormap::Colormap::BlueWhiteRed, t)
+}
+
+/// Rainbow (Blue → Cyan → Green → Yellow → Orange → Red) scale for `mz` in
+/// `[-1, 1]`, matching Nature / npj Computational Materials skyrmion figures.
+pub(crate) fn mz_rainbow_color(mz: f64) -> (f64, f64, f64) {
+    let t = 0.5 * (mz.clamp(-1.0, 1.0) + 1.0);
+    const STOPS: &[(f64, (f64, f64, f64))] = &[
+        (0.00, (0.10, 0.20, 0.88)), // -1.0: Deep royal blue
+        (0.20, (0.12, 0.68, 0.96)), // -0.6: Vivid cyan-blue
+        (0.40, (0.18, 0.82, 0.45)), // -0.2: Emerald green
+        (0.60, (0.78, 0.86, 0.14)), // +0.2: Chartreuse / yellow-green
+        (0.80, (0.96, 0.58, 0.10)), // +0.6: Warm orange
+        (1.00, (0.84, 0.12, 0.10)), // +1.0: Deep crimson red
+    ];
+    for i in 1..STOPS.len() {
+        let (t0, c0) = STOPS[i - 1];
+        let (t1, c1) = STOPS[i];
+        if t <= t1 {
+            let u = ((t - t0) / (t1 - t0)).clamp(0.0, 1.0);
+            return (
+                c0.0 + u * (c1.0 - c0.0),
+                c0.1 + u * (c1.1 - c0.1),
+                c0.2 + u * (c1.2 - c0.2),
+            );
+        }
+    }
+    STOPS[STOPS.len() - 1].1
+}
 
 /// Arrow colour for moment `m` under the tab's colour mode. `axis` and
 /// `collinear` describe the whole structure (`Structure::magnetic_axis`,
@@ -888,13 +1123,25 @@ pub(crate) fn moment_color(
                 style.moment_color_down
             }
         }
+        MomentColorMode::MzRainbow => {
+            let n = (m[0] * m[0] + m[1] * m[1] + m[2] * m[2]).sqrt().max(1e-12);
+            mz_rainbow_color(m[2] / n)
+        }
+        MomentColorMode::Mz => {
+            let n = (m[0] * m[0] + m[1] * m[1] + m[2] * m[2]).sqrt().max(1e-12);
+            mz_color(m[2] / n)
+        }
         MomentColorMode::Direction => {
             let n = (m[0] * m[0] + m[1] * m[1] + m[2] * m[2]).sqrt().max(1e-12);
+            let mz = (m[2] / n).clamp(-1.0, 1.0);
+            let xy = (m[0] * m[0] + m[1] * m[1]).sqrt() / n;
             let hue = m[1].atan2(m[0]).to_degrees().rem_euclid(360.0);
-            // White at +z, black at −z; held just short of pure white and
-            // black so the arrow's shading still shows.
-            let lightness = 0.5 + 0.45 * (m[2] / n);
-            hsl_to_rgb(hue, 0.85, lightness)
+            // White at +z, charcoal at −z; saturation scales with in-plane
+            // projection `xy` so collinear ±z backgrounds stay achromatic
+            // instead of picking up a random hue from atan2(0, 0) floating-point noise.
+            let lightness = 0.54 + 0.41 * mz;
+            let saturation = 0.88 * xy.clamp(0.0, 1.0).powf(0.35);
+            hsl_to_rgb(hue, saturation, lightness)
         }
     }
 }
@@ -941,6 +1188,7 @@ struct MomentArrow {
 }
 
 impl MomentArrow {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         m: [f64; 3],
         rotation: &nalgebra::Rotation3<f64>,
@@ -949,15 +1197,29 @@ impl MomentArrow {
         scale: f64,
         color: (f64, f64, f64),
         tab: &TabState,
+        is_ovf: bool,
+        grow: f64,
     ) -> Option<Self> {
         let len = (m[0] * m[0] + m[1] * m[1] + m[2] * m[2]).sqrt();
         if len < 0.01 {
             return None;
         }
         let u = rotation * nalgebra::Vector3::new(m[0] / len, m[1] / len, m[2] / len);
-        let out = 0.5 * len * tab.style.moment_scale * scale;
+        let out = 0.5 * len * tab.style.moment_scale * scale * grow;
         let half = radius + out;
-        let shaft_r = (0.5 * tab.style.bond_radius * scale).max(1.2);
+        // On an OVF mesh, cell spacing is in nm (tens of Å), so scale the shaft
+        // with the arrow length (`0.08 * 2 * out`), matching the GPU player.
+        let shaft_r = if is_ovf {
+            (0.14 * out).max(1.2)
+        } else {
+            (0.5 * tab.style.bond_radius * scale).max(1.2)
+        };
+        let head_r = if is_ovf { shaft_r * 1.95 } else { shaft_r * 2.4 };
+        let head_len = if is_ovf {
+            (0.9 * out).min(head_r * 3.2)
+        } else {
+            (0.6 * out).min(0.5 * scale).max(shaft_r * 3.0)
+        };
         Some(Self {
             centre: [screen_pos[0], screen_pos[1]],
             radius,
@@ -966,8 +1228,8 @@ impl MomentArrow {
                 ArrowHalf { dir: [-u.x, -u.y, -u.z], length: half, is_tip: false },
             ],
             shaft_r,
-            head_r: shaft_r * 2.4,
-            head_len: (0.6 * out).min(0.5 * scale).max(shaft_r * 3.0),
+            head_r,
+            head_len,
             color,
             metallic: tab.style.metallic,
             roughness: tab.style.roughness,
@@ -1604,7 +1866,7 @@ mod moment_color_tests {
         let down = moment_color([0.0, 0.0, -2.0], axis, false, &style);
         // Direction: +z near white, −z near black.
         assert!(up.0 > 0.9 && up.1 > 0.9 && up.2 > 0.9, "{:?}", up);
-        assert!(down.0 < 0.1 && down.1 < 0.1 && down.2 < 0.1, "{:?}", down);
+        assert!(down.0 < 0.2 && down.1 < 0.2 && down.2 < 0.2, "{:?}", down);
         assert_ne!(up, style.moment_color);
     }
 }

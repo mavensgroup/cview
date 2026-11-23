@@ -56,6 +56,11 @@ pub enum MomentColorMode {
     /// Hue from the in-plane angle; white at +z, black at −z (the usual
     /// spin-texture colouring).
     Direction,
+    /// m_z on a Blue–Cyan–Green–Yellow–Orange–Red rainbow scale (as in
+    /// Nature / npj Computational Materials skyrmion figures).
+    MzRainbow,
+    /// m_z on the CHGCAR plotter's diverging Blue–White–Red scale.
+    Mz,
     /// One colour for every arrow.
     Single,
 }
@@ -184,6 +189,10 @@ pub struct RenderStyle {
     /// Hide the spheres of atoms that carry a moment, leaving the arrows
     /// (spin textures, where the spheres hide the pattern).
     pub moment_arrows_only: bool,
+    /// Draw a faded cell colour-map underlay on OVF magnetization meshes.
+    pub moment_color_map: bool,
+    /// Draw an arrow on every n-th cell of an OVF magnetization mesh.
+    pub moment_stride: usize,
     /// Up arrows, and every arrow in `Single` mode.
     pub moment_color: (f64, f64, f64),
     pub moment_color_down: (f64, f64, f64),
@@ -256,6 +265,8 @@ impl<'de> Deserialize<'de> for RenderStyle {
             moment_scale: DEFAULT_MOMENT_SCALE,
             moment_color_mode: MomentColorMode::default(),
             moment_arrows_only: false,
+            moment_color_map: true,
+            moment_stride: 1,
             moment_color: DEFAULT_MOMENT_COLOR,
             moment_color_down: DEFAULT_MOMENT_COLOR_DOWN,
         })
@@ -294,6 +305,8 @@ impl Default for RenderStyle {
             moment_scale: DEFAULT_MOMENT_SCALE,
             moment_color_mode: MomentColorMode::default(),
             moment_arrows_only: false,
+            moment_color_map: true,
+            moment_stride: 1,
             moment_color: DEFAULT_MOMENT_COLOR,
             moment_color_down: DEFAULT_MOMENT_COLOR_DOWN,
         }

@@ -57,8 +57,7 @@ fn summary_with_header(structure: &Structure, header: &str) -> String {
   // (m_z) when every moment is collinear along z, the vector otherwise.
   let moments = MomentColumn::of(structure);
   // An OVF mesh carries m = M/Ms (unitless), not atomic moments in μB.
-  let mesh = !structure.atoms.is_empty()
-    && structure.atoms.iter().all(|a| a.element == crate::io::ovf::SITE_NAME);
+  let mesh = structure.is_ovf_mesh();
   let unit = if mesh { "" } else { " μB" };
 
   let mut out = String::new();

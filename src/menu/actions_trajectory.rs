@@ -26,13 +26,17 @@ pub fn setup(app: &Application, window: &ApplicationWindow, state: Rc<RefCell<Ap
     app.add_action(&act);
 }
 
-/// Enable the menu entry when the active tab has frames to play. Call after
-/// loading a file and on tab switches.
+/// Enable the menu entry when the active tab has frames to play, or is an OVF
+/// magnetization mesh (even a single-snapshot OVF opens in the GPU player for
+/// colour-map and topological-charge visualization).
 pub fn refresh_enabled(state: &AppState) {
     let has = state
         .tabs
         .get(state.active_tab_index)
-        .is_some_and(|t| t.trajectory.is_some());
+        .is_some_and(|t| {
+            t.trajectory.is_some()
+                || t.structure.as_ref().is_some_and(|s| s.is_ovf_mesh())
+        });
     if let Some(act) = gtk4::gio::Application::default()
         .and_then(|app| app.lookup_action(ACTION))
         .and_then(|a| a.downcast::<gtk4::gio::SimpleAction>().ok())

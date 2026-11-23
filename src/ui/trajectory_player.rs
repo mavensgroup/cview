@@ -15,6 +15,7 @@
 //          [ transport and options    ]
 
 use crate::model::elements::get_element_color;
+use crate::model::mesh_grid::MeshGrid;
 use crate::model::trajectory::Trajectory;
 use crate::physics::analysis::spin_texture::{self, TextureStats};
 use crate::rendering::gl::{loader, ArrowInstance, AtomInstance, BondInstance, Camera, GlBackend, GpuBackend};
@@ -43,9 +44,8 @@ const MIN_ARROW: f64 = 0.01;
 struct Look {
     colors: Vec<[f32; 3]>,
     radii: Vec<f32>,
-    /// Bond length range per species pair (row-major, species × species),
-    /// from the tab's bond rules; None = never bonded.
-    bond_range: Vec<Option<(f64, f64)>>,
+    /// Lookup table of enabled bond lengths per element pair.
+    bond_table: crate::model::bonds::BondTable,
     bond_radius: f32,
     bond_color: [f32; 3],
     background: [f32; 3],
@@ -53,12 +53,37 @@ struct Look {
     moments: Option<MomentLook>,
 }
 
+impl Look {
+    /// The tab's appearance for the sites of `traj`. Everything here is per
+    /// site or per element pair, never per site pair: a trajectory can have
+    /// hundreds of thousands of sites (a magnetization mesh, a large MD box).
+    fn for_tab(tab: &crate::state::TabState, traj: &Trajectory, scheme: crate::model::elements::ColorScheme) -> Look {
+        let colors = traj
+            .species
+            .iter()
+            .map(|el| rgb(tab.style.element_colors.get(el).copied().unwrap_or_else(|| get_element_color(el, scheme))))
+            .collect();
+        let radii = traj.species.iter().map(|el| (tab.base_radius(el) * tab.style.atom_scale) as f32).collect();
+        Look {
+            colors,
+            radii,
+            bond_table: tab.bond_table(),
+            bond_radius: tab.style.bond_radius as f32,
+            bond_color: rgb(tab.style.bond_color),
+            background: rgb(tab.style.background_color),
+            moments: MomentLook::new(traj, &tab.style, tab.style.bond_radius),
+        }
+    }
+}
+
 /// How arrows (and, on a mesh, cells) are coloured.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum ArrowColor {
-    /// Hue from the in-plane angle, white at +z, black at −z.
+    /// Hue from the in-plane angle, white at +z, charcoal at −z.
     Direction,
-    /// m_z on a blue (−) / white / red (+) scale.
+    /// m_z on a Blue–Cyan–Green–Yellow–Orange–Red rainbow scale (Nature style).
+    MzRainbow,
+    /// m_z on the CHGCAR plotter's Blue–White–Red scale.
     Mz,
     /// Up or down along the magnetic axis.
     UpDown,
@@ -67,72 +92,20 @@ enum ArrowColor {
 }
 
 impl ArrowColor {
-    const LABELS: [&'static str; 4] = ["Direction", "m_z (blue–red)", "Up / down", "Single colour"];
-    const ALL: [ArrowColor; 4] = [ArrowColor::Direction, ArrowColor::Mz, ArrowColor::UpDown, ArrowColor::Single];
-}
-
-/// A regular mesh of sites (an OVF magnetization): grid index per site.
-struct Grid {
-    idx: Vec<[i64; 3]>,
-    /// Smallest cell edge, Å.
-    spacing: f64,
-    /// Cell edge along each axis, Å (0 along an axis with one cell).
-    step: [f64; 3],
-    /// Sites along each axis.
-    counts: [i64; 3],
-    /// The axis with fewest sites (a film's normal).
-    normal: usize,
-}
-
-impl Grid {
-    /// The grid `positions` sit on, when every site is on one.
-    fn of(positions: &[[f64; 3]]) -> Option<Grid> {
-        if positions.len() < 2 {
-            return None;
-        }
-        let mut lo = [0.0; 3];
-        let mut step = [0.0; 3];
-        let mut spacing = f64::MAX;
-        for d in 0..3 {
-            let mut v: Vec<f64> = positions.iter().map(|p| p[d]).collect();
-            v.sort_by(f64::total_cmp);
-            lo[d] = v[0];
-            let tol = 1e-6 * (v[v.len() - 1] - v[0]).max(1.0);
-            let gap = v.windows(2).map(|w| w[1] - w[0]).filter(|g| *g > tol).fold(f64::MAX, f64::min);
-            step[d] = if gap == f64::MAX { 0.0 } else { gap };
-            if step[d] > 0.0 {
-                spacing = spacing.min(step[d]);
-            }
-        }
-        if spacing == f64::MAX {
-            return None;
-        }
-        let mut counts = [1i64; 3];
-        let idx: Vec<[i64; 3]> = positions
-            .iter()
-            .map(|p| {
-                [0, 1, 2].map(|d| {
-                    let i = if step[d] > 0.0 { ((p[d] - lo[d]) / step[d]).round() as i64 } else { 0 };
-                    counts[d] = counts[d].max(i + 1);
-                    i
-                })
-            })
-            .collect();
-        let normal = (0..3).min_by_key(|&d| counts[d]).unwrap_or(2);
-        Some(Grid { idx, spacing, step, counts, normal })
-    }
-
-    /// Arrow pitch that leaves about `n` arrows along the longest in-plane
-    /// side.
-    fn cell_area(&self) -> f64 {
-        let s: Vec<f64> = (0..3).filter(|&d| d != self.normal).map(|d| self.step[d]).collect();
-        s.iter().map(|x| if *x > 0.0 { *x } else { self.spacing }).product()
-    }
-
-    fn stride_for(&self, n: i64) -> usize {
-        let longest = (0..3).filter(|&d| d != self.normal).map(|d| self.counts[d]).max().unwrap_or(1);
-        (longest + n - 1).div_euclid(n).max(1) as usize
-    }
+    const LABELS: [&'static str; 5] = [
+        "Direction",
+        "m_z (rainbow)",
+        "m_z (blue–white–red)",
+        "Up / down",
+        "Single colour",
+    ];
+    const ALL: [ArrowColor; 5] = [
+        ArrowColor::Direction,
+        ArrowColor::MzRainbow,
+        ArrowColor::Mz,
+        ArrowColor::UpDown,
+        ArrowColor::Single,
+    ];
 }
 
 /// How moments are drawn: from the tab's style, then the player's own
@@ -155,7 +128,7 @@ struct MomentLook {
     axis: Option<[f64; 3]>,
     collinear: bool,
     /// Present for a mesh: allows thinning and the colour map.
-    grid: Option<Grid>,
+    grid: Option<MeshGrid>,
     /// Arrows on every `stride`-th cell in-plane, scaled up to match.
     stride: usize,
     /// Colour every cell by its moment, faded towards the background, as an
@@ -170,18 +143,22 @@ struct MomentLook {
 /// next row.
 const ARROWS_ACROSS: i64 = 24;
 
-/// Colour-map tile radius, in cell spacings: a flat disc this size covers
-/// its square cell, corners included (½√2 ≈ 0.71).
+/// Radius given to a colour-map tile's instance, in cell spacings. Tiles are
+/// drawn as flat cell rectangles (`MeshGrid::tile_half_edges`); this only
+/// keeps the instance's size meaningful.
 const TILE: f64 = 0.72;
 
-/// How far colour-map tiles are faded towards the background, so the
-/// arrows on top, in the same colours at full strength, stand out.
-const UNDERLAY_FADE: f32 = 0.3;
+/// How far colour-map tiles are faded towards the background (the main
+/// view's value).
+const UNDERLAY_FADE: f32 = crate::rendering::painter::MOMENT_MAP_FADE as f32;
 
 impl MomentLook {
     fn new(traj: &Trajectory, style: &crate::config::RenderStyle, bond_radius: f64) -> Option<Self> {
         use crate::config::MomentColorMode;
         use crate::model::structure::{collinear_with, moment_axis};
+        // Every moment of every frame: linear in what was loaded (at most
+        // `ovf::SERIES_BUDGET` for a mesh), and a frame skipped here could
+        // hold the largest moment or the one that breaks collinearity.
         let all = || traj.frames.iter().filter_map(|f| f.magmoms.as_ref()).flatten().copied();
         all().next()?;
         let axis = moment_axis(all());
@@ -194,14 +171,17 @@ impl MomentLook {
         let color = match style.moment_color_mode {
             MomentColorMode::Auto if collinear => ArrowColor::UpDown,
             MomentColorMode::Auto | MomentColorMode::Direction => ArrowColor::Direction,
+            MomentColorMode::MzRainbow => ArrowColor::MzRainbow,
+            MomentColorMode::Mz => ArrowColor::Mz,
             MomentColorMode::UpDown => ArrowColor::UpDown,
             MomentColorMode::Single => ArrowColor::Single,
         };
-        let grid = if arrows_only { traj.frames.first().and_then(|f| Grid::of(&f.positions)) } else { None };
-        // A big mesh reads as a colour map with sparse arrows; a small one
-        // as arrows on every cell.
+        let grid = if arrows_only { traj.frames.first().and_then(|f| MeshGrid::of(&f.positions)) } else { None };
+        // A big thin-film mesh reads as a colour map with sparse arrows; a 3D
+        // bulk mesh thins in all three dimensions without flat tiles, and a
+        // small mesh shows arrows on every cell.
         let (stride, cells) = match &grid {
-            Some(g) if g.stride_for(ARROWS_ACROSS) > 1 => (g.stride_for(ARROWS_ACROSS), true),
+            Some(g) if g.stride_for(ARROWS_ACROSS) > 1 => (g.stride_for(ARROWS_ACROSS), !g.bulk),
             _ => (1, false),
         };
         let mut look = MomentLook {
@@ -229,12 +209,6 @@ impl MomentLook {
     }
 
     fn rgb_of(&self, m: [f64; 3]) -> [f32; 3] {
-        if self.color == ArrowColor::Mz {
-            let n = (m[0] * m[0] + m[1] * m[1] + m[2] * m[2]).sqrt().max(1e-12);
-            let t = (m[2] / n).clamp(-1.0, 1.0) as f32;
-            let (end, t) = if t >= 0.0 { ([0.80, 0.15, 0.13], t) } else { ([0.13, 0.30, 0.80], -t) };
-            return [0, 1, 2].map(|k| 0.97 + (end[k] - 0.97) * t);
-        }
         // `style.moment_color_mode` follows `color` (`set_color`).
         rgb(crate::rendering::painter::moment_color(m, self.axis, self.collinear, &self.style))
     }
@@ -243,7 +217,9 @@ impl MomentLook {
         use crate::config::MomentColorMode;
         self.color = c;
         self.style.moment_color_mode = match c {
-            ArrowColor::Direction | ArrowColor::Mz => MomentColorMode::Direction,
+            ArrowColor::Direction => MomentColorMode::Direction,
+            ArrowColor::MzRainbow => MomentColorMode::MzRainbow,
+            ArrowColor::Mz => MomentColorMode::Mz,
             ArrowColor::UpDown => MomentColorMode::UpDown,
             ArrowColor::Single => MomentColorMode::Single,
         };
@@ -251,13 +227,7 @@ impl MomentLook {
 
     /// Whether site `k` carries an arrow at the current thinning.
     fn on_pitch(&self, k: usize) -> bool {
-        match &self.grid {
-            Some(g) if self.stride > 1 => {
-                let s = self.stride as i64;
-                (0..3).all(|d| d == g.normal || g.idx[k][d] % s == 0)
-            }
-            _ => true,
-        }
+        self.grid.as_ref().map_or(true, |g| g.on_pitch(k, self.stride))
     }
 }
 
@@ -316,8 +286,8 @@ struct FrameGeometry {
     bonds: Vec<BondInstance>,
     arrows: Vec<ArrowInstance>,
     lines: Vec<[f32; 3]>,
-    /// The atoms are colour-map tiles, drawn unlit.
-    flat: bool,
+    /// When `Some((e1, e2))`, atoms are flat world-space rectangular colour-map tiles.
+    flat: Option<([f32; 3], [f32; 3])>,
 }
 
 /// Atoms (with boundary images), bonds, moment arrows and cell edges of
@@ -370,20 +340,16 @@ fn build_frame(traj: &Trajectory, look: &Look, idx: usize, images: bool, bonds: 
     // An arrow through each sphere that has a moment: it sticks out of the
     // sphere by ½·|m|·scale at each end, as in the main view; on its own
     // (arrows only) it is |m|·scale long, centred on the site. Thinned
-    // arrows are `stride` times longer and thicker. Over the colour map
-    // they are lifted off the film towards the viewer (`lift`).
+    // arrows grow sub-linearly (`stride.powf(0.72)`) so large strides (e.g.
+    // Every 11 on a 256-wide mesh) stay sleek rather than turning into
+    // stubby oversized cones. Over the colour map they are lifted slightly
+    // off the film towards the viewer (`lift`) so their undersides never
+    // pierce the flat tile plane.
     let mut arrows = Vec::new();
     if let Some(ml) = look.moments.as_ref().filter(|ml| ml.show_arrows) {
-        let grow = ml.stride as f64;
-        let shaft_r = ml.shaft_r * ml.width * grow;
-        let lift = match (&ml.grid, map_on) {
-            (Some(g), true) => {
-                let mut v = [0.0; 3];
-                v[g.normal] = lift * (TILE * g.spacing + 2.4 * shaft_r);
-                v
-            }
-            _ => [0.0; 3],
-        };
+        let len_grow = (ml.stride as f64).powf(0.75);
+        let rad_grow = (ml.stride as f64).powf(0.68);
+        let shaft_r = ml.shaft_r * ml.width * rad_grow;
         for (p, k) in &spheres {
             let Some(m) = moment(*k) else { continue };
             let len = norm(m);
@@ -392,9 +358,23 @@ fn build_frame(traj: &Trajectory, look: &Look, idx: usize, images: bool, bonds: 
             }
             let u = m.map(|x| x / len);
             let r = if ml.arrows_only { 0.0 } else { look.radii[*k] as f64 };
-            let half = r + 0.5 * len * ml.scale * ml.length * grow;
+            let half = r + 0.5 * len * ml.scale * ml.length * len_grow;
+            let lift_vec = match (&ml.grid, map_on) {
+                (Some(g), true) => {
+                    // Lift just enough that both the tail and head clear the
+                    // flat tile plane at z = p[g.normal], without detaching
+                    // far above the film.
+                    let un = u[g.normal].abs();
+                    let sin_n = (1.0 - un * un).max(0.0).sqrt();
+                    let clear = un * half + sin_n * (1.95 * shaft_r) + 0.08 * g.spacing;
+                    let mut v = [0.0; 3];
+                    v[g.normal] = lift * clear;
+                    v
+                }
+                _ => [0.0; 3],
+            };
             arrows.push(ArrowInstance {
-                base: [0, 1, 2].map(|d| (p[d] + lift[d] - u[d] * half) as f32),
+                base: [0, 1, 2].map(|d| (p[d] + lift_vec[d] - u[d] * half) as f32),
                 axis: [0, 1, 2].map(|d| (2.0 * u[d] * half) as f32),
                 shaft_r: shaft_r as f32,
                 color: ml.rgb_of(m),
@@ -406,7 +386,17 @@ fn build_frame(traj: &Trajectory, look: &Look, idx: usize, images: bool, bonds: 
     // on, every cell is a tile coloured by its moment. Otherwise atoms as
     // usual. Bonds still pair up `spheres`.
     let ml = look.moments.as_ref();
+    // On a multi-layer film with the colour map on, only the surface layer
+    // facing the viewer gets a tile so internal layers don't stack.
+    let surface_layer = ml.and_then(|ml| ml.grid.as_ref()).map(|g| g.surface_layer(lift >= 0.0));
+    let on_surface = |k: usize| match (ml.and_then(|ml| ml.grid.as_ref()), surface_layer) {
+        (Some(g), Some(sl)) if map_on && g.counts[g.normal] > 1 => g.idx[k][g.normal] == sl,
+        _ => true,
+    };
     let hide = |k: usize| {
+        if map_on && !on_surface(k) {
+            return true;
+        }
         ml.is_some_and(|ml| ml.arrows_only && !map_on) && moment(k).is_some_and(|m| norm(m) >= MIN_ARROW)
     };
     let atoms: Vec<AtomInstance> = spheres
@@ -432,10 +422,8 @@ fn build_frame(traj: &Trajectory, look: &Look, idx: usize, images: bool, bonds: 
         .collect();
 
     let mut bond_list = Vec::new();
-    if bonds && spheres.len() <= MAX_ATOMS_FOR_BONDS {
-        let ns = look.radii.len();
-        let longest = look.bond_range.iter().flatten().map(|r| r.1).fold(0.0, f64::max);
-        let cutoff = longest.max(0.5);
+    if bonds && spheres.len() <= MAX_ATOMS_FOR_BONDS && look.bond_table.max_length() > 0.0 {
+        let cutoff = look.bond_table.max_length().max(0.5);
         let key = |p: &[f64; 3]| [0, 1, 2].map(|d| (p[d] / cutoff).floor() as i64);
         let mut grid: HashMap<[i64; 3], Vec<usize>> = HashMap::new();
         for (i, (p, _)) in spheres.iter().enumerate() {
@@ -453,10 +441,7 @@ fn build_frame(traj: &Trajectory, look: &Look, idx: usize, images: bool, bonds: 
                             }
                             let (q, kj) = &spheres[j];
                             let d = ((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2) + (p[2] - q[2]).powi(2)).sqrt();
-                            let bonded = matches!(
-                                look.bond_range[ki * ns + kj],
-                                Some((lo, hi)) if d >= crate::model::bonds::MIN_SEPARATION && d > lo && d <= hi
-                            );
+                            let bonded = look.bond_table.bonded(&traj.species[*ki], &traj.species[*kj], d);
                             if bonded {
                                 bond_list.push(BondInstance {
                                     a: atoms[i].pos,
@@ -499,7 +484,12 @@ fn build_frame(traj: &Trajectory, look: &Look, idx: usize, images: bool, bonds: 
         }
     }
     let atoms = atoms.into_iter().zip(&spheres).filter(|(_, (_, k))| !hide(*k)).map(|(a, _)| a).collect();
-    FrameGeometry { atoms, bonds: bond_list, arrows, lines, flat: map_on }
+    let flat = if map_on {
+        look.moments.as_ref().and_then(|ml| ml.grid.as_ref()).map(|g| g.tile_half_edges().map(|e| e.map(|x| x as f32)).into())
+    } else {
+        None
+    };
+    FrameGeometry { atoms, bonds: bond_list, arrows, lines, flat }
 }
 
 /// Mean moment of every frame that has moments.
@@ -837,21 +827,37 @@ fn moments_row(player: &Rc<RefCell<Player>>, ui: &Ui) -> Option<gtk4::Box> {
     Some(row)
 }
 
-/// GL framebuffer (RGBA, bottom row first) to a PNG.
-fn save_png(path: &std::path::Path, rgba: &[u8], w: i32, h: i32) -> Result<(), String> {
+/// `RgbaImage` (top row first) to a PNG, with optional colour legend composite.
+fn save_rgba_png(
+    path: &std::path::Path,
+    img: &crate::rendering::gl::export::RgbaImage,
+    legend: Option<crate::config::MomentColorMode>,
+    bg: [f32; 3],
+) -> Result<(), String> {
+    let (w, h) = (img.width as i32, img.height as i32);
     let mut surf = gtk4::cairo::ImageSurface::create(gtk4::cairo::Format::ARgb32, w, h).map_err(|e| e.to_string())?;
     let stride = surf.stride() as usize;
     {
         let mut data = surf.data().map_err(|e| e.to_string())?;
         for y in 0..h as usize {
-            let src = &rgba[(h as usize - 1 - y) * w as usize * 4..][..w as usize * 4];
+            let src = &img.data[y * w as usize * 4..][..w as usize * 4];
             let dst = &mut data[y * stride..][..w as usize * 4];
             for x in 0..w as usize {
-                // Cairo ARGB32 is native-endian 0xAARRGGBB: B, G, R, A in memory on little-endian.
-                let (r, g, b) = (src[x * 4], src[x * 4 + 1], src[x * 4 + 2]);
-                let px = u32::from_be_bytes([255, r, g, b]).to_ne_bytes();
+                let (r, g, b, a) = (src[x * 4], src[x * 4 + 1], src[x * 4 + 2], src[x * 4 + 3]);
+                let px = u32::from_be_bytes([a, r, g, b]).to_ne_bytes();
                 dst[x * 4..x * 4 + 4].copy_from_slice(&px);
             }
+        }
+    }
+    if let Some(mode) = legend {
+        if let Ok(cr) = gtk4::cairo::Context::new(&surf) {
+            let dark = 0.299 * bg[0] + 0.587 * bg[1] + 0.114 * bg[2] < 0.5;
+            let fg = if dark { (0.95, 0.95, 0.97) } else { (0.08, 0.08, 0.10) };
+            let scale = (w.min(h) as f64 / 700.0).max(1.0);
+            cr.save().ok();
+            cr.scale(scale, scale);
+            crate::rendering::painter::draw_moment_color_legend(&cr, 0.0, 0.0, w as f64 / scale, h as f64 / scale, mode, fg);
+            cr.restore().ok();
         }
     }
     let mut file = std::fs::File::create(path).map_err(|e| e.to_string())?;
@@ -902,6 +908,13 @@ fn draw_hud(cr: &gtk4::cairo::Context, player: &Player) {
         cr.move_to(14.0, y);
         let _ = cr.show_text(&text);
         y += size + 7.0;
+    }
+
+    // Bottom-right colour legend when moments are shown in Direction or m_z mode.
+    if let Some(ml) = player.look.moments.as_ref().filter(|ml| ml.show_arrows || ml.cells) {
+        if let Ok((x0, y0, x1, y1)) = cr.clip_extents() {
+            crate::rendering::painter::draw_moment_color_legend(cr, x0, y0, x1, y1, ml.style.moment_color_mode, fg);
+        }
     }
 }
 
@@ -1135,41 +1148,42 @@ fn draw_energy_strip(cr: &gtk4::cairo::Context, w: f64, h: f64, player: &Player)
     let _ = cr.show_text("E − E_min per frame (click to jump)");
 }
 
-/// Open the player for the active tab's trajectory.
+/// Open the player for the active tab's trajectory (or a single-frame OVF
+/// magnetization mesh, synthesized into a 1-frame trajectory so it gets the
+/// GPU 3D tilted view, colour map, and topological charge readout).
 pub fn show(parent: &ApplicationWindow, state: Rc<RefCell<AppState>>, notebook: &Notebook) {
     let player = {
         let st = state.borrow();
         let Some(tab) = st.tabs.get(st.active_tab_index) else { return };
-        let Some(traj) = tab.trajectory.clone() else {
-            console::log_info("This structure has a single frame; there is nothing to play.");
-            return;
+        let traj = match tab.trajectory.clone() {
+            Some(t) => t,
+            None => {
+                let Some(s) = tab.structure.as_ref().filter(|s| s.is_ovf_mesh()) else {
+                    console::log_info("This structure has a single frame; there is nothing to play.");
+                    return;
+                };
+                Rc::new(Trajectory {
+                    species: s.atoms.iter().map(|a| a.element.clone()).collect(),
+                    frames: vec![crate::model::trajectory::Frame {
+                        lattice: s.lattice,
+                        positions: std::sync::Arc::new(s.atoms.iter().map(|a| a.position).collect()),
+                        energy: None,
+                        max_force: None,
+                        step: None,
+                        time: None,
+                        magmoms: Some(
+                            s.atoms
+                                .iter()
+                                .map(|a| a.magmom.unwrap_or([0.0; 3]))
+                                .collect(),
+                        ),
+                    }],
+                    is_periodic: s.is_periodic,
+                    format: "OVF",
+                })
+            }
         };
-        let scheme = st.config.color_scheme;
-        let colors = traj
-            .species
-            .iter()
-            .map(|el| rgb(tab.style.element_colors.get(el).copied().unwrap_or_else(|| get_element_color(el, scheme))))
-            .collect();
-        let radii = traj
-            .species
-            .iter()
-            .map(|el| (tab.base_radius(el) * tab.style.atom_scale) as f32)
-            .collect();
-        let look = Look {
-            colors,
-            radii,
-            bond_range: {
-                let table = tab.bond_table();
-                traj.species
-                    .iter()
-                    .flat_map(|a| traj.species.iter().map(|b| table.range(a, b)))
-                    .collect()
-            },
-            bond_radius: tab.style.bond_radius as f32,
-            bond_color: rgb(tab.style.bond_color),
-            background: rgb(tab.style.background_color),
-            moments: MomentLook::new(&traj, &tab.style, tab.style.bond_radius),
-        };
+        let look = Look::for_tab(tab, &traj, st.config.color_scheme);
         let (center, radius) = framing(&traj, &look);
         // A magnetization mesh opens tilted, the way textures are usually
         // shown; anything else starts from the main view's orientation.
@@ -1199,8 +1213,14 @@ pub fn show(parent: &ApplicationWindow, state: Rc<RefCell<AppState>>, notebook: 
         }
     };
     let n = player.traj.len();
-    let has_strip = player.traj.frames.iter().any(|f| f.energy.is_some()) || player.mean_m.iter().any(Option::is_some);
-    let title = format!("Trajectory Player — {} ({} frames, {})", player.file_name, n, player.traj.format);
+    let has_strip = n > 1
+        && (player.traj.frames.iter().any(|f| f.energy.is_some())
+            || player.mean_m.iter().any(Option::is_some));
+    let title = if n == 1 {
+        format!("Trajectory Player — {} (1 frame, {})", player.file_name, player.traj.format)
+    } else {
+        format!("Trajectory Player — {} ({} frames, {})", player.file_name, n, player.traj.format)
+    };
     let player = Rc::new(RefCell::new(player));
 
     let window = gtk4::Window::builder()
@@ -1274,11 +1294,14 @@ pub fn show(parent: &ApplicationWindow, state: Rc<RefCell<AppState>>, notebook: 
     let bonds = gtk4::CheckButton::with_label("Bonds");
     bonds.set_active(player.borrow().show_bonds);
     let save = gtk4::Button::with_label("Save Image…");
-    save.set_tooltip_text(Some("PNG of the 3D view at screen resolution"));
+    save.set_tooltip_text(Some("Supersampled 2× PNG of the 3D view (with colour legend)"));
     let to_main = gtk4::Button::with_label("Show in Main View");
     to_main.set_tooltip_text(Some(
         "Put this frame in the main window, for measurement, analysis and vector export (undo restores the previous one)",
     ));
+    // A single OVF snapshot is the main view's own structure, not a
+    // trajectory of the tab: there is no other frame to show there.
+    to_main.set_visible(n > 1);
     for w in [first.upcast_ref::<gtk4::Widget>(), prev.upcast_ref(), play.upcast_ref(), next.upcast_ref(), last.upcast_ref(), scale.upcast_ref(), readout.upcast_ref()] {
         transport.append(w);
     }
@@ -1296,6 +1319,7 @@ pub fn show(parent: &ApplicationWindow, state: Rc<RefCell<AppState>>, notebook: 
     root.append(&overlay);
     root.append(&strip);
     root.append(&gtk4::Separator::new(gtk4::Orientation::Horizontal));
+    transport.set_visible(n > 1);
     root.append(&transport);
     root.append(&options);
     window.set_child(Some(&root));
@@ -1402,16 +1426,36 @@ pub fn show(parent: &ApplicationWindow, state: Rc<RefCell<AppState>>, notebook: 
                 if let Some(ml) = p.look.moments.as_ref().filter(|ml| ml.show_arrows) {
                     // Half an arrow, which a tilted film shows sticking up.
                     let r = if ml.arrows_only { 0.0 } else { pad };
-                    pad = pad.max(r + 0.5 * ml.largest * ml.scale * ml.length * ml.stride as f64);
+                    pad = pad.max(r + 0.5 * ml.largest * ml.scale * ml.length * (ml.stride as f64).powf(0.75));
                 }
                 p.camera.fit(&pts, pad, w as f64 / h as f64);
                 p.needs_fit = false;
             }
             backend.draw(&p.camera, w, h, p.look.background);
             if let Some(path) = p.pending_png.take() {
-                let pixels = backend.read_pixels(w, h);
-                match save_png(&path, &pixels, w, h) {
-                    Ok(()) => console::log_info(&format!("Saved {} ({}x{})", path.display(), w, h)),
+                let (hw, hh) = p.camera.half_extents(w as f64, h as f64);
+                let out_w = (w.max(1) as u32) * 2;
+                let out_h = (h.max(1) as u32) * 2;
+                let req = crate::rendering::gl::export::ExportRequest {
+                    window: [-hw, hw, -hh, hh],
+                    width: out_w,
+                    height: out_h,
+                    supersample: 2,
+                    background: Some(p.look.background),
+                    line_width_px: 2.5,
+                    max_layers: 1,
+                };
+                let legend = p
+                    .look
+                    .moments
+                    .as_ref()
+                    .filter(|ml| ml.show_arrows || ml.cells)
+                    .map(|ml| ml.style.moment_color_mode);
+                let res = backend
+                    .render_image(&p.camera, &req, &mut |_| {})
+                    .and_then(|img| save_rgba_png(&path, &img, legend, p.look.background));
+                match res {
+                    Ok(()) => console::log_info(&format!("Saved {} ({}x{}, 2x supersampled)", path.display(), out_w, out_h)),
                     Err(e) => console::log_error(&format!("Could not save {}: {e}", path.display())),
                 }
             }
@@ -1688,10 +1732,18 @@ mod tests {
     use crate::model::trajectory::Frame;
 
     fn look(n: usize) -> Look {
+        use crate::model::bonds::{BondRule, BondTable, RuleSource};
         Look {
             colors: vec![[1.0; 3]; n],
             radii: vec![0.5; n],
-            bond_range: vec![Some((0.0, 1.61)); n * n],
+            bond_table: BondTable::from_rules(&[BondRule {
+                a: "C".into(),
+                b: "C".into(),
+                min: 0.0,
+                max: 1.61,
+                enabled: true,
+                source: RuleSource::Covalent,
+            }]),
             bond_radius: 0.1,
             bond_color: [0.5; 3],
             background: [1.0; 3],
@@ -1761,5 +1813,39 @@ mod tests {
         assert_eq!(g.atoms.len(), 1, "the cell with an arrow has no sphere");
         assert_eq!(mean_moments(&t)[0], Some([0.0, 0.0, 0.5]));
         assert_eq!(format_time(1.25e-9), "1.250 ns");
+    }
+
+    /// v1.3.0–v1.3.5 built a bond table per *site pair* on open: 24 bytes ×
+    /// N², about 20 GB for a 512² OVF series, which took the machine down.
+    /// The player's look must stay linear in the number of sites.
+    #[test]
+    fn a_huge_trajectory_opens_without_per_pair_tables() {
+        let n = 300_000; // a per-pair table would need ~2 TB
+        let positions: Vec<[f64; 3]> = (0..n).map(|i| [(i % 600) as f64 * 2.0, (i / 600) as f64 * 2.0, 0.0]).collect();
+        let t = Trajectory {
+            species: vec!["Fe".into(); n],
+            frames: vec![Frame {
+                lattice: [[1200.0, 0.0, 0.0], [0.0, 1000.0, 0.0], [0.0, 0.0, 10.0]],
+                positions: positions.clone().into(),
+                energy: None,
+                max_force: None,
+                step: None,
+                time: None,
+                magmoms: None,
+            }],
+            is_periodic: true,
+            format: "LAMMPS",
+        };
+        let mut tab = crate::state::TabState::new(&crate::config::Config::default());
+        tab.structure = t.structure_at(0);
+        let l = Look::for_tab(&tab, &t, crate::model::elements::ColorScheme::default());
+        assert_eq!(l.colors.len(), n);
+        assert_eq!(l.radii.len(), n);
+        // Bonds are searched per frame through the table (cell lists), not a
+        // site-pair matrix; above the limit they are skipped altogether.
+        assert!(n > MAX_ATOMS_FOR_BONDS);
+        let g = build_frame(&t, &l, 0, false, true, 1.0);
+        assert_eq!(g.atoms.len(), n);
+        assert!(g.bonds.is_empty());
     }
 }

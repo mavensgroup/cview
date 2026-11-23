@@ -62,7 +62,10 @@ pub fn create_tab_content(state: Rc<RefCell<AppState>>, tab_id: usize) -> (Drawi
       rendering::scene::calculate_scene(tab, &st.config, w as f64, h as f64, false, None, None);
 
     // 3. Draw Elements
-    rendering::painter::draw_unit_cell(cr, &lattice_corners, false);
+    let is_ovf = tab.structure.as_ref().is_some_and(|s| s.is_ovf_mesh());
+    if !is_ovf {
+      rendering::painter::draw_unit_cell(cr, &lattice_corners, false);
+    }
     rendering::painter::draw_structure(cr, &atoms, tab, bounds.scale, false, st.config.color_scheme);
     rendering::painter::draw_miller_planes(
       cr,

@@ -397,6 +397,37 @@ pub fn build(
     });
     vbox_mag.append(&check_only);
 
+    let check_cmap = CheckButton::with_label("Mesh colour map");
+    check_cmap.set_tooltip_text(Some(
+        "For OVF magnetization meshes: draw a faded cell colour-map underlay beneath the arrows",
+    ));
+    check_cmap.set_active(state.borrow().active_tab().style.moment_color_map);
+    let s_mcmap = state.clone();
+    let nb_mcmap = nb_weak.clone();
+    let cb_mcmap = queue_active_draw;
+    let id_cmap = check_cmap.connect_toggled(move |btn| {
+        s_mcmap.borrow_mut().active_tab_mut().style.moment_color_map = btn.is_active();
+        cb_mcmap(&nb_mcmap);
+    });
+    vbox_mag.append(&check_cmap);
+
+    let stride_row = GtkBox::new(Orientation::Horizontal, 10);
+    stride_row.append(&Label::new(Some("Arrow every n-th cell:")));
+    let spin_stride = gtk4::SpinButton::with_range(1.0, 64.0, 1.0);
+    spin_stride.set_value(state.borrow().active_tab().style.moment_stride.max(1) as f64);
+    spin_stride.set_tooltip_text(Some(
+        "For OVF magnetization meshes: draw an arrow on every n-th cell in the plane, scaled up to match",
+    ));
+    let s_mstr = state.clone();
+    let nb_mstr = nb_weak.clone();
+    let cb_mstr = queue_active_draw;
+    let id_stride = spin_stride.connect_value_changed(move |sb| {
+        s_mstr.borrow_mut().active_tab_mut().style.moment_stride = (sb.value() as usize).max(1);
+        cb_mstr(&nb_mstr);
+    });
+    stride_row.append(&spin_stride);
+    vbox_mag.append(&stride_row);
+
     let s_ml = state.clone();
     let nb_ml = nb_weak.clone();
     let cb_ml = queue_active_draw;
@@ -415,33 +446,115 @@ pub fn build(
     );
     vbox_mag.append(&len_box);
 
+    // Colour mode, then the up/down colours (Single uses the first).
+    let mode_mrow = GtkBox::new(Orientation::Horizontal, 10);
+    mode_mrow.append(&Label::new(Some("Color by:")));
+    let dd_mcol = DropDown::from_strings(&[
+        "Auto",
+        "Up / Down",
+        "Direction",
+        "m_z (rainbow)",
+        "m_z (blue–white–red)",
+        "Single",
+    ]);
+    dd_mcol.set_hexpand(true);
+    dd_mcol.set_tooltip_text(Some(
+        "Auto: Up / Down for collinear moments, Direction otherwise. \
+         Up / Down: along the direction of the largest moment (sublattices of \
+         antiferro- and ferrimagnets). Direction: hue from the in-plane angle, \
+         white at +z, charcoal at −z. m_z (rainbow): Blue (−z) → Cyan → Green → \
+         Yellow → Orange → Red (+z) as in Nature skyrmion figures. \
+         m_z (blue–white–red): CHGCAR diverging Blue–White–Red scale. Single: one colour.",
+    ));
+    dd_mcol.set_selected(match state.borrow().active_tab().style.moment_color_mode {
+        MomentColorMode::Auto => 0,
+        MomentColorMode::UpDown => 1,
+        MomentColorMode::Direction => 2,
+        MomentColorMode::MzRainbow => 3,
+        MomentColorMode::Mz => 4,
+        MomentColorMode::Single => 5,
+    });
+    mode_mrow.append(&dd_mcol);
+    vbox_mag.append(&mode_mrow);
+
     // These follow the active tab: an OVF mesh sets its own, and switching
     // tabs or opening a file into the empty first tab must show them.
+    let dd_mcol_sync = dd_mcol.downgrade();
     {
         let state = Rc::downgrade(&state);
-        let (check_mag, check_only, len_scale) = (check_mag.downgrade(), check_only.downgrade(), len_scale.downgrade());
+        let (check_mag, check_only, check_cmap, spin_stride, stride_row, len_scale) = (
+            check_mag.downgrade(),
+            check_only.downgrade(),
+            check_cmap.downgrade(),
+            spin_stride.downgrade(),
+            stride_row.downgrade(),
+            len_scale.downgrade(),
+        );
         gtk4::glib::timeout_add_local(std::time::Duration::from_millis(400), move || {
-            let (Some(st), Some(cm), Some(co), Some(ls)) =
-                (state.upgrade(), check_mag.upgrade(), check_only.upgrade(), len_scale.upgrade())
-            else {
+            let (Some(st), Some(cm), Some(co), Some(cc), Some(ss), Some(sr), Some(ls), Some(dd)) = (
+                state.upgrade(),
+                check_mag.upgrade(),
+                check_only.upgrade(),
+                check_cmap.upgrade(),
+                spin_stride.upgrade(),
+                stride_row.upgrade(),
+                len_scale.upgrade(),
+                dd_mcol_sync.upgrade(),
+            ) else {
                 return gtk4::glib::ControlFlow::Break;
             };
-            let Ok(st) = st.try_borrow() else { return gtk4::glib::ControlFlow::Continue };
-            if st.tabs.is_empty() {
-                return gtk4::glib::ControlFlow::Continue;
+            let snap = {
+                let Ok(st) = st.try_borrow() else { return gtk4::glib::ControlFlow::Continue };
+                if st.tabs.is_empty() {
+                    return gtk4::glib::ControlFlow::Continue;
+                }
+                let tab = st.active_tab();
+                let is_ovf = tab.structure.as_ref().is_some_and(|s| s.is_ovf_mesh());
+                let style = &tab.style;
+                (
+                    is_ovf,
+                    style.moment_color_mode,
+                    style.show_moments,
+                    style.moment_arrows_only,
+                    style.moment_color_map,
+                    style.moment_stride.max(1) as f64,
+                    style.moment_scale,
+                )
+            };
+            let (is_ovf, color_mode, show_moments, arrows_only, color_map, st_v, v) = snap;
+            cc.set_visible(is_ovf);
+            sr.set_visible(is_ovf);
+            let want_dd = match color_mode {
+                MomentColorMode::Auto => 0,
+                MomentColorMode::UpDown => 1,
+                MomentColorMode::Direction => 2,
+                MomentColorMode::MzRainbow => 3,
+                MomentColorMode::Mz => 4,
+                MomentColorMode::Single => 5,
+            };
+            if dd.selected() != want_dd {
+                dd.set_selected(want_dd);
             }
-            let style = &st.active_tab().style;
-            if cm.is_active() != style.show_moments {
+            if cm.is_active() != show_moments {
                 cm.block_signal(&id_mag);
-                cm.set_active(style.show_moments);
+                cm.set_active(show_moments);
                 cm.unblock_signal(&id_mag);
             }
-            if co.is_active() != style.moment_arrows_only {
+            if co.is_active() != arrows_only {
                 co.block_signal(&id_only);
-                co.set_active(style.moment_arrows_only);
+                co.set_active(arrows_only);
                 co.unblock_signal(&id_only);
             }
-            let v = style.moment_scale;
+            if cc.is_active() != color_map {
+                cc.block_signal(&id_cmap);
+                cc.set_active(color_map);
+                cc.unblock_signal(&id_cmap);
+            }
+            if (ss.value() - st_v).abs() > 1e-6 {
+                ss.block_signal(&id_stride);
+                ss.set_value(st_v);
+                ss.unblock_signal(&id_stride);
+            }
             if (ls.value() - v).abs() > 1e-6 {
                 let adj = ls.adjustment();
                 adj.set_upper((2.0f64).max((2.0 * v).ceil()));
@@ -452,27 +565,6 @@ pub fn build(
             gtk4::glib::ControlFlow::Continue
         });
     }
-
-    // Colour mode, then the up/down colours (Single uses the first).
-    let mode_mrow = GtkBox::new(Orientation::Horizontal, 10);
-    mode_mrow.append(&Label::new(Some("Color by:")));
-    let dd_mcol = DropDown::from_strings(&["Auto", "Up / Down", "Direction", "Single"]);
-    dd_mcol.set_hexpand(true);
-    dd_mcol.set_tooltip_text(Some(
-        "Auto: Up / Down for collinear moments, Direction otherwise. \
-         Up / Down: along the direction of the largest moment (sublattices of \
-         antiferro- and ferrimagnets). Direction: hue from the in-plane angle, \
-         white at +z, black at −z (canted moments, spirals, skyrmions). \
-         Single: one colour.",
-    ));
-    dd_mcol.set_selected(match state.borrow().active_tab().style.moment_color_mode {
-        MomentColorMode::Auto => 0,
-        MomentColorMode::UpDown => 1,
-        MomentColorMode::Direction => 2,
-        MomentColorMode::Single => 3,
-    });
-    mode_mrow.append(&dd_mcol);
-    vbox_mag.append(&mode_mrow);
 
     let box_mcol = GtkBox::new(Orientation::Horizontal, 10);
     let color_button = |c: (f64, f64, f64), down: bool| {
@@ -517,7 +609,10 @@ pub fn build(
         let (lbl_up, btn_up, lbl_down, btn_down, row) =
             (lbl_up.clone(), btn_up.clone(), lbl_down.clone(), btn_down.clone(), box_mcol.clone());
         move |mode: MomentColorMode| {
-            row.set_visible(mode != MomentColorMode::Direction);
+            row.set_visible(!matches!(
+                mode,
+                MomentColorMode::Direction | MomentColorMode::MzRainbow | MomentColorMode::Mz
+            ));
             lbl_up.set_label(if mode == MomentColorMode::Single { "Color:" } else { "Up:" });
             let two = matches!(mode, MomentColorMode::UpDown | MomentColorMode::Auto);
             lbl_down.set_visible(two);
@@ -533,7 +628,9 @@ pub fn build(
         let mode = match dd.selected() {
             1 => MomentColorMode::UpDown,
             2 => MomentColorMode::Direction,
-            3 => MomentColorMode::Single,
+            3 => MomentColorMode::MzRainbow,
+            4 => MomentColorMode::Mz,
+            5 => MomentColorMode::Single,
             _ => MomentColorMode::Auto,
         };
         s_mm.borrow_mut().active_tab_mut().style.moment_color_mode = mode;

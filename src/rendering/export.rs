@@ -192,7 +192,9 @@ pub fn setup_drawing(drawing_area: &DrawingArea, state: Rc<RefCell<AppState>>) {
         let (render_atoms, lattice_corners, bounds) =
             scene::calculate_scene(tab, &st.config, w, h, false, None, None);
 
-        painter::draw_unit_cell(cr, &lattice_corners, false);
+        if !tab.structure.as_ref().is_some_and(|s| s.is_ovf_mesh()) {
+            painter::draw_unit_cell(cr, &lattice_corners, false);
+        }
         painter::draw_structure(cr, &render_atoms, tab, bounds.scale, false, st.config.color_scheme);
         painter::draw_axes(cr, tab, w, h);
     });
@@ -441,8 +443,9 @@ fn draw_export_content(
     settings: &ExportSettings,
     color_scheme: crate::model::elements::ColorScheme,
 ) {
-    // Unit cell
-    if settings.include_unit_cell {
+    // Unit cell (omitted for OVF magnetization meshes, which fill their box)
+    let is_ovf = tab.structure.as_ref().is_some_and(|s| s.is_ovf_mesh());
+    if settings.include_unit_cell && !is_ovf {
         painter::draw_unit_cell(cr, lattice_corners, true);
     }
 

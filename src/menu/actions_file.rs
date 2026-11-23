@@ -227,6 +227,7 @@ pub fn setup(
         filter_struct.add_pattern("*.mcif");
         filter_struct.add_pattern("*.ovf");
         filter_struct.add_pattern("*.omf");
+        filter_struct.add_pattern("*.ohf");
         filter_struct.add_pattern("*.CIF");
         filter_struct.add_pattern("*.xyz");
         filter_struct.add_pattern("*.pdb");
@@ -272,7 +273,7 @@ pub fn setup(
         dialog.add_filter(&f_cif);
 
         let f_ovf = FileFilter::new();
-        f_ovf.set_name(Some("Magnetization, mumax3 / OOMMF / Spirit (*.ovf, *.omf)"));
+        f_ovf.set_name(Some("Magnetization, mumax3 / OOMMF / Spirit (*.ovf, *.omf, *.ohf)"));
         f_ovf.add_pattern("*.ovf");
         f_ovf.add_pattern("*.omf");
         f_ovf.add_pattern("*.ohf");
