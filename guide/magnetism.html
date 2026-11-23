@@ -56,7 +56,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-0a6c3b2f.js";
+            window.path_to_searchindex_js = "../searchindex-9a1ceaae.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f492e3cf.js"></script>
@@ -259,6 +259,11 @@ The Bilbao <strong>MAGNDATA</strong> database provides published structures in t
 <li>A file in the folder with a different mesh, or one that cannot be read, is left out with a warning.</li>
 <li>Other quantities in the same folder (<code>B_ext000000.ovf</code>) and unnumbered files (<code>m.ovf</code>) are not part of the series.</li>
 </ul>
+<h4 id="topological-charge-and-skyrmion-radius"><a class="header" href="#topological-charge-and-skyrmion-radius">Topological charge and skyrmion radius</a></h4>
+<p>For a magnetization mesh, the Trajectory Player shows the topological charge of the current frame and plots it for every frame:</p>
+<p>$$Q = \frac{1}{4\pi}\int \mathbf{m}\cdot\left(\partial_a \mathbf{m}\times\partial_b \mathbf{m}\right),da,db$$</p>
+<p>It is computed on the lattice after Berg and Lüscher: each plaquette of four cells is split into two triangles, and the solid angles their unit vectors span are summed. No derivatives are needed, and Q lands on an integer for a smooth texture. (a, b) are the in-plane axes taken right-handed about the film normal (the axis with the fewest cells), so a skyrmion whose core points along +z in a −z background has Q = +1, and one with the opposite polarity has Q = −1. Bloch and Néel skyrmions give the same Q. Cells outside the magnet (zero moment) are skipped. For a film several cells thick, Q is averaged over the layers.</p>
+<p>When |Q| rounds to 1, the radius <strong>R</strong> is shown too: the radius of a disc with the same area as the reversed core (cells whose normal component is opposite to the background’s). It follows the m_z = 0 contour to within about half a cell. For several skyrmions, no radius is given.</p>
 <hr>
 <h2 id="showing-the-moments"><a class="header" href="#showing-the-moments">Showing the moments</a></h2>
 <p>The <strong>Magnetic Moments</strong> group in the sidebar (under <strong>Appearance</strong>) controls the arrows for the active tab. The settings are per tab and are not saved between sessions.</p>

@@ -57,7 +57,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0a6c3b2f.js";
+            window.path_to_searchindex_js = "searchindex-9a1ceaae.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f492e3cf.js"></script>
@@ -213,7 +213,7 @@
 
 <p><a href="https://mavens-group.github.io/">The Mavens Group</a></p>
 
-<p class="version">v1.3.4 (2026)</p>
+<p class="version">v1.3.5 (2026)</p>
 
 </div>
 
@@ -652,9 +652,9 @@ CView automatically detects the file type based on extension and content. You ca
 <p><code>Structure → Trajectory Player… (Ctrl + Shift + P)</code> plays them in a separate window drawn on the GPU:</p>
 <ul>
 <li>Play, step and jump with the buttons or <strong>Space</strong>, <strong>, / .</strong> (or <strong>← / →</strong>), <strong>Home / End</strong>; set the speed in frames per second.</li>
-<li>For relaxations, the energy of every step is plotted under the view (click to jump), with the energy, ΔE and largest force of the current step on screen. Without energies (an OVF series), the plot shows the mean moment ⟨m_x⟩, ⟨m_y⟩, ⟨m_z⟩ per frame instead, and the simulation time is shown.</li>
-<li><strong>View x / y / z</strong> looks down a Cartesian axis and refits the view.</li>
-<li>When the frames carry magnetic moments, a row of moment controls appears: <strong>Arrows</strong> on/off, <strong>Length</strong>, <strong>Width</strong>, and <strong>Colour</strong> (<em>Direction</em>: hue from the in-plane angle, white at +z, black at −z, as in mumax3; <em>m_z</em> on a blue–white–red scale; <em>Up / down</em>; or one colour). For a magnetization mesh there are also <strong>Every</strong> (an arrow on every n-th cell in the plane, the arrows growing to match) and <strong>Colour map</strong> (every cell drawn as a flat tile in its moment’s colour, with grey arrows on top). A large mesh opens with the colour map on and the arrows thinned to about 48 along the longest side.</li>
+<li>For relaxations, the energy of every step is plotted under the view (click to jump), with the energy, ΔE and largest force of the current step on screen. Without energies (an OVF series), the plot shows the mean moment ⟨m_x⟩, ⟨m_y⟩, ⟨m_z⟩ per frame instead, and the simulation time is shown. On a magnetization mesh the plot also shows the topological charge <strong>Q</strong> per frame (dashed, on its own axis at the right), so nucleation and annihilation show up as steps; see <a href="#topological-charge-and-skyrmion-radius">Topological charge</a>.</li>
+<li><strong>View x / y / z</strong> looks down a Cartesian axis and refits the view. <strong>Tilt</strong> looks at the film from 55° off its normal (the far edge away from you), the usual angle for skyrmion figures, and refits. A magnetization mesh opens in this view; other trajectories open in the main view’s orientation.</li>
+<li>When the frames carry magnetic moments, a row of moment controls appears: <strong>Arrows</strong> on/off, <strong>Length</strong>, <strong>Width</strong>, and <strong>Colour</strong> (<em>Direction</em>: hue from the in-plane angle, white at +z, black at −z, as in mumax3; <em>m_z</em> on a blue–white–red scale; <em>Up / down</em>; or one colour). For a magnetization mesh there are also <strong>Every</strong> (an arrow on every n-th cell in the plane, the arrows growing to match) and <strong>Colour map</strong> (every cell drawn as a flat tile in its moment’s colour, faded towards the background so the arrows on top, in full colour, stand out). A large mesh opens with the colour map on and the arrows thinned to about 24 along the longest side, which stays readable when the film is tilted. The view is antialiased.</li>
 <li><strong>Show in Main View</strong> copies the current frame into the main window for measurements, analysis and vector export; <strong>Undo</strong> restores the previous structure.</li>
 <li><strong>Save Image…</strong> writes the 3D view as a PNG.</li>
 </ul>
@@ -1688,6 +1688,11 @@ The Bilbao <strong>MAGNDATA</strong> database provides published structures in t
 <li>A file in the folder with a different mesh, or one that cannot be read, is left out with a warning.</li>
 <li>Other quantities in the same folder (<code>B_ext000000.ovf</code>) and unnumbered files (<code>m.ovf</code>) are not part of the series.</li>
 </ul>
+<h4 id="topological-charge-and-skyrmion-radius"><a class="header" href="#topological-charge-and-skyrmion-radius">Topological charge and skyrmion radius</a></h4>
+<p>For a magnetization mesh, the Trajectory Player shows the topological charge of the current frame and plots it for every frame:</p>
+<p>$$Q = \frac{1}{4\pi}\int \mathbf{m}\cdot\left(\partial_a \mathbf{m}\times\partial_b \mathbf{m}\right),da,db$$</p>
+<p>It is computed on the lattice after Berg and Lüscher: each plaquette of four cells is split into two triangles, and the solid angles their unit vectors span are summed. No derivatives are needed, and Q lands on an integer for a smooth texture. (a, b) are the in-plane axes taken right-handed about the film normal (the axis with the fewest cells), so a skyrmion whose core points along +z in a −z background has Q = +1, and one with the opposite polarity has Q = −1. Bloch and Néel skyrmions give the same Q. Cells outside the magnet (zero moment) are skipped. For a film several cells thick, Q is averaged over the layers.</p>
+<p>When |Q| rounds to 1, the radius <strong>R</strong> is shown too: the radius of a disc with the same area as the reversed core (cells whose normal component is opposite to the background’s). It follows the m_z = 0 contour to within about half a cell. For several skyrmions, no radius is given.</p>
 <hr>
 <h2 id="showing-the-moments"><a class="header" href="#showing-the-moments">Showing the moments</a></h2>
 <p>The <strong>Magnetic Moments</strong> group in the sidebar (under <strong>Appearance</strong>) controls the arrows for the active tab. The settings are per tab and are not saved between sessions.</p>
@@ -1842,7 +1847,8 @@ species limit.</li>
 as arrows.</li>
 <li><input disabled="" type="checkbox" checked=""> <strong>OVF snapshot series</strong> play in the Trajectory Player, with moment
 arrows and a colour map.</li>
-<li><input disabled="" type="checkbox"> Topological charge of a spin texture; build skyrmion lattices.</li>
+<li><input disabled="" type="checkbox" checked=""> Topological charge Q and skyrmion radius per frame in the Trajectory Player.</li>
+<li><input disabled="" type="checkbox"> Build skyrmion lattices; m_z = 0 isosurface for thick films.</li>
 <li><input disabled="" type="checkbox"> Magnetic moment arrows in the 3D charge density window.</li>
 <li><input disabled="" type="checkbox"> <strong>Thermal ellipsoids</strong> from anisotropic displacement parameters in CIF.</li>
 <li><input disabled="" type="checkbox"> Overlay two structures in one view.</li>
