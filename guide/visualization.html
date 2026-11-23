@@ -56,7 +56,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-9a1ceaae.js";
+            window.path_to_searchindex_js = "../searchindex-6d79368a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f492e3cf.js"></script>
@@ -235,9 +235,10 @@ CView automatically detects the file type based on extension and content. You ca
 <li>Play, step and jump with the buttons or <strong>Space</strong>, <strong>, / .</strong> (or <strong>← / →</strong>), <strong>Home / End</strong>; set the speed in frames per second.</li>
 <li>For relaxations, the energy of every step is plotted under the view (click to jump), with the energy, ΔE and largest force of the current step on screen. Without energies (an OVF series), the plot shows the mean moment ⟨m_x⟩, ⟨m_y⟩, ⟨m_z⟩ per frame instead, and the simulation time is shown. On a magnetization mesh the plot also shows the topological charge <strong>Q</strong> per frame (dashed, on its own axis at the right), so nucleation and annihilation show up as steps; see <a href="magnetism.html#topological-charge-and-skyrmion-radius">Topological charge</a>.</li>
 <li><strong>View x / y / z</strong> looks down a Cartesian axis and refits the view. <strong>Tilt</strong> looks at the film from 55° off its normal (the far edge away from you), the usual angle for skyrmion figures, and refits. A magnetization mesh opens in this view; other trajectories open in the main view’s orientation.</li>
-<li>When the frames carry magnetic moments, a row of moment controls appears: <strong>Arrows</strong> on/off, <strong>Length</strong>, <strong>Width</strong>, and <strong>Colour</strong> (<em>Direction</em>: hue from the in-plane angle, white at +z, black at −z, as in mumax3; <em>m_z</em> on a blue–white–red scale; <em>Up / down</em>; or one colour). For a magnetization mesh there are also <strong>Every</strong> (an arrow on every n-th cell in the plane, the arrows growing to match) and <strong>Colour map</strong> (every cell drawn as a flat tile in its moment’s colour, faded towards the background so the arrows on top, in full colour, stand out). A large mesh opens with the colour map on and the arrows thinned to about 24 along the longest side, which stays readable when the film is tilted. The view is antialiased.</li>
+<li>When the frames carry magnetic moments, a row of moment controls appears: <strong>Arrows</strong> on/off, <strong>Length</strong>, <strong>Width</strong>, and <strong>Colour</strong> (<em>Direction</em>: hue from the in-plane angle, white at +z, charcoal at −z, as in mumax3; <em>m_z (rainbow)</em>; <em>m_z (blue–white–red)</em>; <em>Up / down</em>; or one colour; see <a href="magnetism.html#showing-the-moments">Magnetism</a>). Direction and the m_z scales get a colour legend in the bottom-right corner. For a magnetization mesh there are also <strong>Every</strong> (an arrow on every n-th cell in the plane, the arrows growing to match) and <strong>Colour map</strong> (every cell drawn as a flat tile in its moment’s colour, faded towards the background so the arrows on top, in full colour, stand out; on a film several cells thick only the layer facing you is tiled). A large mesh opens with the colour map on and the arrows thinned to about 24 along the longest side, which stays readable when the film is tilted. The view is antialiased.</li>
 <li><strong>Show in Main View</strong> copies the current frame into the main window for measurements, analysis and vector export; <strong>Undo</strong> restores the previous structure.</li>
-<li><strong>Save Image…</strong> writes the 3D view as a PNG.</li>
+<li><strong>Save Image…</strong> writes the 3D view as a PNG at twice the window’s resolution, supersampled, with the colour legend.</li>
+<li>A single OVF snapshot opens in the player too, without the transport controls, the plot or Show in Main View, for the tilted view and its Q and R readout.</li>
 </ul>
 <h3 id="tab-management"><a class="header" href="#tab-management">Tab Management</a></h3>
 <p>CView uses a tabbed interface to handle multiple structures simultaneously. The application employs a <strong>smart loading strategy</strong> to keep the workspace clean:</p>
