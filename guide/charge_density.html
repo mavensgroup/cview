@@ -56,7 +56,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-6d79368a.js";
+            window.path_to_searchindex_js = "../searchindex-83de9800.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f492e3cf.js"></script>
@@ -232,7 +232,7 @@
 <p>The <strong>3D Isosurface</strong> page draws isosurfaces of the density together with the atoms and cell, on the GPU (OpenGL 3.3). In this mode the right-hand pane shows the 3D controls.</p>
 <h3 id="surfaces"><a class="header" href="#surfaces">Surfaces</a></h3>
 <ul>
-<li><strong>Isovalue</strong> in e/Å³: the logarithmic slider for exploring, the box for an exact value, or a click on the |ρ| histogram under the view.</li>
+<li><strong>Isovalue</strong> in e/Å³ (μB/Å³ for the magnetization density): the logarithmic slider for exploring, the box for an exact value, or a click on the |ρ| histogram under the view.</li>
 <li><strong>Set by enclosed charge</strong>: choose the fraction of the electrons the surface should enclose (e.g. 50%) and CView finds the isovalue. This compares across systems in a way an absolute isovalue does not.</li>
 <li><strong>Lobes</strong>: +, − or ± (difference and spin densities are detected and shown as ± automatically), with opacity and a colour for each sign.</li>
 <li><strong>Ambient occlusion</strong> darkens crevices and contacts between lobes and atoms, which makes the shape readable in print.</li>
@@ -241,8 +241,45 @@
 <p>Surfaces are watertight (no pinholes) and continue seamlessly across cell faces. They are recomputed in the background as you move the slider.</p>
 <h3 id="section-plane-and-cut-away"><a class="header" href="#section-plane-and-cut-away">Section plane and cut-away</a></h3>
 <p><strong>Section plane</strong> draws the density on any $(hkl)$ plane, coloured on a logarithmic scale (or blue–white–red for difference and spin densities) with a contour at the isovalue. <strong>Cut away beyond the plane</strong> removes surfaces and atoms on one side, so the section becomes the cut face.</p>
+<h3 id="focusing-on-a-defect"><a class="header" href="#focusing-on-a-defect">Focusing on a defect</a></h3>
+<ul>
+<li>
+<p><strong>Bonds</strong> joins the atoms shown, by the default bond rules (VESTA’s list, else covalent radii), so the coordination around the surfaces is readable.</p>
+</li>
+<li>
+<p><strong>Atom size</strong> scales the spheres, so small atoms leave the surfaces around them visible.</p>
+</li>
+<li>
+<p><strong>Reverse sign</strong> shows −ρ. For a spin density this is the same state with every spin reversed, which a collinear calculation cannot tell apart, so a configuration that converged spin-down can be drawn in the same colours as a spin-up one.</p>
+</li>
+<li>
+<p><strong>Crop to a box</strong> shows only the atoms and surfaces inside a box around a point, for example a vacancy and the polarons next to it. Give the centre in fractional coordinates, or type an atom’s number (in file order, as in VASP’s OUTCAR) and press <strong>Centre on atom</strong>. <strong>Box edge</strong> is in Å; the box may reach past the cell, and periodic images fill it. With <strong>Cell</strong> ticked, the box’s edges are drawn instead of the cell’s. The view (and an exported figure) is framed on what the box contains, not on its corners.</p>
+</li>
+<li>
+<p><strong>Markers</strong> label a point or an atom. Type <code>x y z label</code> in fractional coordinates (e.g. <code>0.385 0.617 0.615 V_O</code>), or <code>#N label</code> for atom N in file order (e.g. <code>#16 NN</code>). Then pick a style and press <strong>Mark</strong>. <code>_</code> starts a subscript, so <code>V_O</code> prints as V with a subscript O.</p>
+<ul>
+<li><strong>Cube</strong>: a small wire cube with the label above it, for an empty site such as a vacancy.</li>
+<li><strong>Ring</strong>: a thin circle around the point, 1.25 × the atom’s radius when an atom sits there (within 0.3 Å), otherwise a small fixed radius.</li>
+<li><strong>Dot</strong>: a small filled dot.</li>
+<li><strong>Label only</strong>: just the text.</li>
+</ul>
+<p>Ring, dot and label-only markers place their label beside the point, outside the atom drawn there, on the side that covers the fewest other labels and the fewest atoms in front of it. Rings, dots and labels are drawn over the picture on screen and, in exported PDF and SVG figures, as vector paths and text with a thin white halo. Cube markers keep the look they always had.</p>
+</li>
+<li>
+<p><strong>Highlight magnetic sites</strong> colours the atoms whose moment in the run’s OUTCAR exceeds 0.5 μB, for example the Ce³⁺ of a polaron. The moments come from the OUTCAR’s last magnetization table, or from the DFT+U shells when it has none. Individual atoms can be recoloured or resized in a scene file (see below).</p>
+</li>
+</ul>
+<h3 id="orbital-glyphs-dftu"><a class="header" href="#orbital-glyphs-dftu">Orbital glyphs (DFT+U)</a></h3>
+<p>For a VASP DFT+U run written with <code>LDAUPRINT = 1</code> or <code>2</code>, CView reads the on-site occupation matrices from the OUTCAR and draws each +U shell’s orbitals on its atom. The OUTCAR next to the CHGCAR is read automatically; <strong>Load OUTCAR…</strong> picks another one. Only collinear runs are supported.</p>
+<ul>
+<li><strong>Occupied orbitals</strong> diagonalises each spin’s occupation matrix and draws every eigenvector with occupation at least the <strong>Threshold</strong> (0.5 by default). A localised electron, such as the 4f¹ of a Ce³⁺ polaron or an e_g electron of Mn³⁺, shows up as one occupation near 1. The two colours are the two signs of ψ.</li>
+<li><strong>Shell spin density</strong> draws ρ↑ − ρ↓ of each shell whose moment is at least the threshold (in μB), all at one isovalue, so weaker shells look smaller. Use it for orbital order when no single orbital stands out.</li>
+<li><strong>Size</strong> is how far the largest lobe reaches from its atom (Å). <strong>Lobe level</strong> is the isovalue as a fraction of the peak: lower values give fatter lobes, and higher values leave only the dominant ones.</li>
+<li>The shapes use VASP’s real spherical harmonics in the cell’s Cartesian frame, with a Slater-type radial part, so they look like textbook orbitals. The orientation is exact, but the size is schematic. The orbitals drawn, with their occupations and coefficients, are listed in Structure Info.</li>
+<li>Untick <strong>Surfaces</strong> (Display) to show the glyphs without the density isosurfaces. Exported figures list the glyph colours in the key, and scene files keep the glyph settings.</li>
+</ul>
 <h3 id="numbers"><a class="header" href="#numbers">Numbers</a></h3>
-<p>The view lists the electrons and volume inside each lobe. <strong>Report Enclosed Charge</strong> writes them, the isovalue and ∫ρ dV over the cell to Structure Info.</p>
+<p>The view lists the electrons and volume inside each lobe (the moment in μB for the magnetization density). <strong>Report Enclosed Charge</strong> writes them, the isovalue and ∫ρ dV over the cell to Structure Info.</p>
 <h3 id="figures-for-publication"><a class="header" href="#figures-for-publication">Figures for publication</a></h3>
 <p><strong>Export Figure…</strong> produces a journal-ready image:</p>
 <ul>
@@ -250,8 +287,39 @@
 <li>Fonts and lines are set in points at final size (Nature asks for 5–7 pt); the dialog warns if a Nature figure is taller than 170 mm.</li>
 <li><strong>PDF / SVG</strong> contain the picture at full resolution with the title, isovalue key, colour bar, axes, scale bar and panel letter as vector text, editable in Illustrator or Inkscape. <strong>PNG / TIFF</strong> carry the dpi, so they open at print size.</li>
 <li>Transparency is rendered exactly, edges are supersampled, and the background can be transparent for assembling multi-panel figures.</li>
-<li>A scene file (<code>.cview.json</code>) is saved next to every figure. <strong>Load Scene…</strong> restores the view, isovalue and all settings, so a requested change is quick to make.</li>
+<li>A scene file (<code>.cview.json</code>) is saved next to every figure. <strong>Load Scene…</strong> restores the view, isovalue, density channel, sign, crop box, markers, highlights, bonds and all other settings, so a requested change is quick to make.</li>
 </ul>
+<h4 id="figures-from-a-script"><a class="header" href="#figures-from-a-script">Figures from a script</a></h4>
+<p>A scene file can also be rendered without clicking, which is useful for making the same figure from several calculations:</p>
+<pre><code class="language-bash">CVIEW_CD_FIGURE=spin.pdf CVIEW_CD_SCENE=spin.cview.json cview path/to/CHGCAR
+</code></pre>
+<p>CView opens the CHGCAR on the 3D page, applies the scene (its channel, view, crop, markers and figure settings), writes the figure and its scene file, and quits. Scene files are JSON, so a script can write them; the <code>rotation</code> is a quaternion <code>[x, y, z, w]</code> that turns Cartesian coordinates into screen coordinates (x right, y down, z into the screen).</p>
+<p>Scene keys for labelling a figure. All of them are optional; a scene without them looks as it always did.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Key</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>markers[].frac</code>, <code>label</code></td><td>Fractional position and text (<code>_</code> starts a subscript).</td></tr>
+<tr><td><code>markers[].style</code></td><td><code>"cube"</code> (default), <code>"ring"</code>, <code>"dot"</code> or <code>"none"</code> (label only).</td></tr>
+<tr><td><code>markers[].color</code></td><td><code>[r, g, b]</code> (0–1) for a ring or dot; the annotation ink by default.</td></tr>
+<tr><td><code>markers[].anchor</code></td><td><code>"above"</code> (default), <code>"below"</code>, <code>"left"</code>, <code>"right"</code> or <code>"auto"</code>.</td></tr>
+<tr><td><code>markers[].label_offset</code></td><td><code>[dx, dy]</code> in points, right and down, applied after anchoring.</td></tr>
+<tr><td><code>highlight[]</code></td><td><code>{"index": N}</code> (from 1, file order) or <code>{"frac": [x, y, z]}</code> (the atom within 0.3 Å), with optional <code>"color": [r, g, b]</code> and <code>"scale"</code> (radius factor, default 1).</td></tr>
+<tr><td><code>highlight_magnetic</code></td><td><code>{"threshold": 0.5, "color": [r, g, b], "scale": 1}</code>: every site with |m| above the threshold.</td></tr>
+</tbody>
+</table>
+</div>
+<p>For example, to label the vacancy, the two Ce³⁺ of a polaron pair and one O ligand, with the Ce³⁺ drawn in gold:</p>
+<pre><code class="language-json">"markers": [
+  {"frac": [0.385, 0.617, 0.615], "label": "V_O"},
+  {"frac": [0.506, 0.758, 0.756], "label": "Ce_NN", "style": "ring", "anchor": "auto"},
+  {"frac": [0.244, 0.759, 0.494], "label": "Ce_NN", "style": "ring", "anchor": "auto"},
+  {"frac": [0.630, 0.880, 0.880], "label": "O_trans", "style": "ring", "anchor": "auto"}
+],
+"highlight_magnetic": {"threshold": 0.5, "color": [0.93, 0.68, 0.10]}
+</code></pre>
 <p><strong>Export Mesh</strong> writes the surfaces as OBJ (with colours) or PLY for Blender or ParaView.</p>
 <h2 id="advanced-features"><a class="header" href="#advanced-features">Advanced Features</a></h2>
 <h3 id="picture-in-picture-3d-preview"><a class="header" href="#picture-in-picture-3d-preview">Picture-in-Picture 3D Preview</a></h3>
