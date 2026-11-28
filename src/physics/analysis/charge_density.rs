@@ -11,7 +11,7 @@ use std::borrow::Cow;
 // ---------------------------------------------------------------------------
 
 /// Which density channel to visualize
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum DensityChannel {
     Total,
     SpinUp,

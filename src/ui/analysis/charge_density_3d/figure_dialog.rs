@@ -85,12 +85,12 @@ fn annotations(v: &View, s: &FigureSettings, window: [f64; 4], page: &Page) -> A
     }
     if s.key {
         let iso = figure::format_value(v.iso);
-        let unit = "e/Å³";
+        let (sym, unit) = (f.symbol(), f.unit());
         if v.lobes != Lobes::Negative && v.lobes_now[0].is_some() {
-            a.key.push((v.color_pos.map(|c| c as f64), format!("ρ = +{iso} {unit}")));
+            a.key.push((v.color_pos.map(|c| c as f64), format!("{sym} = +{iso} {unit}")));
         }
         if v.lobes != Lobes::Positive && v.lobes_now[1].is_some() {
-            a.key.push((v.color_neg.map(|c| c as f64), format!("ρ = −{iso} {unit}")));
+            a.key.push((v.color_neg.map(|c| c as f64), format!("{sym} = −{iso} {unit}")));
         }
     }
     if s.color_bar && v.section.show {
@@ -99,7 +99,11 @@ fn annotations(v: &View, s: &FigureSettings, window: [f64; 4], page: &Page) -> A
             signed,
             lo: if signed { 0.0 } else { f.abs_max() * 1e-4 },
             hi: if signed { v.iso } else { f.abs_max() },
-            label: if signed { "Δρ (e/Å³)".into() } else { "ρ (e/Å³, log scale)".into() },
+            label: match (signed, f.symbol()) {
+                (true, "m") => format!("m ({})", f.unit()),
+                (true, _) => format!("Δρ ({})", f.unit()),
+                (false, sym) => format!("{sym} ({}, log scale)", f.unit()),
+            },
         });
     }
     if s.axes {
@@ -119,9 +123,26 @@ fn annotations(v: &View, s: &FigureSettings, window: [f64; 4], page: &Page) -> A
         let pt_per_a = page.width_pt() / width_a;
         a.scale_bar = Some((figure::nice_length(width_a * 0.2), pt_per_a));
     }
+    // Marker labels, just above their cubes.
+    {
+        let view = v.camera.view().cast::<f64>();
+        let [l0, r0, b0, t0] = window;
+        let pt_per_a = page.width_pt() / (r0 - l0);
+        for m in v.markers.iter().filter(|m| !m.label.is_empty()) {
+            for c in super::marker_positions(f, &v.crop, m) {
+                let p = view * Vector4::new(c.x, c.y, c.z, 1.0);
+                if p.x < l0 || p.x > r0 || p.y < b0 || p.y > t0 {
+                    continue;
+                }
+                let x = (p.x - l0) / (r0 - l0) * page.width_pt();
+                let y = (t0 - p.y) / (t0 - b0) * page.height_pt() - super::MARKER_HALF * 1.5 * pt_per_a - s.font_pt * 0.6;
+                a.labels.push((m.label.clone(), x, y));
+            }
+        }
+    }
     if s.atom_labels {
         let view = v.camera.view().cast::<f64>();
-        let spheres = super::atom_spheres(f);
+        let spheres = super::atom_spheres(f, &v.crop, v.atom_scale);
         let proj: Vec<(String, Vector4<f64>, f64)> = spheres
             .iter()
             .map(|(el, c, r)| (el.clone(), view * Vector4::new(c.x, c.y, c.z, 1.0), *r))

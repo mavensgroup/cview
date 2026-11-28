@@ -2056,6 +2056,14 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
             Ok(data) => inject_primary(data, name),
             Err(e) => crate::utils::console::log_error(&format!("Could not read {}: {e}", path.display())),
         }
+        if let Some(out) = std::env::var_os("CVIEW_CD_FIGURE") {
+            stack.set_visible_child_name("iso3d");
+            super::charge_density_3d::run_figure_script(
+                parts3d.handle.clone(),
+                out.into(),
+                std::env::var_os("CVIEW_CD_SCENE").map(Into::into),
+            );
+        }
     }
 
     root

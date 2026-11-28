@@ -30,6 +30,14 @@ pub struct OpenContext {
 /// otherwise in a new tab.
 pub fn open_path(ctx: &OpenContext, path_str: &str) {
     let Some(st_rc) = ctx.state.upgrade() else { return };
+    if std::env::var_os("CVIEW_CD_FIGURE").is_some() {
+        // Scripted charge-density figure: the file is a CHGCAR for the
+        // Charge Density window, not a structure for a tab.
+        if let Some(win) = ctx.window.upgrade() {
+            crate::ui::analysis::window::show_charge_density_window_with(&win, st_rc, Some(std::path::Path::new(path_str)));
+        }
+        return;
+    }
     let filename = std::path::Path::new(path_str)
         .file_name()
         .unwrap_or_default()

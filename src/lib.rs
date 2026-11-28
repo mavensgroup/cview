@@ -32,11 +32,11 @@ use utils::console;
 /// Launch the CView GTK application. This is the entire body of the
 /// `cview` binary; it is exposed here so the crate root stays a library.
 pub fn run() {
-    // A debugging snapshot run (CVIEW_PLAYER_SNAPSHOT) must be its own
+    // A debugging snapshot run (CVIEW_PLAYER_SNAPSHOT, CVIEW_CD_FIGURE) must be its own
     // instance: it quits when done, and must not hand its file to a running
     // CView.
     let mut flags = gtk4::gio::ApplicationFlags::HANDLES_OPEN;
-    if std::env::var_os("CVIEW_PLAYER_SNAPSHOT").is_some() {
+    if std::env::var_os("CVIEW_PLAYER_SNAPSHOT").is_some() || std::env::var_os("CVIEW_CD_FIGURE").is_some() {
         flags |= gtk4::gio::ApplicationFlags::NON_UNIQUE;
     }
     let app = Application::builder()

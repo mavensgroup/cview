@@ -12,7 +12,8 @@
 //   POV-Ray.
 
 use super::figure_dialog::FigureSettings;
-use super::{IsoMode, Lobe, Lobes, SectionState, View};
+use super::{CropState, IsoMode, Lobe, Lobes, Marker, SectionState, View};
+use crate::physics::analysis::charge_density::DensityChannel;
 use crate::utils::console;
 use gtk4::prelude::*;
 use gtk4::glib;
@@ -46,6 +47,25 @@ pub(super) struct Scene {
     pub section: SectionState,
     #[serde(default)]
     pub figure: Option<FigureSettings>,
+    /// Total, spin-up, spin-down or magnetization. Absent in scenes saved
+    /// before it was recorded: those keep the current channel.
+    #[serde(default)]
+    pub channel: Option<DensityChannel>,
+    #[serde(default)]
+    pub crop: CropState,
+    #[serde(default = "one")]
+    pub atom_scale: f64,
+    #[serde(default)]
+    pub markers: Vec<Marker>,
+    /// Absent in older scenes, which had no bonds.
+    #[serde(default)]
+    pub show_bonds: bool,
+    #[serde(default)]
+    pub flip: bool,
+}
+
+fn one() -> f64 {
+    1.0
 }
 
 pub(super) fn from_view(v: &View, figure: Option<FigureSettings>) -> Option<Scene> {
@@ -69,6 +89,12 @@ pub(super) fn from_view(v: &View, figure: Option<FigureSettings>) -> Option<Scen
         show_cell: v.show_cell,
         section: v.section,
         figure,
+        channel: Some(f.channel),
+        crop: v.crop,
+        atom_scale: v.atom_scale,
+        markers: v.markers.clone(),
+        show_bonds: v.show_bonds,
+        flip: v.flip,
     })
 }
 
@@ -102,6 +128,14 @@ pub(super) struct SceneWidgets {
     pub k: glib::WeakRef<gtk4::SpinButton>,
     pub l: glib::WeakRef<gtk4::SpinButton>,
     pub sec_pos: glib::WeakRef<gtk4::Scale>,
+    pub atom_size: glib::WeakRef<gtk4::Scale>,
+    pub bonds: glib::WeakRef<gtk4::CheckButton>,
+    pub flip: glib::WeakRef<gtk4::CheckButton>,
+    pub crop_on: glib::WeakRef<gtk4::CheckButton>,
+    pub crop_center: [glib::WeakRef<gtk4::SpinButton>; 3],
+    pub crop_size: glib::WeakRef<gtk4::SpinButton>,
+    /// Controls enabled only while cropping.
+    pub crop_deps: Vec<glib::WeakRef<gtk4::Widget>>,
 }
 
 /// Apply `scene` to the view and its controls (without triggering the
@@ -160,7 +194,32 @@ pub(super) fn apply(scene: &Scene, view: &Rc<RefCell<View>>, w: &SceneWidgets, s
     if let Some(x) = w.sec_pos.upgrade() {
         x.set_value(s.pos);
     }
+    if let Some(x) = w.atom_size.upgrade() {
+        x.set_value(scene.atom_scale);
+    }
+    if let Some(x) = w.crop_on.upgrade() {
+        x.set_active(scene.crop.on);
+    }
+    if let Some(x) = w.bonds.upgrade() {
+        x.set_active(scene.show_bonds);
+    }
+    if let Some(x) = w.flip.upgrade() {
+        x.set_active(scene.flip);
+    }
+    for (x, c) in w.crop_center.iter().zip(scene.crop.center) {
+        if let Some(x) = x.upgrade() {
+            x.set_value(c);
+        }
+    }
+    if let Some(x) = w.crop_size.upgrade() {
+        x.set_value(scene.crop.size);
+    }
+    for x in w.crop_deps.iter().filter_map(|x| x.upgrade()) {
+        x.set_sensitive(scene.crop.on);
+    }
     syncing.set(false);
+    super::set_flip(view, scene.flip);
+    super::set_crop(view, scene.crop);
 
     let mut v = view.borrow_mut();
     if let Some(f) = &v.field {
@@ -184,6 +243,9 @@ pub(super) fn apply(scene: &Scene, view: &Rc<RefCell<View>>, w: &SceneWidgets, s
     v.ao_strength = scene.ao_strength;
     v.show_atoms = scene.show_atoms;
     v.show_cell = scene.show_cell;
+    v.atom_scale = scene.atom_scale;
+    v.markers = scene.markers.clone();
+    v.show_bonds = scene.show_bonds;
     v.section = scene.section;
     super::apply_iso_mode(&mut v);
     drop(v);
@@ -391,10 +453,28 @@ mod tests {
             show_cell: false,
             section: SectionState::default(),
             figure: None,
+            channel: Some(DensityChannel::Magnetization),
+            crop: CropState { on: true, center: [0.25, 0.5, -0.1], size: 9.0 },
+            atom_scale: 0.6,
+            markers: vec![Marker { frac: [0.385, 0.617, 0.615], label: "V_O".into() }],
+            show_bonds: true,
+            flip: true,
         };
         let back: Scene = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
         assert_eq!(back.iso_mode, IsoMode::Fraction(0.5));
         assert_eq!(back.lobes, Lobes::Both);
         assert_eq!(back.section, SectionState::default());
+        assert_eq!(back.channel, s.channel);
+        assert_eq!(back.crop, s.crop);
+        assert_eq!(back.markers, s.markers);
+        // A scene saved before these fields existed still loads.
+        let mut old = serde_json::to_value(&s).unwrap();
+        for k in ["channel", "crop", "atom_scale", "markers", "show_bonds", "flip"] {
+            old.as_object_mut().unwrap().remove(k);
+        }
+        let back: Scene = serde_json::from_value(old).unwrap();
+        assert_eq!((back.channel, back.crop.on, back.atom_scale), (None, false, 1.0));
+        assert!(back.markers.is_empty());
+        assert!(!back.show_bonds && !back.flip);
     }
 }

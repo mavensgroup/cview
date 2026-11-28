@@ -43,7 +43,7 @@ The **Export Data (NumPy .npy)** action also saves the raw 2D slice as a float64
 The **3D Isosurface** page draws isosurfaces of the density together with the atoms and cell, on the GPU (OpenGL 3.3). In this mode the right-hand pane shows the 3D controls.
 
 ### Surfaces
-* **Isovalue** in e/Å³: the logarithmic slider for exploring, the box for an exact value, or a click on the |ρ| histogram under the view.
+* **Isovalue** in e/Å³ (μB/Å³ for the magnetization density): the logarithmic slider for exploring, the box for an exact value, or a click on the |ρ| histogram under the view.
 * **Set by enclosed charge**: choose the fraction of the electrons the surface should enclose (e.g. 50%) and CView finds the isovalue. This compares across systems in a way an absolute isovalue does not.
 * **Lobes**: +, − or ± (difference and spin densities are detected and shown as ± automatically), with opacity and a colour for each sign.
 * **Ambient occlusion** darkens crevices and contacts between lobes and atoms, which makes the shape readable in print.
@@ -54,8 +54,15 @@ Surfaces are watertight (no pinholes) and continue seamlessly across cell faces.
 ### Section plane and cut-away
 **Section plane** draws the density on any $(hkl)$ plane, coloured on a logarithmic scale (or blue–white–red for difference and spin densities) with a contour at the isovalue. **Cut away beyond the plane** removes surfaces and atoms on one side, so the section becomes the cut face.
 
+### Focusing on a defect
+* **Bonds** joins the atoms shown, by the default bond rules (VESTA's list, else covalent radii), so the coordination around the surfaces is readable.
+* **Atom size** scales the spheres, so small atoms leave the surfaces around them visible.
+* **Reverse sign** shows −ρ. For a spin density this is the same state with every spin reversed, which a collinear calculation cannot tell apart, so a configuration that converged spin-down can be drawn in the same colours as a spin-up one.
+* **Crop to a box** shows only the atoms and surfaces inside a box around a point, for example a vacancy and the polarons next to it. Give the centre in fractional coordinates, or type an atom's number (in file order, as in VASP's OUTCAR) and press **Centre on atom**. **Box edge** is in Å; the box may reach past the cell, and periodic images fill it. With **Cell** ticked, the box's edges are drawn instead of the cell's. The view (and an exported figure) is framed on what the box contains, not on its corners.
+* **Markers** label a point that has no atom: type `x y z label` in fractional coordinates (e.g. `0.385 0.617 0.615 V_O`) and press **Mark**. Each marker is drawn as a small wire cube, and its label is written above it in exported figures; `_` starts a subscript, so `V_O` prints as V with a subscript O.
+
 ### Numbers
-The view lists the electrons and volume inside each lobe. **Report Enclosed Charge** writes them, the isovalue and ∫ρ dV over the cell to Structure Info.
+The view lists the electrons and volume inside each lobe (the moment in μB for the magnetization density). **Report Enclosed Charge** writes them, the isovalue and ∫ρ dV over the cell to Structure Info.
 
 ### Figures for publication
 **Export Figure…** produces a journal-ready image:
@@ -64,7 +71,16 @@ The view lists the electrons and volume inside each lobe. **Report Enclosed Char
 * Fonts and lines are set in points at final size (Nature asks for 5–7 pt); the dialog warns if a Nature figure is taller than 170 mm.
 * **PDF / SVG** contain the picture at full resolution with the title, isovalue key, colour bar, axes, scale bar and panel letter as vector text, editable in Illustrator or Inkscape. **PNG / TIFF** carry the dpi, so they open at print size.
 * Transparency is rendered exactly, edges are supersampled, and the background can be transparent for assembling multi-panel figures.
-* A scene file (`.cview.json`) is saved next to every figure. **Load Scene…** restores the view, isovalue and all settings, so a requested change is quick to make.
+* A scene file (`.cview.json`) is saved next to every figure. **Load Scene…** restores the view, isovalue, density channel, sign, crop box, markers, bonds and all other settings, so a requested change is quick to make.
+
+#### Figures from a script
+A scene file can also be rendered without clicking, which is useful for making the same figure from several calculations:
+
+```bash
+CVIEW_CD_FIGURE=spin.pdf CVIEW_CD_SCENE=spin.cview.json cview path/to/CHGCAR
+```
+
+CView opens the CHGCAR on the 3D page, applies the scene (its channel, view, crop, markers and figure settings), writes the figure and its scene file, and quits. Scene files are JSON, so a script can write them; the `rotation` is a quaternion `[x, y, z, w]` that turns Cartesian coordinates into screen coordinates (x right, y down, z into the screen).
 
 **Export Mesh** writes the surfaces as OBJ (with colours) or PLY for Blender or ParaView.
 

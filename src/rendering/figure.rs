@@ -198,17 +198,18 @@ pub fn draw_annotations(cr: &cairo::Context, a: &Annotations, page: &Page) {
         y += f * 1.35;
     }
 
-    // Key (lobe colours and isovalues).
+    // Key (lobe colours and isovalues), in the title's column: clear of the
+    // panel letter when there is no title above it.
     set_font(cr, f, false, false);
     for (color, text) in &a.key {
         cr.set_source_rgb(color[0], color[1], color[2]);
-        cr.rectangle(margin, y - f * 0.75, f * 0.9, f * 0.75);
+        cr.rectangle(x, y - f * 0.75, f * 0.9, f * 0.75);
         let _ = cr.fill_preserve();
         set_ink(0.6);
         cr.set_line_width(page.line_pt * 0.5);
         let _ = cr.stroke();
         set_ink(1.0);
-        cr.move_to(margin + f * 1.3, y);
+        cr.move_to(x + f * 1.3, y);
         let _ = cr.show_text(text);
         y += f * 1.3;
     }
@@ -289,14 +290,49 @@ pub fn draw_annotations(cr: &cairo::Context, a: &Annotations, page: &Page) {
         let _ = cr.show_text(&text);
     }
 
-    // Atom labels.
-    set_font(cr, f * 0.9, false, false);
+    // Atom and marker labels; "V_O" sets the O as a subscript.
     for (text, lx, ly) in &a.labels {
-        let tw = cr.text_extents(text).map(|e| e.x_advance()).unwrap_or(0.0);
+        let size = f * 0.9;
+        let tw = subscript_runs(text).iter().map(|(t, sub)| text_width(cr, t, if *sub { size * SUB_SCALE } else { size })).sum::<f64>();
         set_ink(1.0);
-        cr.move_to(lx - tw / 2.0, ly + f * 0.35);
-        let _ = cr.show_text(text);
+        let mut x = lx - tw / 2.0;
+        for (t, sub) in subscript_runs(text) {
+            let sz = if sub { size * SUB_SCALE } else { size };
+            set_font(cr, sz, false, false);
+            cr.move_to(x, ly + f * 0.35 + if sub { size * 0.25 } else { 0.0 });
+            let _ = cr.show_text(&t);
+            x += text_width(cr, &t, sz);
+        }
     }
+}
+
+/// Size of subscript text relative to its base.
+const SUB_SCALE: f64 = 0.7;
+
+fn text_width(cr: &cairo::Context, text: &str, size: f64) -> f64 {
+    set_font(cr, size, false, false);
+    cr.text_extents(text).map(|e| e.x_advance()).unwrap_or(0.0)
+}
+
+/// Split a label into (text, is_subscript) runs: `_` starts a subscript
+/// that runs to the next space or `_`; `\_` is a literal underscore.
+pub fn subscript_runs(text: &str) -> Vec<(String, bool)> {
+    let mut runs: Vec<(String, bool)> = vec![(String::new(), false)];
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        let sub = runs.last().is_some_and(|r| r.1);
+        match c {
+            '\\' if chars.peek() == Some(&'_') => {
+                chars.next();
+                runs.last_mut().unwrap().0.push('_');
+            }
+            '_' => runs.push((String::new(), !sub)),
+            ' ' if sub => runs.push((" ".into(), false)),
+            _ => runs.last_mut().unwrap().0.push(c),
+        }
+    }
+    runs.retain(|r| !r.0.is_empty());
+    runs
 }
 
 fn trim_number(v: f64) -> String {
@@ -304,15 +340,21 @@ fn trim_number(v: f64) -> String {
     s.trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
-/// Compact value for colour-bar ends.
+/// Compact value for colour-bar ends and keys: three significant figures.
 pub fn format_value(v: f64) -> String {
     let a = v.abs();
     if a == 0.0 {
         "0".into()
-    } else if !(1e-3..1e3).contains(&a) {
-        format!("{v:.1e}")
+    } else if !(1e-3..1e4).contains(&a) {
+        format!("{v:.2e}")
     } else {
-        trim_number(if a < 0.01 { (v * 1e5).round() / 1e5 } else { (v * 1e3).round() / 1e3 })
+        let decimals = (2 - a.log10().floor() as i32).max(0) as usize;
+        let s = format!("{v:.decimals$}");
+        if s.contains('.') {
+            s.trim_end_matches('0').trim_end_matches('.').to_string()
+        } else {
+            s
+        }
     }
 }
 
@@ -530,6 +572,28 @@ fn write_tiff(path: &Path, surf: cairo::ImageSurface, dpi: f64) -> io::Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn labels_split_into_subscripts() {
+        let r = |t: &str| subscript_runs(t);
+        assert_eq!(r("V_O"), vec![("V".into(), false), ("O".into(), true)]);
+        assert_eq!(r("Ce_1 site"), vec![("Ce".into(), false), ("1".into(), true), (" site".into(), false)]);
+        assert_eq!(r("a\\_b"), vec![("a_b".into(), false)]);
+        assert_eq!(r("O"), vec![("O".into(), false)]);
+    }
+
+    #[test]
+    fn values_keep_three_significant_figures() {
+        // A spin-density isovalue of 0.003 once printed as "0".
+        assert_eq!(format_value(0.003), "0.003");
+        assert_eq!(format_value(0.00125), "0.00125");
+        assert_eq!(format_value(0.0123), "0.0123");
+        assert_eq!(format_value(-0.5), "-0.5");
+        assert_eq!(format_value(12.34), "12.3");
+        assert_eq!(format_value(250.0), "250");
+        assert_eq!(format_value(0.0), "0");
+        assert_eq!(format_value(2e-4), "2.00e-4");
+    }
 
     #[test]
     fn crc_matches_the_png_reference() {

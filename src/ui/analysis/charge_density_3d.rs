@@ -19,12 +19,12 @@ mod scene_file;
 
 use super::charge_density_tab::ChargeDensityState;
 use crate::model::elements::{get_atom_cov, get_element_color, ColorScheme};
-use crate::physics::analysis::charge_density::get_channel_data;
+use crate::physics::analysis::charge_density::{get_channel_data, DensityChannel};
 use crate::physics::analysis::isosurface::{isosurface, Grid, Inside, Mesh, Region};
 use crate::physics::analysis::volumetric::{
     ambient_occlusion, enclosed, iso_for_charge_fraction, log_histogram, Enclosed, Occluders, Sign,
 };
-use crate::rendering::gl::{loader, AtomInstance, Camera, GlBackend, GpuBackend, Material, MeshData, Section, Volume};
+use crate::rendering::gl::{loader, AtomInstance, BondInstance, Camera, GlBackend, GpuBackend, Material, MeshData, Section, Volume};
 use crate::utils::{console, task};
 use gtk4::prelude::*;
 use gtk4::{glib, Align, Orientation};
@@ -68,6 +68,8 @@ pub(super) struct Field {
     pub(super) dims: [usize; 3],
     pub(super) lattice: [[f64; 3]; 3],
     pub(super) label: String,
+    /// The channel of the 2D page's state this field was built from.
+    pub(super) channel: DensityChannel,
     pub(super) min: f32,
     pub(super) max: f32,
     default_iso: f64,
@@ -78,6 +80,30 @@ pub(super) struct Field {
 }
 
 impl Field {
+    /// Unit of the values: μB/Å³ for the magnetization, e/Å³ otherwise.
+    pub(super) fn unit(&self) -> &'static str {
+        if self.channel == DensityChannel::Magnetization {
+            "μB/Å³"
+        } else {
+            "e/Å³"
+        }
+    }
+    /// Unit of an integral of the values: μB or e.
+    pub(super) fn integral_unit(&self) -> &'static str {
+        if self.channel == DensityChannel::Magnetization {
+            "μB"
+        } else {
+            "e"
+        }
+    }
+    /// Symbol for the values in keys and labels.
+    pub(super) fn symbol(&self) -> &'static str {
+        if self.channel == DensityChannel::Magnetization {
+            "m"
+        } else {
+            "ρ"
+        }
+    }
     pub(super) fn abs_max(&self) -> f64 {
         (self.min.abs().max(self.max.abs()) as f64).max(1e-12)
     }
@@ -154,6 +180,7 @@ fn build_field(st: &ChargeDensityState) -> Option<Field> {
         dims: c.grid,
         lattice: c.lattice,
         label,
+        channel: st.channel,
         min,
         max,
         default_iso,
@@ -204,6 +231,196 @@ impl Default for SectionState {
     }
 }
 
+/// Show only a box around a point (a defect, say): the atoms inside it and
+/// the surfaces meshed over it. Its edges follow the lattice vectors, and it
+/// may reach past the cell (periodic images fill it).
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub(super) struct CropState {
+    pub(super) on: bool,
+    /// Centre, fractional coordinates.
+    pub(super) center: [f64; 3],
+    /// Edge length along each lattice vector, Å.
+    pub(super) size: f64,
+}
+
+impl Default for CropState {
+    fn default() -> Self {
+        Self { on: false, center: [0.5; 3], size: 8.0 }
+    }
+}
+
+/// A labelled point drawn as a small wire cube: a vacancy, an interstitial
+/// site, anything without an atom of its own.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub(super) struct Marker {
+    /// Fractional coordinates.
+    pub(super) frac: [f64; 3],
+    pub(super) label: String,
+}
+
+/// Half the edge of a marker's cube, Å.
+const MARKER_HALF: f64 = 0.4;
+
+/// Cartesian positions of `m` on screen: its images inside the crop box, or
+/// the one in the cell.
+fn marker_positions(f: &Field, crop: &CropState, m: &Marker) -> Vec<Vector3<f64>> {
+    let lat = f.lattice_matrix();
+    if !crop.on {
+        return vec![lat * Vector3::from(m.frac.map(|x| x.rem_euclid(1.0)))];
+    }
+    let (lo, hi) = shown_box(f, crop);
+    let range = |i: usize| ((lo[i] - m.frac[i]).ceil() as i64)..=((hi[i] - m.frac[i]).floor() as i64);
+    let mut out = Vec::new();
+    for sx in range(0) {
+        for sy in range(1) {
+            for sz in range(2) {
+                out.push(lat * Vector3::new(m.frac[0] + sx as f64, m.frac[1] + sy as f64, m.frac[2] + sz as f64));
+            }
+        }
+    }
+    out
+}
+
+/// Parse "x y z [label]" (fractional coordinates).
+pub(super) fn parse_marker(text: &str) -> Option<Marker> {
+    let mut parts = text.split_whitespace();
+    let mut frac = [0.0; 3];
+    for x in &mut frac {
+        *x = parts.next()?.parse().ok()?;
+    }
+    let label = parts.collect::<Vec<_>>().join(" ");
+    Some(Marker { frac, label })
+}
+
+/// The fractional box on screen: the crop box, or one cell.
+fn shown_box(f: &Field, c: &CropState) -> ([f64; 3], [f64; 3]) {
+    if !c.on {
+        return ([0.0; 3], [1.0; 3]);
+    }
+    let mut lo = [0.0; 3];
+    let mut hi = [1.0; 3];
+    for i in 0..3 {
+        let len = Vector3::new(f.lattice[i][0], f.lattice[i][1], f.lattice[i][2]).norm().max(1e-9);
+        let h = 0.5 * c.size.max(0.1) / len;
+        lo[i] = c.center[i] - h;
+        hi[i] = c.center[i] + h;
+    }
+    (lo, hi)
+}
+
+/// Grid cubes covering the shown box.
+fn shown_region(f: &Field, c: &CropState) -> Region {
+    if !c.on {
+        return Region::cell(f.dims);
+    }
+    let (lo, hi) = shown_box(f, c);
+    let n = f.dims.map(|d| d as f64);
+    Region {
+        lo: [0, 1, 2].map(|i| (lo[i] * n[i]).floor() as i64),
+        hi: [0, 1, 2].map(|i| (hi[i] * n[i]).ceil() as i64),
+    }
+}
+
+/// Corners of the shown box, Cartesian.
+fn shown_corners(f: &Field, c: &CropState) -> Vec<Vector3<f64>> {
+    let (lo, hi) = shown_box(f, c);
+    let m = f.lattice_matrix();
+    (0..8)
+        .map(|k: u32| {
+            let pick = |i: usize| if k & (1 << i) == 0 { lo[i] } else { hi[i] };
+            m * Vector3::new(pick(0), pick(1), pick(2))
+        })
+        .collect()
+}
+
+/// Replace the field by its negative (see `View::flip`).
+pub(super) fn negate_field(f: &mut Field) {
+    let data = Arc::make_mut(&mut f.data);
+    for v in data.iter_mut() {
+        *v = -*v;
+    }
+    (f.min, f.max) = (-f.max, -f.min);
+    f.hash = fnv1a(&f.data);
+    f.label = match f.label.strip_suffix(SIGN_REVERSED) {
+        Some(l) => l.to_string(),
+        None => format!("{}{SIGN_REVERSED}", f.label),
+    };
+}
+
+const SIGN_REVERSED: &str = ", sign reversed";
+
+/// What the camera frames: the cell corners and atoms, or with a crop box,
+/// the atoms, surfaces and markers actually drawn in it (its corners would
+/// leave the empty parts of the box in the picture). (point, radius) pairs.
+pub(super) fn content_points(v: &View) -> Vec<(Vector3<f64>, f64)> {
+    let Some(f) = v.field.as_ref() else { return Vec::new() };
+    let mut pts: Vec<(Vector3<f64>, f64)> = Vec::new();
+    if v.show_atoms {
+        pts.extend(atom_spheres(f, &v.crop, v.atom_scale).into_iter().map(|(_, c, r)| (c, r)));
+    }
+    if !v.crop.on {
+        pts.extend(shown_corners(f, &v.crop).into_iter().map(|c| (c, 0.0)));
+        return pts;
+    }
+    for lobe in v.lobes_now.iter().flatten() {
+        let n = lobe.mesh.positions.len();
+        let step = (n / 20_000).max(1);
+        pts.extend(lobe.mesh.positions.iter().step_by(step).map(|p| (Vector3::new(p[0] as f64, p[1] as f64, p[2] as f64), 0.0)));
+    }
+    for m in &v.markers {
+        pts.extend(marker_positions(f, &v.crop, m).into_iter().map(|c| (c, MARKER_HALF * 1.8)));
+    }
+    if pts.is_empty() {
+        pts.extend(shown_corners(f, &v.crop).into_iter().map(|c| (c, 0.0)));
+    }
+    pts
+}
+
+/// Bonds between the atoms on screen, by the default bond rules (VESTA's
+/// list, else covalent radii), coloured by halves like the main view.
+fn bond_instances(f: &Field, v: &View) -> Vec<BondInstance> {
+    use crate::model::bonds::{default_rules, BondTable};
+    let spheres = atom_spheres(f, &v.crop, v.atom_scale);
+    let elements: Vec<String> = spheres.iter().map(|s| s.0.clone()).collect();
+    let table = BondTable::from_rules(&default_rules(&elements, 1.15));
+    let colors: Vec<[f32; 3]> = spheres
+        .iter()
+        .map(|(el, _, _)| {
+            let c = get_element_color(el, v.scheme);
+            [c.0 as f32, c.1 as f32, c.2 as f32]
+        })
+        .collect();
+    let radius = (BOND_RADIUS * v.atom_scale.min(1.0)) as f32;
+    let mut out = Vec::new();
+    for i in 0..spheres.len() {
+        for j in i + 1..spheres.len() {
+            let (a, b) = (&spheres[i], &spheres[j]);
+            let d = (a.1 - b.1).norm();
+            if table.bonded(&a.0, &b.0, d) {
+                out.push(BondInstance {
+                    a: [a.1.x as f32, a.1.y as f32, a.1.z as f32],
+                    b: [b.1.x as f32, b.1.y as f32, b.1.z as f32],
+                    radius,
+                    color_a: colors[i],
+                    color_b: colors[j],
+                });
+            }
+        }
+    }
+    out
+}
+
+/// Bond radius at atom size 1, Å.
+const BOND_RADIUS: f64 = 0.09;
+
+/// Camera centre and radius for the shown box.
+fn shown_frame(f: &Field, c: &CropState) -> (Vector3<f64>, f64) {
+    let corners = shown_corners(f, c);
+    let center = corners.iter().sum::<Vector3<f64>>() / 8.0;
+    let radius = corners.iter().map(|p| (p - center).norm()).fold(1.0, f64::max);
+    (center, radius)
+}
+
 /// The section plane in world space: unit normal n and offset d (n·x = d),
 /// or `None` for hkl = 000.
 fn section_plane(f: &Field, s: &SectionState) -> Option<(Vector3<f64>, f64)> {
@@ -240,9 +457,21 @@ pub(super) struct View {
     pub(super) show_atoms: bool,
     pub(super) show_cell: bool,
     pub(super) section: SectionState,
+    pub(super) crop: CropState,
+    pub(super) markers: Vec<Marker>,
+    pub(super) show_bonds: bool,
+    /// Show −field: a spin density with all spins reversed (a symmetry of a
+    /// collinear calculation), so pairs that converged spin-down compare
+    /// directly with spin-up ones.
+    pub(super) flip: bool,
+    /// Multiplies the atom radii.
+    pub(super) atom_scale: f64,
     pub(super) scheme: ColorScheme,
     pub(super) camera: Camera,
     needs_fit: bool,
+    /// Refit once the surfaces being computed arrive (a new crop box is
+    /// framed by what it contains).
+    fit_after_mesh: bool,
     pub(super) backend: Option<GlBackend>,
     /// Current surfaces (positive, negative); kept on the CPU for reports
     /// and mesh export.
@@ -266,6 +495,7 @@ pub(super) struct Ui {
     iso_spin: glib::WeakRef<gtk4::SpinButton>,
     lobes: glib::WeakRef<gtk4::DropDown>,
     placeholder: glib::WeakRef<gtk4::Label>,
+    iso_unit: glib::WeakRef<gtk4::Label>,
 }
 
 /// Slider position (0..1, logarithmic) ↔ isovalue.
@@ -294,9 +524,27 @@ pub(super) fn redraw(ui: &Ui) {
 }
 
 /// Atom spheres including images on the cell faces: (element, centre, radius).
-pub(super) fn atom_spheres(f: &Field) -> Vec<(String, Vector3<f64>, f64)> {
+pub(super) fn atom_spheres(f: &Field, crop: &CropState, scale: f64) -> Vec<(String, Vector3<f64>, f64)> {
     let m = f.lattice_matrix();
     let mut out = Vec::new();
+    if crop.on {
+        // Every image inside the box.
+        let (lo, hi) = shown_box(f, crop);
+        const TOL: f64 = 1e-3;
+        for (el, fr) in &f.atoms {
+            let radius = get_atom_cov(el) * ATOM_SCALE * scale;
+            let range = |i: usize| ((lo[i] - fr[i] - TOL).ceil() as i64)..=((hi[i] - fr[i] + TOL).floor() as i64);
+            for sx in range(0) {
+                for sy in range(1) {
+                    for sz in range(2) {
+                        let p = Vector3::new(fr[0] + sx as f64, fr[1] + sy as f64, fr[2] + sz as f64);
+                        out.push((el.clone(), m * p, radius));
+                    }
+                }
+            }
+        }
+        return out;
+    }
     for (el, fr) in &f.atoms {
         let base = Vector3::new(fr[0].rem_euclid(1.0), fr[1].rem_euclid(1.0), fr[2].rem_euclid(1.0));
         let shifts = |x: f64| -> Vec<f64> {
@@ -309,7 +557,7 @@ pub(super) fn atom_spheres(f: &Field) -> Vec<(String, Vector3<f64>, f64)> {
             }
             s
         };
-        let radius = get_atom_cov(el) * ATOM_SCALE;
+        let radius = get_atom_cov(el) * ATOM_SCALE * scale;
         for sx in shifts(base.x) {
             for sy in shifts(base.y) {
                 for sz in shifts(base.z) {
@@ -319,6 +567,44 @@ pub(super) fn atom_spheres(f: &Field) -> Vec<(String, Vector3<f64>, f64)> {
         }
     }
     out
+}
+
+/// Show the field or its negative. The caller remeshes.
+pub(super) fn set_flip(view: &Rc<RefCell<View>>, on: bool) {
+    let mut v = view.borrow_mut();
+    if v.flip == on {
+        return;
+    }
+    v.flip = on;
+    if let Some(f) = v.field.as_mut() {
+        negate_field(f);
+    }
+    // The lobes swap sign.
+    v.lobes = match v.lobes {
+        Lobes::Positive => Lobes::Negative,
+        Lobes::Negative => Lobes::Positive,
+        Lobes::Both => Lobes::Both,
+    };
+    v.volume_dirty = true;
+    v.lobes_now = [None, None];
+    v.meshes_dirty = true;
+    apply_iso_mode(&mut v);
+}
+
+/// Show `crop` (or the whole cell): recentre the camera on it and refit.
+/// The caller remeshes.
+pub(super) fn set_crop(view: &Rc<RefCell<View>>, crop: CropState) {
+    let mut v = view.borrow_mut();
+    v.crop = crop;
+    if let Some(f) = v.field.as_ref() {
+        let (center, radius) = shown_frame(f, &crop);
+        let (rotation, zoom) = (v.camera.rotation, v.camera.zoom);
+        v.camera = Camera::new(center, radius, rotation);
+        v.camera.zoom = zoom;
+    }
+    v.needs_fit = true;
+    v.fit_after_mesh = crop.on;
+    v.scene_dirty = true;
 }
 
 /// If the isovalue follows an enclosed-charge fraction, recompute it.
@@ -354,8 +640,9 @@ pub(super) fn remesh(view: &Rc<RefCell<View>>, ui: &Ui) {
     let Some(f) = v.field.as_ref() else { return };
     let (data, dims, lattice) = (f.data.clone(), f.dims, f.lattice);
     let (iso, lobes, ao_on) = (v.iso as f32, v.lobes, v.ao);
+    let region = shown_region(f, &v.crop);
     let spheres: Vec<([f64; 3], f64)> = if v.show_atoms {
-        atom_spheres(f).into_iter().map(|(_, c, r)| ([c.x, c.y, c.z], r)).collect()
+        atom_spheres(f, &v.crop, v.atom_scale).into_iter().map(|(_, c, r)| ([c.x, c.y, c.z], r)).collect()
     } else {
         Vec::new()
     };
@@ -366,7 +653,6 @@ pub(super) fn remesh(view: &Rc<RefCell<View>>, ui: &Ui) {
         move |cancel| {
             let t = std::time::Instant::now();
             let grid = Grid { data: &data, dims, lattice };
-            let region = Region::cell(dims);
             let want_pos = lobes != Lobes::Negative;
             let want_neg = lobes != Lobes::Positive;
             let occ = Occluders {
@@ -400,6 +686,10 @@ pub(super) fn remesh(view: &Rc<RefCell<View>>, ui: &Ui) {
                 v.lobes_now = [pos, neg];
                 v.meshes_dirty = true;
                 v.busy = false;
+                if v.fit_after_mesh {
+                    v.fit_after_mesh = false;
+                    v.needs_fit = true;
+                }
             }
             redraw(&ui2);
         },
@@ -408,12 +698,12 @@ pub(super) fn remesh(view: &Rc<RefCell<View>>, ui: &Ui) {
     redraw(ui);
 }
 
-/// Atoms and cell edges.
-fn upload_scene(backend: &mut GlBackend, f: &Field, show_atoms: bool, show_cell: bool, scheme: ColorScheme) {
+/// Atoms and the edges of the cell (or of the crop box).
+fn upload_scene(backend: &mut GlBackend, f: &Field, v: &View) {
     let mut atoms = Vec::new();
-    if show_atoms {
-        for (el, c, r) in atom_spheres(f) {
-            let col = get_element_color(&el, scheme);
+    if v.show_atoms {
+        for (el, c, r) in atom_spheres(f, &v.crop, v.atom_scale) {
+            let col = get_element_color(&el, v.scheme);
             atoms.push(AtomInstance {
                 pos: [c.x as f32, c.y as f32, c.z as f32],
                 radius: r as f32,
@@ -422,18 +712,36 @@ fn upload_scene(backend: &mut GlBackend, f: &Field, show_atoms: bool, show_cell:
         }
     }
     backend.set_atoms(&atoms);
-    let m = f.lattice_matrix();
+    backend.set_bonds(&if v.show_atoms && v.show_bonds { bond_instances(f, v) } else { Vec::new() });
     let mut lines = Vec::new();
-    if show_cell {
+    if v.show_cell {
+        let corners = shown_corners(f, &v.crop);
         let corner = |k: u32| {
-            let v = m * Vector3::new((k & 1) as f64, ((k >> 1) & 1) as f64, ((k >> 2) & 1) as f64);
-            [v.x as f32, v.y as f32, v.z as f32]
+            let c = corners[k as usize];
+            [c.x as f32, c.y as f32, c.z as f32]
         };
         for i in 0..8u32 {
             for axis in 0..3 {
                 if i & (1 << axis) == 0 {
                     lines.push(corner(i));
                     lines.push(corner(i | (1 << axis)));
+                }
+            }
+        }
+    }
+    // Markers: a cube with edges along the Cartesian axes.
+    for m in &v.markers {
+        for p in marker_positions(f, &v.crop, m) {
+            let corner = |k: u32| {
+                let d = |i: u32| if k & (1 << i) == 0 { -MARKER_HALF } else { MARKER_HALF };
+                [(p.x + d(0)) as f32, (p.y + d(1)) as f32, (p.z + d(2)) as f32]
+            };
+            for i in 0..8u32 {
+                for axis in 0..3 {
+                    if i & (1 << axis) == 0 {
+                        lines.push(corner(i));
+                        lines.push(corner(i | (1 << axis)));
+                    }
                 }
             }
         }
@@ -500,10 +808,10 @@ fn draw_hud(cr: &gtk4::cairo::Context, w: f64, h: f64, v: &View) {
         Lobes::Negative => "−",
     };
     cr.move_to(14.0, 42.0);
-    let _ = cr.show_text(&format!("isosurface {sign}{:.5} e/Å³{mode}", v.iso));
+    let _ = cr.show_text(&format!("isosurface {sign}{} {}{mode}", crate::rendering::figure::format_value(v.iso), f.unit()));
     cr.move_to(14.0, 58.0);
     let status = if v.busy { "computing…".to_string() } else { v.stats.clone() };
-    let _ = cr.show_text(&format!("range {:.3} … {:.3} e/Å³   {}", f.min, f.max, status));
+    let _ = cr.show_text(&format!("range {:.3} … {:.3} {}   {}", f.min, f.max, f.unit(), status));
 
     let mut y = 76.0;
     for (slot, color, name) in [(0usize, v.color_pos, "ρ > +iso"), (1, v.color_neg, "ρ < −iso")] {
@@ -515,8 +823,9 @@ fn draw_hud(cr: &gtk4::cairo::Context, w: f64, h: f64, v: &View) {
         cr.move_to(32.0, y);
         let e = l.enclosed;
         let _ = cr.show_text(&format!(
-            "{name}: {:.3} e in {:.2} Å³ ({:.1}% of the charge)",
+            "{name}: {:.3} {} in {:.2} Å³ ({:.1}% of the charge)",
             e.electrons,
+            f.integral_unit(),
             e.volume,
             e.charge_fraction * 100.0
         ));
@@ -543,14 +852,10 @@ fn draw_hud(cr: &gtk4::cairo::Context, w: f64, h: f64, v: &View) {
 /// Zoom so the cell and atoms fill the figure frame (aspect = width/height)
 /// on a `cw`×`ch` canvas, keeping the orientation.
 pub(super) fn fit_into_frame(v: &mut View, cw: f64, ch: f64, aspect: f64) {
-    let Some(f) = v.field.as_ref() else { return };
-    let m = f.lattice_matrix();
-    let mut pts: Vec<(Vector3<f64>, f64)> = (0..8)
-        .map(|c| (m * Vector3::new((c & 1) as f64, ((c >> 1) & 1) as f64, ((c >> 2) & 1) as f64), 0.0))
-        .collect();
-    if v.show_atoms {
-        pts.extend(atom_spheres(f).into_iter().map(|(_, c, r)| (c, r)));
+    if v.field.is_none() {
+        return;
     }
+    let pts = content_points(v);
     let rot = v.camera.rotation.to_rotation_matrix();
     let (mut hx, mut hy) = (1e-3_f64, 1e-3_f64);
     for (p, r) in pts {
@@ -622,6 +927,9 @@ pub struct Parts {
 pub struct Handle {
     view: Rc<RefCell<View>>,
     ui: Ui,
+    apply_scene: Rc<dyn Fn(scene_file::Scene)>,
+    /// A scene is waiting for its channel to load.
+    scene_pending: Rc<Cell<bool>>,
 }
 
 impl Handle {
@@ -657,6 +965,70 @@ impl Handle {
     pub fn busy(&self) -> bool {
         self.view.borrow().busy
     }
+
+    /// Load a scene file (`*.cview.json`) and apply it, switching the density
+    /// channel if it records one. Returns the figure settings it holds.
+    pub fn load_scene(&self, path: &std::path::Path) -> Result<Option<FigureSettings>, String> {
+        let scene = scene_file::load(path)?;
+        let figure = scene.figure.clone();
+        (self.apply_scene)(scene);
+        Ok(figure)
+    }
+
+    /// Density loaded, surfaces computed and on screen, nothing pending.
+    pub fn ready(&self) -> bool {
+        let v = self.view.borrow();
+        v.field.is_some()
+            && v.backend.is_some()
+            && !v.busy
+            && !self.scene_pending.get()
+            && v.lobes_now.iter().any(Option::is_some)
+    }
+}
+
+/// Scripted figure export (`CVIEW_CD_FIGURE=out.pdf [CVIEW_CD_SCENE=scene.cview.json] cview CHGCAR`):
+/// once the density is on screen apply the scene, wait for its surfaces,
+/// export the figure (scene settings, or the defaults) and quit. A debugging
+/// and batch aid, like `CVIEW_PLAYER_SNAPSHOT`.
+pub fn run_figure_script(handle: Handle, out: std::path::PathBuf, scene: Option<std::path::PathBuf>) {
+    let started = std::time::Instant::now();
+    let mut scene = scene;
+    let mut settings: Option<FigureSettings> = None;
+    let quit = || {
+        if let Some(app) = gtk4::gio::Application::default() {
+            app.quit();
+        }
+    };
+    glib::timeout_add_local(Duration::from_millis(200), move || {
+        if started.elapsed() > Duration::from_secs(300) {
+            console::log_error("Figure script: timed out waiting for the surfaces");
+            quit();
+            return glib::ControlFlow::Break;
+        }
+        if !handle.ready() {
+            return glib::ControlFlow::Continue;
+        }
+        if let Some(p) = scene.take() {
+            match handle.load_scene(&p) {
+                Ok(f) => settings = f,
+                Err(e) => {
+                    console::log_error(&format!("Figure script: {}: {e}", p.display()));
+                    quit();
+                    return glib::ControlFlow::Break;
+                }
+            }
+            return glib::ControlFlow::Continue;
+        }
+        match handle.export_figure(&out, &settings.clone().unwrap_or_default()) {
+            Ok(msg) => console::log_info(&msg),
+            Err(e) => console::log_error(&format!("Figure script: {e}")),
+        }
+        if let Some(r) = handle.report() {
+            console::info_report(&r);
+        }
+        quit();
+        glib::ControlFlow::Break
+    });
 }
 
 fn section(title: &str) -> (gtk4::Box, gtk4::Box) {
@@ -693,9 +1065,15 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
         show_atoms: true,
         show_cell: true,
         section: SectionState::default(),
+        crop: CropState::default(),
+        markers: Vec::new(),
+        show_bonds: true,
+        flip: false,
+        atom_scale: 1.0,
         scheme,
         camera: Camera::new(Vector3::zeros(), 1.0, UnitQuaternion::identity()),
         needs_fit: true,
+        fit_after_mesh: false,
         backend: None,
         lobes_now: [None, None],
         meshes_dirty: false,
@@ -740,7 +1118,10 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
     iso_row.append(&gtk4::Label::new(Some("Isovalue")));
     iso_row.append(&iso_scale);
     iso_row.append(&iso_spin);
-    iso_row.append(&gtk4::Label::new(Some("e/Å³")));
+    let iso_unit = gtk4::Label::new(Some("e/Å³"));
+    iso_unit.set_width_chars(6);
+    iso_unit.set_xalign(0.0);
+    iso_row.append(&iso_unit);
     for w in [hist.upcast_ref::<gtk4::Widget>(), iso_row.upcast_ref()] {
         w.set_margin_start(6);
         w.set_margin_end(6);
@@ -834,10 +1215,81 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
     atoms.set_active(true);
     let cell = gtk4::CheckButton::with_label("Cell");
     cell.set_active(true);
+    let bonds = gtk4::CheckButton::with_label("Bonds");
+    bonds.set_active(true);
+    bonds.set_tooltip_text(Some("Bonds between the atoms shown, by the default bond rules"));
     let toggles = gtk4::Box::new(Orientation::Horizontal, 12);
     toggles.append(&atoms);
+    toggles.append(&bonds);
     toggles.append(&cell);
     b_disp.append(&toggles);
+    let flip = gtk4::CheckButton::with_label("Reverse sign");
+    flip.set_tooltip_text(Some(
+        "Show −ρ: for a spin density, all spins reversed (a symmetry of a collinear calculation), \
+         so a configuration that converged spin-down can be shown like a spin-up one",
+    ));
+    b_disp.append(&flip);
+    let atom_size = gtk4::Scale::with_range(Orientation::Horizontal, 0.2, 2.0, 0.05);
+    atom_size.set_value(1.0);
+    atom_size.set_draw_value(false);
+    atom_size.set_size_request(120, -1);
+    atom_size.set_tooltip_text(Some("Atom radius, relative to the default"));
+    b_disp.append(&row("Atom size", &atom_size));
+    let crop_on = gtk4::CheckButton::with_label("Crop to a box");
+    crop_on.set_tooltip_text(Some(
+        "Show only the atoms and surfaces inside a box around a point (a defect, say); periodic images fill it",
+    ));
+    b_disp.append(&crop_on);
+    let frac_spin = |v: f64| {
+        let s = gtk4::SpinButton::with_range(-1.0, 2.0, 0.01);
+        s.set_digits(4);
+        s.set_value(v);
+        s.set_width_chars(6);
+        s
+    };
+    let (cx, cy, cz) = (frac_spin(0.5), frac_spin(0.5), frac_spin(0.5));
+    let centre_row = gtk4::Box::new(Orientation::Horizontal, 4);
+    let centre_label = gtk4::Label::new(Some("Centre (frac.)"));
+    centre_label.set_halign(Align::Start);
+    centre_label.set_hexpand(true);
+    centre_row.append(&centre_label);
+    for s in [&cx, &cy, &cz] {
+        centre_row.append(s);
+    }
+    b_disp.append(&centre_row);
+    let crop_size = gtk4::SpinButton::with_range(1.0, 60.0, 0.5);
+    crop_size.set_digits(1);
+    crop_size.set_value(CropState::default().size);
+    b_disp.append(&row("Box edge (Å)", &crop_size));
+    let atom_no = gtk4::SpinButton::with_range(1.0, 99999.0, 1.0);
+    atom_no.set_tooltip_text(Some("Atom number, in file order from 1 (as in VASP's OUTCAR)"));
+    let centre_on = gtk4::Button::with_label("Centre on atom");
+    let atom_row = gtk4::Box::new(Orientation::Horizontal, 4);
+    atom_row.append(&atom_no);
+    atom_row.append(&centre_on);
+    atom_row.set_halign(Align::End);
+    b_disp.append(&atom_row);
+    let marker_entry = gtk4::Entry::new();
+    marker_entry.set_placeholder_text(Some("x y z label (fractional), e.g. 0.25 0.25 0.25 V_O"));
+    marker_entry.set_tooltip_text(Some("Mark a point without an atom (a vacancy, say): a small wire cube, labelled in exported figures"));
+    marker_entry.set_hexpand(true);
+    let marker_add = gtk4::Button::with_label("Mark");
+    let marker_clear = gtk4::Button::with_label("Clear");
+    marker_clear.set_tooltip_text(Some("Remove all markers"));
+    let marker_row = gtk4::Box::new(Orientation::Horizontal, 4);
+    marker_row.append(&marker_entry);
+    marker_row.append(&marker_add);
+    marker_row.append(&marker_clear);
+    b_disp.append(&marker_row);
+    // Enabled only while cropping.
+    let crop_deps: Vec<glib::WeakRef<gtk4::Widget>> =
+        [centre_row.upcast_ref::<gtk4::Widget>(), crop_size.upcast_ref(), atom_row.upcast_ref()]
+            .iter()
+            .map(|w| {
+                w.set_sensitive(false);
+                w.downgrade()
+            })
+            .collect();
     let views = gtk4::Box::new(Orientation::Horizontal, 4);
     views.append(&gtk4::Label::new(Some("View along")));
     let view_btn = |label: &str, tip: &str| {
@@ -876,6 +1328,7 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
         iso_spin: iso_spin.downgrade(),
         lobes: lobes_dd.downgrade(),
         placeholder: placeholder.downgrade(),
+        iso_unit: iso_unit.downgrade(),
     };
     // Set while code moves controls itself, so handlers ignore it.
     let syncing = Rc::new(Cell::new(false));
@@ -925,17 +1378,15 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
             let sf = a.scale_factor();
             let (w, h) = (a.width() * sf, a.height() * sf);
             prepare_backend(v);
-            let (Some(backend), Some(f)) = (v.backend.as_mut(), v.field.as_ref()) else {
+            if v.backend.is_none() || v.field.is_none() {
                 return glib::Propagation::Proceed;
-            };
+            }
             if v.needs_fit && w > 0 && h > 0 {
-                let m = f.lattice_matrix();
-                let pts: Vec<Vector3<f64>> = (0..8)
-                    .map(|c| m * Vector3::new((c & 1) as f64, ((c >> 1) & 1) as f64, ((c >> 2) & 1) as f64))
-                    .collect();
+                let pts: Vec<Vector3<f64>> = content_points(v).into_iter().map(|(p, _)| p).collect();
                 v.camera.fit(&pts, 0.5, w as f64 / h as f64);
                 v.needs_fit = false;
             }
+            let Some(backend) = v.backend.as_mut() else { return glib::Propagation::Proceed };
             backend.set_line_width(1.5 * sf as f32);
             backend.draw(&v.camera, w, h, BACKGROUND);
             glib::Propagation::Stop
@@ -974,21 +1425,25 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
                         (false, true) => Lobes::Negative,
                         _ => Lobes::Positive,
                     };
-                    let m = f.lattice_matrix();
-                    let center = m * Vector3::new(0.5, 0.5, 0.5);
-                    let radius = (0..8)
-                        .map(|c| (m * Vector3::new((c & 1) as f64, ((c >> 1) & 1) as f64, ((c >> 2) & 1) as f64) - center).norm())
-                        .fold(1.0, f64::max);
+                    let (center, radius) = shown_frame(f, &v.crop);
                     // A tilted three-quarter view shows depth on first open.
                     let rotation = if first { UnitQuaternion::from_euler_angles(-0.35, 0.55, 0.0) } else { v.camera.rotation };
                     v.camera = Camera::new(center, radius, rotation);
                     v.needs_fit = true;
                 }
                 v.field = field;
+                if v.flip {
+                    if let Some(f) = v.field.as_mut() {
+                        negate_field(f);
+                    }
+                }
                 apply_iso_mode(&mut v);
             }
             if let Some(p) = ui.placeholder.upgrade() {
                 p.set_visible(view.borrow().field.is_none());
+            }
+            if let (Some(l), Some(f)) = (ui.iso_unit.upgrade(), view.borrow().field.as_ref()) {
+                l.set_text(f.unit());
             }
             {
                 let v = view.borrow();
@@ -1225,6 +1680,141 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
         });
     }
 
+    {
+        let (view, ui, syncing) = (view.clone(), ui.clone(), syncing.clone());
+        bonds.connect_toggled(move |c| {
+            if syncing.get() {
+                return;
+            }
+            let mut v = view.borrow_mut();
+            v.show_bonds = c.is_active();
+            v.scene_dirty = true;
+            drop(v);
+            redraw(&ui);
+        });
+    }
+    {
+        let (view, ui, syncing) = (view.clone(), ui.clone(), syncing.clone());
+        flip.connect_toggled(move |c| {
+            if syncing.get() {
+                return;
+            }
+            set_flip(&view, c.is_active());
+            sync_iso_controls(&view, &ui, &syncing);
+            remesh(&view, &ui);
+        });
+    }
+
+    // ---- atom size and crop box ----
+    {
+        let (view, ui, syncing) = (view.clone(), ui.clone(), syncing.clone());
+        atom_size.connect_value_changed(move |sc| {
+            if syncing.get() {
+                return;
+            }
+            {
+                let mut v = view.borrow_mut();
+                v.atom_scale = sc.value();
+                v.scene_dirty = true;
+            }
+            // Atoms occlude the surfaces.
+            if view.borrow().ao && view.borrow().show_atoms {
+                remesh(&view, &ui);
+            } else {
+                redraw(&ui);
+            }
+        });
+    }
+    {
+        let read = {
+            let (on, x, y, z, size) = (crop_on.downgrade(), cx.downgrade(), cy.downgrade(), cz.downgrade(), crop_size.downgrade());
+            move || -> Option<CropState> {
+                Some(CropState {
+                    on: on.upgrade()?.is_active(),
+                    center: [x.upgrade()?.value(), y.upgrade()?.value(), z.upgrade()?.value()],
+                    size: size.upgrade()?.value(),
+                })
+            }
+        };
+        let deps = crop_deps.clone();
+        let update = {
+            let (view, ui, syncing) = (view.clone(), ui.clone(), syncing.clone());
+            Rc::new(move || {
+                if syncing.get() {
+                    return;
+                }
+                let Some(c) = read() else { return };
+                for w in deps.iter().filter_map(|w| w.upgrade()) {
+                    w.set_sensitive(c.on);
+                }
+                set_crop(&view, c);
+                remesh(&view, &ui);
+            })
+        };
+        let u = update.clone();
+        crop_on.connect_toggled(move |_| u());
+        for s in [&cx, &cy, &cz, &crop_size] {
+            let u = update.clone();
+            s.connect_value_changed(move |_| u());
+        }
+        let (view, syncing) = (view.clone(), syncing.clone());
+        let (an, x, y, z) = (atom_no.downgrade(), cx.downgrade(), cy.downgrade(), cz.downgrade());
+        centre_on.connect_clicked(move |_| {
+            let Some(n) = an.upgrade().map(|s| s.value() as usize) else { return };
+            let fr = {
+                let v = view.borrow();
+                let Some(f) = v.field.as_ref() else { return };
+                match f.atoms.get(n.wrapping_sub(1)) {
+                    Some((_, fr)) => *fr,
+                    None => {
+                        console::log_warn(&format!("Centre on atom: there are {} atoms", f.atoms.len()));
+                        return;
+                    }
+                }
+            };
+            syncing.set(true);
+            for (w, c) in [(&x, fr[0]), (&y, fr[1]), (&z, fr[2])] {
+                if let Some(w) = w.upgrade() {
+                    w.set_value(c);
+                }
+            }
+            syncing.set(false);
+            update();
+        });
+    }
+
+    // ---- markers ----
+    {
+        let (view2, ui2, entry) = (view.clone(), ui.clone(), marker_entry.downgrade());
+        let add = move || {
+            let (view, ui) = (&view2, &ui2);
+            let Some(e) = entry.upgrade() else { return };
+            match parse_marker(&e.text()) {
+                Some(m) => {
+                    let mut v = view.borrow_mut();
+                    v.markers.push(m);
+                    v.scene_dirty = true;
+                    drop(v);
+                    e.set_text("");
+                    redraw(ui);
+                }
+                None => console::log_warn("Marker: type three fractional coordinates and an optional label"),
+            }
+        };
+        let add = Rc::new(add);
+        let a = add.clone();
+        marker_add.connect_clicked(move |_| a());
+        marker_entry.connect_activate(move |_| add());
+        let (view, ui) = (view.clone(), ui.clone());
+        marker_clear.connect_clicked(move |_| {
+            let mut v = view.borrow_mut();
+            v.markers.clear();
+            v.scene_dirty = true;
+            drop(v);
+            redraw(&ui);
+        });
+    }
+
     // ---- section plane ----
     {
         let update = {
@@ -1389,8 +1979,12 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
         let view = view.clone();
         save_scene.connect_clicked(move |b| scene_file::save_dialog(b, view.clone()));
     }
-    {
-        let (view, ui, syncing) = (view.clone(), ui.clone(), syncing.clone());
+    // Applying a scene: switch the channel first if it records another one.
+    // The page picks the new channel up on its next poll, which resets the
+    // camera and isovalue, so the scene itself is applied after that.
+    let scene_pending = Rc::new(Cell::new(false));
+    let apply_scene: Rc<dyn Fn(scene_file::Scene)> = {
+        let (view, ui, syncing, state, pending) = (view.clone(), ui.clone(), syncing.clone(), state.clone(), scene_pending.clone());
         let widgets = scene_file::SceneWidgets {
             lobes: lobes_dd.downgrade(),
             mode: mode_dd.downgrade(),
@@ -1409,14 +2003,71 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
             k: sk.downgrade(),
             l: sl.downgrade(),
             sec_pos: sec_pos.downgrade(),
+            atom_size: atom_size.downgrade(),
+            bonds: bonds.downgrade(),
+            flip: flip.downgrade(),
+            crop_on: crop_on.downgrade(),
+            crop_center: [cx.downgrade(), cy.downgrade(), cz.downgrade()],
+            crop_size: crop_size.downgrade(),
+            crop_deps: crop_deps.clone(),
         };
-        load_scene.connect_clicked(move |b| {
-            let (view, ui, syncing, widgets) = (view.clone(), ui.clone(), syncing.clone(), widgets.clone());
-            scene_file::load_dialog(b, move |scene| {
-                scene_file::apply(&scene, &view, &widgets, &syncing);
-                sync_iso_controls(&view, &ui, &syncing);
-                remesh(&view, &ui);
+        Rc::new(move |scene: scene_file::Scene| {
+            let want = scene.channel;
+            let switching = match want {
+                Some(ch) if state.borrow().channel != ch => {
+                    let mut st = state.borrow_mut();
+                    if ch == DensityChannel::Total || st.chgcar_a.as_ref().is_some_and(|c| c.spin_polarized) {
+                        st.channel = ch;
+                        st.recompute();
+                        true
+                    } else {
+                        console::log_warn(&format!(
+                            "Scene shows the {} density, but this CHGCAR is not spin-polarised",
+                            ch.label().to_lowercase()
+                        ));
+                        false
+                    }
+                }
+                _ => false,
+            };
+            let finish = {
+                let (view, ui, syncing, widgets, pending) = (view.clone(), ui.clone(), syncing.clone(), widgets.clone(), pending.clone());
+                move || {
+                    scene_file::apply(&scene, &view, &widgets, &syncing);
+                    sync_iso_controls(&view, &ui, &syncing);
+                    remesh(&view, &ui);
+                    pending.set(false);
+                }
+            };
+            pending.set(true);
+            if !switching {
+                finish();
+                return;
+            }
+            let view = Rc::downgrade(&view);
+            let pending = pending.clone();
+            let mut tries = 0;
+            glib::timeout_add_local(Duration::from_millis(50), move || {
+                tries += 1;
+                let Some(v) = view.upgrade() else { return glib::ControlFlow::Break };
+                if v.borrow().field.as_ref().is_some_and(|f| Some(f.channel) == want) {
+                    finish();
+                    return glib::ControlFlow::Break;
+                }
+                if tries > 200 {
+                    console::log_error("Scene not applied: the density channel did not switch");
+                    pending.set(false);
+                    return glib::ControlFlow::Break;
+                }
+                glib::ControlFlow::Continue
             });
+        })
+    };
+    {
+        let apply_scene = apply_scene.clone();
+        load_scene.connect_clicked(move |b| {
+            let apply_scene = apply_scene.clone();
+            scene_file::load_dialog(b, move |scene| apply_scene(scene));
         });
     }
 
@@ -1445,7 +2096,7 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
         area.add_controller(scroll);
     }
 
-    let handle = Handle { view: view.clone(), ui: ui.clone() };
+    let handle = Handle { view: view.clone(), ui: ui.clone(), apply_scene, scene_pending };
     Parts { page, bottom, controls, handle }
 }
 
@@ -1467,7 +2118,7 @@ pub(super) fn prepare_backend(v: &mut View) {
 fn prepare_with(backend: &mut GlBackend, v: &mut View) {
     let Some(f) = v.field.as_ref() else { return };
     if v.scene_dirty {
-        upload_scene(backend, f, v.show_atoms, v.show_cell, v.scheme);
+        upload_scene(backend, f, v);
         v.scene_dirty = false;
     }
     if v.volume_dirty {
@@ -1501,14 +2152,19 @@ fn enclosed_report(f: &Field, v: &View) -> String {
     let mut out = format!("Isosurface report: {}\n", f.label);
     out += &format!("  Grid          : {} × {} × {}\n", f.dims[0], f.dims[1], f.dims[2]);
     out += &format!("  Cell volume   : {vol:.3} Å³\n");
-    out += &format!("  Net charge    : {total:.4} e  (∫ρ dV over the cell)\n");
-    out += &format!("  Isovalue      : {:.6} e/Å³\n", v.iso);
+    if f.channel == DensityChannel::Magnetization {
+        out += &format!("  Net moment    : {total:.4} μB  (∫m dV over the cell)\n");
+    } else {
+        out += &format!("  Net charge    : {total:.4} e  (∫ρ dV over the cell)\n");
+    }
+    out += &format!("  Isovalue      : {:.6} {}\n", v.iso, f.unit());
     for (slot, name) in [(0usize, "ρ > +iso"), (1, "ρ < −iso")] {
         if let Some(l) = &v.lobes_now[slot] {
             let e = l.enclosed;
             out += &format!(
-                "  {name:<13} : {:.4} e in {:.3} Å³  ({:.2}% of the cell, {:.2}% of that sign's charge), {} triangles\n",
+                "  {name:<13} : {:.4} {} in {:.3} Å³  ({:.2}% of the cell, {:.2}% of that sign's charge), {} triangles\n",
                 e.electrons,
+                f.integral_unit(),
                 e.volume,
                 e.volume_fraction * 100.0,
                 e.charge_fraction * 100.0,
@@ -1529,6 +2185,7 @@ mod tests {
             dims: [1, 1, 1],
             lattice: [[4.0, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 4.0]],
             label: String::new(),
+            channel: DensityChannel::Total,
             min,
             max,
             default_iso: 0.1,
@@ -1536,6 +2193,42 @@ mod tests {
             histogram: vec![],
             hash: 0,
         }
+    }
+
+    #[test]
+    fn crop_box_meshes_and_shows_only_its_part() {
+        let mut f = field(0.0, 1.0);
+        f.dims = [40, 40, 40];
+        f.atoms = vec![("O".into(), [0.0, 0.0, 0.0]), ("Ce".into(), [0.5, 0.5, 0.5])];
+        // Whole cell: the corner atom appears at all 8 corners.
+        let all = atom_spheres(&f, &CropState::default(), 1.0);
+        assert_eq!(all.iter().filter(|a| a.0 == "O").count(), 8);
+        // A 2 Å box around the cell corner: one O (its images meet there), no Ce.
+        let crop = CropState { on: true, center: [1.0, 1.0, 1.0], size: 2.0 };
+        let some = atom_spheres(&f, &crop, 0.5);
+        assert_eq!(some.len(), 1);
+        assert!((some[0].1 - Vector3::new(4.0, 4.0, 4.0)).norm() < 1e-9);
+        // ±1 Å = ±0.25 of a 4 Å cell = ±10 grid steps, past the cell edge.
+        let r = shown_region(&f, &crop);
+        assert_eq!((r.lo, r.hi), ([30; 3], [50; 3]));
+        let (c, _) = shown_frame(&f, &crop);
+        assert!((c - Vector3::new(4.0, 4.0, 4.0)).norm() < 1e-9);
+        assert_eq!(shown_region(&f, &CropState::default()), Region::cell(f.dims));
+    }
+
+    #[test]
+    fn markers_parse_and_repeat_inside_the_box() {
+        let m = parse_marker("0.25 0.5 1  V_O").unwrap();
+        assert_eq!((m.frac, m.label.as_str()), ([0.25, 0.5, 1.0], "V_O"));
+        assert!(parse_marker("0.25 x 1").is_none());
+        let f = field(0.0, 1.0);
+        // Out of the box: wrapped into the cell.
+        assert_eq!(marker_positions(&f, &CropState::default(), &m), vec![Vector3::new(1.0, 2.0, 0.0)]);
+        // A box wider than the cell along a holds two images.
+        let crop = CropState { on: true, center: [0.25, 0.5, 1.0], size: 5.0 };
+        assert_eq!(marker_positions(&f, &crop, &m).len(), 1);
+        let crop = CropState { on: true, center: [0.75, 0.5, 1.0], size: 4.5 };
+        assert_eq!(marker_positions(&f, &crop, &m).len(), 2);
     }
 
     #[test]
