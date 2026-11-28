@@ -4,6 +4,7 @@ pub mod interstitial;
 pub mod isosurface;
 pub mod volumetric;
 pub mod kpath;
+pub mod orbitals;
 pub mod spin_texture;
 pub mod symmetry;
 pub mod voids;

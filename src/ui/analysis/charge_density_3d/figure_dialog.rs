@@ -10,7 +10,7 @@
 // picture + vector annotations) or PNG/TIFF (dpi in the file) through
 // `rendering::figure`, plus a scene file next to it.
 
-use super::{frame_rect, prepare_backend, redraw, scene_file, Lobes, Ui, View};
+use super::{GlyphMode, frame_rect, prepare_backend, redraw, scene_file, Lobes, Ui, View};
 use crate::rendering::figure::{self, Annotations, ColorBar, Page, NATURE_MAX_HEIGHT_MM, PRESETS};
 use crate::rendering::gl::ExportRequest;
 use crate::utils::console;
@@ -86,11 +86,25 @@ fn annotations(v: &View, s: &FigureSettings, window: [f64; 4], page: &Page) -> A
     if s.key {
         let iso = figure::format_value(v.iso);
         let (sym, unit) = (f.symbol(), f.unit());
-        if v.lobes != Lobes::Negative && v.lobes_now[0].is_some() {
-            a.key.push((v.color_pos.map(|c| c as f64), format!("{sym} = +{iso} {unit}")));
+        if v.show_surfaces {
+            if v.lobes != Lobes::Negative && v.lobes_now[0].is_some() {
+                a.key.push((v.color_pos.map(|c| c as f64), format!("{sym} = +{iso} {unit}")));
+            }
+            if v.lobes != Lobes::Positive && v.lobes_now[1].is_some() {
+                a.key.push((v.color_neg.map(|c| c as f64), format!("{sym} = −{iso} {unit}")));
+            }
         }
-        if v.lobes != Lobes::Positive && v.lobes_now[1].is_some() {
-            a.key.push((v.color_neg.map(|c| c as f64), format!("{sym} = −{iso} {unit}")));
+        if v.glyphs.mode != GlyphMode::Off {
+            let shell = v.glyph_label.clone().unwrap_or_default();
+            let (what, plus, minus) = match v.glyphs.mode {
+                GlyphMode::SpinDensity => ("shell spin density", "m > 0", "m < 0"),
+                _ => ("orbital", "ψ > 0", "ψ < 0"),
+            };
+            for (mesh, color, sign) in [(&v.glyph_meshes[0], v.glyphs.color_pos, plus), (&v.glyph_meshes[1], v.glyphs.color_neg, minus)] {
+                if mesh.is_some() {
+                    a.key.push((color.map(|c| c as f64), format!("{shell} {what}, {sign}")));
+                }
+            }
         }
     }
     if s.color_bar && v.section.show {
@@ -123,26 +137,24 @@ fn annotations(v: &View, s: &FigureSettings, window: [f64; 4], page: &Page) -> A
         let pt_per_a = page.width_pt() / width_a;
         a.scale_bar = Some((figure::nice_length(width_a * 0.2), pt_per_a));
     }
-    // Marker labels, just above their cubes.
+    // Markers: rings, dots and labels in the vector layer.
     {
         let view = v.camera.view().cast::<f64>();
         let [l0, r0, b0, t0] = window;
-        let pt_per_a = page.width_pt() / (r0 - l0);
-        for m in v.markers.iter().filter(|m| !m.label.is_empty()) {
-            for c in super::marker_positions(f, &v.crop, m) {
-                let p = view * Vector4::new(c.x, c.y, c.z, 1.0);
-                if p.x < l0 || p.x > r0 || p.y < b0 || p.y > t0 {
-                    continue;
-                }
-                let x = (p.x - l0) / (r0 - l0) * page.width_pt();
-                let y = (t0 - p.y) / (t0 - b0) * page.height_pt() - super::MARKER_HALF * 1.5 * pt_per_a - s.font_pt * 0.6;
-                a.labels.push((m.label.clone(), x, y));
-            }
-        }
+        let (pw, ph) = (page.width_pt(), page.height_pt());
+        let project = |c: Vector3<f64>| {
+            let p = view * Vector4::new(c.x, c.y, c.z, 1.0);
+            ((p.x - l0) / (r0 - l0) * pw, (t0 - p.y) / (t0 - b0) * ph, p.z)
+        };
+        let visible = |x: f64, y: f64| (0.0..=pw).contains(&x) && (0.0..=ph).contains(&y);
+        let m = super::marker_annotations(f, v, &project, &visible, pw / (r0 - l0), s.font_pt, page.ink, true);
+        a.marks = m.marks;
+        a.marker_labels = m.labels;
+        a.labels.extend(m.legacy);
     }
     if s.atom_labels {
         let view = v.camera.view().cast::<f64>();
-        let spheres = super::atom_spheres(f, &v.crop, v.atom_scale);
+        let spheres = super::view_spheres(f, v);
         let proj: Vec<(String, Vector4<f64>, f64)> = spheres
             .iter()
             .map(|(el, c, r)| (el.clone(), view * Vector4::new(c.x, c.y, c.z, 1.0), *r))

@@ -12,7 +12,7 @@
 //   POV-Ray.
 
 use super::figure_dialog::FigureSettings;
-use super::{CropState, IsoMode, Lobe, Lobes, Marker, SectionState, View};
+use super::{CropState, GlyphMode, GlyphState, Highlight, HighlightMagnetic, IsoMode, Lobe, Lobes, Marker, SectionState, View};
 use crate::physics::analysis::charge_density::DensityChannel;
 use crate::utils::console;
 use gtk4::prelude::*;
@@ -62,6 +62,20 @@ pub(super) struct Scene {
     pub show_bonds: bool,
     #[serde(default)]
     pub flip: bool,
+    #[serde(default = "yes")]
+    pub show_surfaces: bool,
+    #[serde(default)]
+    pub glyphs: GlyphState,
+    /// Atoms recoloured or resized one by one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub highlight: Vec<Highlight>,
+    /// Recolour the magnetic sites (|m| from the OUTCAR above a threshold).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub highlight_magnetic: Option<HighlightMagnetic>,
+}
+
+fn yes() -> bool {
+    true
 }
 
 fn one() -> f64 {
@@ -95,6 +109,10 @@ pub(super) fn from_view(v: &View, figure: Option<FigureSettings>) -> Option<Scen
         markers: v.markers.clone(),
         show_bonds: v.show_bonds,
         flip: v.flip,
+        show_surfaces: v.show_surfaces,
+        glyphs: v.glyphs,
+        highlight: v.highlights.clone(),
+        highlight_magnetic: v.highlight_magnetic,
     })
 }
 
@@ -131,6 +149,14 @@ pub(super) struct SceneWidgets {
     pub atom_size: glib::WeakRef<gtk4::Scale>,
     pub bonds: glib::WeakRef<gtk4::CheckButton>,
     pub flip: glib::WeakRef<gtk4::CheckButton>,
+    pub surfaces: glib::WeakRef<gtk4::CheckButton>,
+    pub highlight_mag: glib::WeakRef<gtk4::CheckButton>,
+    pub orb_mode: glib::WeakRef<gtk4::DropDown>,
+    pub orb_thr: glib::WeakRef<gtk4::SpinButton>,
+    pub orb_size: glib::WeakRef<gtk4::SpinButton>,
+    pub orb_level: glib::WeakRef<gtk4::SpinButton>,
+    pub orb_cp: glib::WeakRef<gtk4::ColorButton>,
+    pub orb_cn: glib::WeakRef<gtk4::ColorButton>,
     pub crop_on: glib::WeakRef<gtk4::CheckButton>,
     pub crop_center: [glib::WeakRef<gtk4::SpinButton>; 3],
     pub crop_size: glib::WeakRef<gtk4::SpinButton>,
@@ -206,6 +232,31 @@ pub(super) fn apply(scene: &Scene, view: &Rc<RefCell<View>>, w: &SceneWidgets, s
     if let Some(x) = w.flip.upgrade() {
         x.set_active(scene.flip);
     }
+    if let Some(x) = w.surfaces.upgrade() {
+        x.set_active(scene.show_surfaces);
+    }
+    if let Some(x) = w.highlight_mag.upgrade() {
+        x.set_active(scene.highlight_magnetic.is_some());
+    }
+    let g = scene.glyphs;
+    if let Some(x) = w.orb_mode.upgrade() {
+        x.set_selected(match g.mode {
+            GlyphMode::Off => 0,
+            GlyphMode::Orbitals => 1,
+            GlyphMode::SpinDensity => 2,
+        });
+    }
+    for (x, val) in [(&w.orb_thr, g.threshold), (&w.orb_size, g.size), (&w.orb_level, g.fraction)] {
+        if let Some(x) = x.upgrade() {
+            x.set_value(val);
+        }
+    }
+    if let Some(x) = w.orb_cp.upgrade() {
+        x.set_rgba(&rgba(g.color_pos));
+    }
+    if let Some(x) = w.orb_cn.upgrade() {
+        x.set_rgba(&rgba(g.color_neg));
+    }
     for (x, c) in w.crop_center.iter().zip(scene.crop.center) {
         if let Some(x) = x.upgrade() {
             x.set_value(c);
@@ -246,6 +297,12 @@ pub(super) fn apply(scene: &Scene, view: &Rc<RefCell<View>>, w: &SceneWidgets, s
     v.atom_scale = scene.atom_scale;
     v.markers = scene.markers.clone();
     v.show_bonds = scene.show_bonds;
+    v.show_surfaces = scene.show_surfaces;
+    v.highlights = scene.highlight.clone();
+    v.highlight_magnetic = scene.highlight_magnetic;
+    v.glyphs = scene.glyphs;
+    v.glyphs_dirty = true;
+    v.meshes_dirty = true;
     v.section = scene.section;
     super::apply_iso_mode(&mut v);
     drop(v);
@@ -402,6 +459,8 @@ mod tests {
     use super::*;
     use crate::physics::analysis::isosurface::Mesh;
     use crate::physics::analysis::volumetric::Enclosed;
+    use super::super::MarkerStyle;
+    use crate::rendering::figure::Anchor;
 
     fn lobe() -> Lobe {
         Lobe {
@@ -456,9 +515,26 @@ mod tests {
             channel: Some(DensityChannel::Magnetization),
             crop: CropState { on: true, center: [0.25, 0.5, -0.1], size: 9.0 },
             atom_scale: 0.6,
-            markers: vec![Marker { frac: [0.385, 0.617, 0.615], label: "V_O".into() }],
+            markers: vec![
+                Marker::new([0.385, 0.617, 0.615], "V_O"),
+                Marker {
+                    frac: [0.5, 0.25, 0.75],
+                    label: "NN".into(),
+                    style: MarkerStyle::Ring,
+                    color: Some([0.8, 0.1, 0.5]),
+                    anchor: Anchor::Auto,
+                    label_offset: Some([2.0, -3.0]),
+                },
+            ],
             show_bonds: true,
             flip: true,
+            show_surfaces: false,
+            glyphs: GlyphState { mode: GlyphMode::Orbitals, ..Default::default() },
+            highlight: vec![
+                Highlight { frac: None, index: Some(16), color: Some([1.0, 0.0, 1.0]), scale: 1.3 },
+                Highlight { frac: Some([0.1, 0.2, 0.3]), index: None, color: None, scale: 0.8 },
+            ],
+            highlight_magnetic: Some(HighlightMagnetic { threshold: 0.7, color: [0.1, 0.2, 0.3], scale: 1.2 }),
         };
         let back: Scene = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
         assert_eq!(back.iso_mode, IsoMode::Fraction(0.5));
@@ -467,14 +543,36 @@ mod tests {
         assert_eq!(back.channel, s.channel);
         assert_eq!(back.crop, s.crop);
         assert_eq!(back.markers, s.markers);
+        assert_eq!(back.highlight, s.highlight);
+        assert_eq!(back.highlight_magnetic, s.highlight_magnetic);
         // A scene saved before these fields existed still loads.
         let mut old = serde_json::to_value(&s).unwrap();
-        for k in ["channel", "crop", "atom_scale", "markers", "show_bonds", "flip"] {
+        for k in ["channel", "crop", "atom_scale", "markers", "show_bonds", "flip", "show_surfaces", "glyphs", "highlight", "highlight_magnetic"] {
             old.as_object_mut().unwrap().remove(k);
         }
         let back: Scene = serde_json::from_value(old).unwrap();
         assert_eq!((back.channel, back.crop.on, back.atom_scale), (None, false, 1.0));
         assert!(back.markers.is_empty());
-        assert!(!back.show_bonds && !back.flip);
+        assert!(!back.show_bonds && !back.flip && back.show_surfaces);
+        assert_eq!(back.glyphs.mode, GlyphMode::Off);
+        assert!(back.highlight.is_empty() && back.highlight_magnetic.is_none());
+    }
+
+    #[test]
+    fn old_markers_stay_labelled_cubes() {
+        // A marker as written before styles existed.
+        let m: Marker = serde_json::from_str(r#"{"frac": [0.385, 0.617, 0.615], "label": "V_O"}"#).unwrap();
+        assert_eq!(m, Marker::new([0.385, 0.617, 0.615], "V_O"));
+        assert_eq!((m.style, m.anchor, m.color, m.label_offset), (MarkerStyle::Cube, Anchor::Above, None, None));
+        // New fields spelled as in the docs.
+        let m: Marker = serde_json::from_str(
+            r#"{"frac": [0, 0, 0], "label": "NN", "style": "ring", "anchor": "auto", "color": [1, 0, 0], "label_offset": [3, -2]}"#,
+        )
+        .unwrap();
+        assert_eq!((m.style, m.anchor, m.label_offset), (MarkerStyle::Ring, Anchor::Auto, Some([3.0, -2.0])));
+        let h: HighlightMagnetic = serde_json::from_str("{}").unwrap();
+        assert_eq!(h, HighlightMagnetic::default());
+        let h: Highlight = serde_json::from_str(r#"{"index": 28}"#).unwrap();
+        assert_eq!((h.index, h.scale, h.color), (Some(28), 1.0, None));
     }
 }

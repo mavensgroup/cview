@@ -13,14 +13,23 @@
 // Surfaces, their ambient occlusion and the enclosed charge are computed on
 // a worker; every control change replaces the job in flight, so the slider
 // stays live while the previous surface stays on screen.
+//
+// Orbital glyphs: with an OUTCAR of a DFT+U run (LDAUPRINT >= 1, read from
+// beside the CHGCAR or loaded by hand), each +U shell's occupied orbitals or
+// spin density are drawn as small lobed surfaces on its atom (mesh slots 2
+// and 3), from `physics::analysis::orbitals`. They are rebuilt on a worker
+// only when what they depend on changes (`GlyphKey`).
 
 mod figure_dialog;
 mod scene_file;
 
 use super::charge_density_tab::ChargeDensityState;
+use crate::io::ldau::{self, OnsiteMatrix};
 use crate::model::elements::{get_atom_cov, get_element_color, ColorScheme};
 use crate::physics::analysis::charge_density::{get_channel_data, DensityChannel};
 use crate::physics::analysis::isosurface::{isosurface, Grid, Inside, Mesh, Region};
+use crate::physics::analysis::orbitals::{build_glyph_set, GlyphKind, GlyphParams};
+use crate::rendering::figure::{Anchor, Mark, MarkerLabel};
 use crate::physics::analysis::volumetric::{
     ambient_occlusion, enclosed, iso_for_charge_fraction, log_histogram, Enclosed, Occluders, Sign,
 };
@@ -41,6 +50,8 @@ const ATOM_SCALE: f64 = 0.32;
 const IMAGE_TOL: f64 = 0.02;
 const BACKGROUND: [f32; 3] = [1.0, 1.0, 1.0];
 const HIST_BINS: usize = 160;
+/// First of the two mesh slots holding orbital glyphs (0 and 1 are the surfaces).
+const GLYPH_SLOT: usize = 2;
 /// How far (Å) neighbouring lobes and atoms still darken a surface.
 const AO_REACH: f64 = 2.5;
 const AO_RAYS: usize = 24;
@@ -249,17 +260,260 @@ impl Default for CropState {
     }
 }
 
-/// A labelled point drawn as a small wire cube: a vacancy, an interstitial
-/// site, anything without an atom of its own.
+/// A labelled point: a vacancy or interstitial site (a wire cube), or an
+/// atom to point out in a figure (a ring, a dot, or the label alone).
+/// Fields after `label` are optional in scene files; without them a marker
+/// is the labelled wire cube of older scenes.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(super) struct Marker {
     /// Fractional coordinates.
     pub(super) frac: [f64; 3],
     pub(super) label: String,
+    #[serde(default)]
+    pub(super) style: MarkerStyle,
+    /// Ring or dot colour; the annotation ink when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) color: Option<[f32; 3]>,
+    #[serde(default)]
+    pub(super) anchor: Anchor,
+    /// Shift of the label after anchoring, in points (right, down).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) label_offset: Option<[f64; 2]>,
+}
+
+impl Marker {
+    pub(super) fn new(frac: [f64; 3], label: impl Into<String>) -> Self {
+        Self { frac, label: label.into(), style: MarkerStyle::Cube, color: None, anchor: Anchor::Above, label_offset: None }
+    }
+}
+
+/// How a marker is drawn.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(super) enum MarkerStyle {
+    /// A wire cube (in the 3D scene), for empty sites.
+    #[default]
+    Cube,
+    /// The label alone.
+    None,
+    /// A thin circle around the point: 1.25 × the atom's radius when an atom
+    /// sits there, else a small fixed radius.
+    Ring,
+    /// A small filled dot.
+    Dot,
+}
+
+/// Recolour or resize one atom: by `index` (from 1, POSCAR order) or by the
+/// atom nearest `frac` (within 0.3 Å).
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub(super) struct Highlight {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) frac: Option<[f64; 3]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) index: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) color: Option<[f32; 3]>,
+    #[serde(default = "unit_scale")]
+    pub(super) scale: f64,
+}
+
+/// Highlight every site whose |moment| (from the OUTCAR) exceeds `threshold`.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub(super) struct HighlightMagnetic {
+    #[serde(default = "half")]
+    pub(super) threshold: f64,
+    #[serde(default = "magnetic_color")]
+    pub(super) color: [f32; 3],
+    #[serde(default = "unit_scale")]
+    pub(super) scale: f64,
+}
+
+impl Default for HighlightMagnetic {
+    fn default() -> Self {
+        Self { threshold: half(), color: magnetic_color(), scale: 1.0 }
+    }
+}
+
+fn unit_scale() -> f64 {
+    1.0
+}
+fn half() -> f64 {
+    0.5
+}
+fn magnetic_color() -> [f32; 3] {
+    [0.93, 0.68, 0.10]
+}
+
+/// Drawn colour and radius factor of one atom.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct AtomStyle {
+    pub(super) color: Option<[f32; 3]>,
+    pub(super) scale: f64,
+}
+
+impl Default for AtomStyle {
+    fn default() -> Self {
+        Self { color: None, scale: 1.0 }
+    }
+}
+
+/// Distance within which a point counts as sitting on an atom, Å.
+const ON_ATOM: f64 = 0.3;
+
+/// The atom (index) within `ON_ATOM` of the fractional point, if any.
+pub(super) fn atom_at(f: &Field, frac: [f64; 3]) -> Option<usize> {
+    let m = f.lattice_matrix();
+    f.atoms
+        .iter()
+        .enumerate()
+        .map(|(i, (_, a))| {
+            let d = Vector3::new(frac[0] - a[0], frac[1] - a[1], frac[2] - a[2]).map(|x| x - x.round());
+            (i, (m * d).norm())
+        })
+        .filter(|(_, d)| *d < ON_ATOM)
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(i, _)| i)
+}
+
+/// Per-atom styles from the explicit highlights and the magnetic switch
+/// (explicit ones win).
+pub(super) fn atom_styles(f: &Field, highlights: &[Highlight], magnetic: Option<&HighlightMagnetic>, moments: Option<&[f64]>) -> Vec<AtomStyle> {
+    let mut out = vec![AtomStyle::default(); f.atoms.len()];
+    if let (Some(h), Some(m)) = (magnetic, moments) {
+        for (i, s) in out.iter_mut().enumerate() {
+            if m.get(i).is_some_and(|x| x.abs() > h.threshold) {
+                *s = AtomStyle { color: Some(h.color), scale: h.scale };
+            }
+        }
+    }
+    for h in highlights {
+        let i = match (h.index, h.frac) {
+            (Some(n), _) => n.checked_sub(1),
+            (None, Some(fr)) => atom_at(f, fr),
+            _ => None,
+        };
+        if let Some(s) = i.and_then(|i| out.get_mut(i)) {
+            *s = AtomStyle { color: h.color.or(s.color), scale: h.scale };
+        }
+    }
+    out
+}
+
+/// The styles for the view's current highlights.
+pub(super) fn view_styles(f: &Field, v: &View) -> Vec<AtomStyle> {
+    atom_styles(f, &v.highlights, v.highlight_magnetic.as_ref(), v.site_moments.as_deref().map(|m| m.as_slice()))
+}
+
+/// Atom spheres as the view draws them.
+pub(super) fn view_spheres(f: &Field, v: &View) -> Vec<(String, Vector3<f64>, f64)> {
+    atom_spheres(f, &v.crop, v.atom_scale, &view_styles(f, v))
 }
 
 /// Half the edge of a marker's cube, Å.
 const MARKER_HALF: f64 = 0.4;
+/// Ring radius where no atom sits, and dot radius, Å.
+const RING_R: f64 = 0.35;
+const DOT_R: f64 = 0.12;
+
+/// Rings, dots and labels for the markers, in a 2D frame.
+#[derive(Default)]
+pub(super) struct MarkerAnnotations {
+    pub(super) marks: Vec<Mark>,
+    pub(super) labels: Vec<MarkerLabel>,
+    /// Labels of cube markers anchored above with no offset, at their
+    /// original figure position (text, x, y), so older scenes export
+    /// unchanged.
+    pub(super) legacy: Vec<(String, f64, f64)>,
+}
+
+/// Lay out the markers. `project` maps Cartesian Å to (x, y, depth) in the
+/// frame (y down; larger depth is nearer the viewer), `visible` says
+/// whether a frame point is drawn, `per_a` is frame units per Å and `font`
+/// the annotation font size. `legacy`: keep the old placement for plain
+/// cube labels (exported figures).
+#[allow(clippy::too_many_arguments)]
+pub(super) fn marker_annotations(
+    f: &Field,
+    v: &View,
+    project: &dyn Fn(Vector3<f64>) -> (f64, f64, f64),
+    visible: &dyn Fn(f64, f64) -> bool,
+    per_a: f64,
+    font: f64,
+    ink: [f64; 3],
+    legacy: bool,
+) -> MarkerAnnotations {
+    let mut out = MarkerAnnotations::default();
+    if v.markers.is_empty() {
+        return out;
+    }
+    let styles = view_styles(f, v);
+    let atoms: Vec<(usize, (f64, f64, f64), f64)> = if v.show_atoms {
+        atom_images(f, &v.crop)
+            .into_iter()
+            .zip(atom_spheres(f, &v.crop, v.atom_scale, &styles))
+            .map(|((i, p), (_, _, r))| (i, project(p), r * per_a))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    for m in &v.markers {
+        let site = atom_at(f, m.frac);
+        let site_r = site.map(|i| get_atom_cov(&f.atoms[i].0) * ATOM_SCALE * v.atom_scale * styles.get(i).map_or(1.0, |s| s.scale));
+        let color = m.color.map_or(ink, |c| c.map(|x| x as f64));
+        for p in marker_positions(f, &v.crop, m) {
+            let (x, y, z) = project(p);
+            if !visible(x, y) {
+                continue;
+            }
+            let atom_r = if v.show_atoms { site_r.map_or(0.0, |r| r * per_a) } else { 0.0 };
+            let clear = match m.style {
+                MarkerStyle::Cube => {
+                    if legacy && m.anchor == Anchor::Above && m.label_offset.is_none() {
+                        if !m.label.is_empty() {
+                            out.legacy.push((m.label.clone(), x, y - MARKER_HALF * 1.5 * per_a - font * 0.6));
+                        }
+                        continue;
+                    }
+                    MARKER_HALF * 1.5 * per_a
+                }
+                MarkerStyle::Ring => {
+                    let r = site_r.map_or(RING_R, |r| r * 1.25) * per_a;
+                    out.marks.push(Mark { x, y, r, filled: false, color });
+                    r
+                }
+                MarkerStyle::Dot => {
+                    let r = (DOT_R * per_a).max(1.0);
+                    out.marks.push(Mark { x, y, r, filled: true, color });
+                    r.max(atom_r)
+                }
+                MarkerStyle::None => atom_r,
+            };
+            if m.label.is_empty() {
+                continue;
+            }
+            // Other atoms: in front of the point, or behind it. The atom at
+            // the point itself is covered by `clear`.
+            let (mut near, mut far) = (Vec::new(), Vec::new());
+            for (i, (ax, ay, az), r) in &atoms {
+                if Some(*i) == site && (ax - x).hypot(ay - y) < 0.5 * per_a {
+                    continue;
+                }
+                if *az > z { near.push((*ax, *ay, *r)) } else { far.push((*ax, *ay, *r)) }
+            }
+            out.labels.push(MarkerLabel {
+                text: m.label.clone(),
+                x,
+                y,
+                clear,
+                anchor: m.anchor,
+                offset: m.label_offset.unwrap_or([0.0; 2]),
+                near,
+                far,
+            });
+        }
+    }
+    out
+}
 
 /// Cartesian positions of `m` on screen: its images inside the crop box, or
 /// the one in the cell.
@@ -281,15 +535,86 @@ fn marker_positions(f: &Field, crop: &CropState, m: &Marker) -> Vec<Vector3<f64>
     out
 }
 
-/// Parse "x y z [label]" (fractional coordinates).
-pub(super) fn parse_marker(text: &str) -> Option<Marker> {
-    let mut parts = text.split_whitespace();
-    let mut frac = [0.0; 3];
-    for x in &mut frac {
-        *x = parts.next()?.parse().ok()?;
-    }
+/// Parse "x y z [label]" (fractional coordinates) or "#N [label]" (atom N,
+/// from 1, in POSCAR order), as a marker of `style`. A cube keeps its label
+/// above; other styles place it beside the point.
+pub(super) fn parse_marker(text: &str, atoms: &[(String, [f64; 3])], style: MarkerStyle) -> Option<Marker> {
+    let mut parts = text.split_whitespace().peekable();
+    let frac = if let Some(n) = parts.peek().and_then(|t| t.strip_prefix('#')) {
+        let n: usize = n.parse().ok()?;
+        let fr = atoms.get(n.checked_sub(1)?)?.1;
+        parts.next();
+        fr
+    } else {
+        let mut frac = [0.0; 3];
+        for x in &mut frac {
+            *x = parts.next()?.parse().ok()?;
+        }
+        frac
+    };
     let label = parts.collect::<Vec<_>>().join(" ");
-    Some(Marker { frac, label })
+    let mut m = Marker::new(frac, label);
+    m.style = style;
+    if style != MarkerStyle::Cube {
+        m.anchor = Anchor::Auto;
+    }
+    Some(m)
+}
+
+/// What the orbital glyphs show.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub(super) enum GlyphMode {
+    Off,
+    /// Occupied eigenvectors of the occupation matrices, coloured by phase.
+    Orbitals,
+    /// Each shell's ρ↑ − ρ↓, coloured by sign.
+    SpinDensity,
+}
+
+/// Orbital glyph settings (saved in scenes).
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub(super) struct GlyphState {
+    pub(super) mode: GlyphMode,
+    /// Occupation (orbitals) or |shell moment| in μB (spin density).
+    pub(super) threshold: f64,
+    /// Isovalue as a fraction of the peak: lower gives fatter lobes.
+    pub(super) fraction: f64,
+    /// Reach of the largest lobe from its atom, Å.
+    pub(super) size: f64,
+    pub(super) color_pos: [f32; 3],
+    pub(super) color_neg: [f32; 3],
+}
+
+impl Default for GlyphState {
+    fn default() -> Self {
+        Self {
+            mode: GlyphMode::Off,
+            threshold: 0.5,
+            fraction: 0.3,
+            size: 1.4,
+            color_pos: [0.96, 0.62, 0.12],
+            color_neg: [0.16, 0.58, 0.62],
+        }
+    }
+}
+
+/// Occupation matrices read from an OUTCAR.
+pub(super) struct Orbitals {
+    pub(super) blocks: Arc<Vec<OnsiteMatrix>>,
+    pub(super) source: std::path::PathBuf,
+}
+
+/// Everything the glyph meshes depend on (colours are only materials).
+#[derive(Clone, Copy, PartialEq)]
+struct GlyphKey {
+    mode: GlyphMode,
+    threshold: f64,
+    fraction: f64,
+    size: f64,
+    crop: CropState,
+    blocks: usize,
+    lattice: [[f64; 3]; 3],
+    atoms: usize,
 }
 
 /// The fractional box on screen: the crop box, or one cell.
@@ -356,16 +681,17 @@ pub(super) fn content_points(v: &View) -> Vec<(Vector3<f64>, f64)> {
     let Some(f) = v.field.as_ref() else { return Vec::new() };
     let mut pts: Vec<(Vector3<f64>, f64)> = Vec::new();
     if v.show_atoms {
-        pts.extend(atom_spheres(f, &v.crop, v.atom_scale).into_iter().map(|(_, c, r)| (c, r)));
+        pts.extend(view_spheres(f, v).into_iter().map(|(_, c, r)| (c, r)));
     }
     if !v.crop.on {
         pts.extend(shown_corners(f, &v.crop).into_iter().map(|c| (c, 0.0)));
         return pts;
     }
-    for lobe in v.lobes_now.iter().flatten() {
-        let n = lobe.mesh.positions.len();
-        let step = (n / 20_000).max(1);
-        pts.extend(lobe.mesh.positions.iter().step_by(step).map(|p| (Vector3::new(p[0] as f64, p[1] as f64, p[2] as f64), 0.0)));
+    let surfaces = v.lobes_now.iter().flatten().filter(|_| v.show_surfaces).map(|l| &l.mesh);
+    let glyphs = v.glyph_meshes.iter().flatten().filter(|_| v.glyphs.mode != GlyphMode::Off).map(|m| m.as_ref());
+    for mesh in surfaces.chain(glyphs) {
+        let step = (mesh.positions.len() / 20_000).max(1);
+        pts.extend(mesh.positions.iter().step_by(step).map(|p| (Vector3::new(p[0] as f64, p[1] as f64, p[2] as f64), 0.0)));
     }
     for m in &v.markers {
         pts.extend(marker_positions(f, &v.crop, m).into_iter().map(|c| (c, MARKER_HALF * 1.8)));
@@ -380,16 +706,11 @@ pub(super) fn content_points(v: &View) -> Vec<(Vector3<f64>, f64)> {
 /// list, else covalent radii), coloured by halves like the main view.
 fn bond_instances(f: &Field, v: &View) -> Vec<BondInstance> {
     use crate::model::bonds::{default_rules, BondTable};
-    let spheres = atom_spheres(f, &v.crop, v.atom_scale);
+    let styles = view_styles(f, v);
+    let spheres = atom_spheres(f, &v.crop, v.atom_scale, &styles);
     let elements: Vec<String> = spheres.iter().map(|s| s.0.clone()).collect();
     let table = BondTable::from_rules(&default_rules(&elements, 1.15));
-    let colors: Vec<[f32; 3]> = spheres
-        .iter()
-        .map(|(el, _, _)| {
-            let c = get_element_color(el, v.scheme);
-            [c.0 as f32, c.1 as f32, c.2 as f32]
-        })
-        .collect();
+    let colors: Vec<[f32; 3]> = atom_images(f, &v.crop).into_iter().map(|(i, _)| atom_color(f, v, &styles, i)).collect();
     let radius = (BOND_RADIUS * v.atom_scale.min(1.0)) as f32;
     let mut out = Vec::new();
     for i in 0..spheres.len() {
@@ -459,6 +780,10 @@ pub(super) struct View {
     pub(super) section: SectionState,
     pub(super) crop: CropState,
     pub(super) markers: Vec<Marker>,
+    pub(super) highlights: Vec<Highlight>,
+    pub(super) highlight_magnetic: Option<HighlightMagnetic>,
+    /// |moment| per atom from the OUTCAR (μB), for `highlight_magnetic`.
+    pub(super) site_moments: Option<Arc<Vec<f64>>>,
     pub(super) show_bonds: bool,
     /// Show −field: a spin density with all spins reversed (a symmetry of a
     /// collinear calculation), so pairs that converged spin-down compare
@@ -482,6 +807,19 @@ pub(super) struct View {
     job: Option<task::JobHandle>,
     stats: String,
     busy: bool,
+    pub(super) show_surfaces: bool,
+    pub(super) orbitals: Option<Orbitals>,
+    pub(super) glyphs: GlyphState,
+    /// Glyph meshes (positive, negative), in Å.
+    pub(super) glyph_meshes: [Option<Arc<Mesh>>; 2],
+    /// e.g. "Ce f", for keys.
+    pub(super) glyph_label: Option<String>,
+    glyph_key: Option<GlyphKey>,
+    glyphs_dirty: bool,
+    glyph_job: Option<task::JobHandle>,
+    outcar_job: Option<task::JobHandle>,
+    glyph_busy: bool,
+    glyph_report: String,
     /// Aspect ratio of the figure being set up, drawn as a frame.
     pub(super) export_frame: Option<f64>,
 }
@@ -496,6 +834,7 @@ pub(super) struct Ui {
     lobes: glib::WeakRef<gtk4::DropDown>,
     placeholder: glib::WeakRef<gtk4::Label>,
     iso_unit: glib::WeakRef<gtk4::Label>,
+    orb_status: glib::WeakRef<gtk4::Label>,
 }
 
 /// Slider position (0..1, logarithmic) ↔ isovalue.
@@ -524,28 +863,27 @@ pub(super) fn redraw(ui: &Ui) {
 }
 
 /// Atom spheres including images on the cell faces: (element, centre, radius).
-pub(super) fn atom_spheres(f: &Field, crop: &CropState, scale: f64) -> Vec<(String, Vector3<f64>, f64)> {
+/// Atom images on screen as (atom index, Cartesian Å): every image inside
+/// the crop box, or each atom in the cell plus its copies on the cell faces.
+pub(super) fn atom_images(f: &Field, crop: &CropState) -> Vec<(usize, Vector3<f64>)> {
     let m = f.lattice_matrix();
     let mut out = Vec::new();
     if crop.on {
-        // Every image inside the box.
         let (lo, hi) = shown_box(f, crop);
         const TOL: f64 = 1e-3;
-        for (el, fr) in &f.atoms {
-            let radius = get_atom_cov(el) * ATOM_SCALE * scale;
-            let range = |i: usize| ((lo[i] - fr[i] - TOL).ceil() as i64)..=((hi[i] - fr[i] + TOL).floor() as i64);
+        for (i, (_, fr)) in f.atoms.iter().enumerate() {
+            let range = |k: usize| ((lo[k] - fr[k] - TOL).ceil() as i64)..=((hi[k] - fr[k] + TOL).floor() as i64);
             for sx in range(0) {
                 for sy in range(1) {
                     for sz in range(2) {
-                        let p = Vector3::new(fr[0] + sx as f64, fr[1] + sy as f64, fr[2] + sz as f64);
-                        out.push((el.clone(), m * p, radius));
+                        out.push((i, m * Vector3::new(fr[0] + sx as f64, fr[1] + sy as f64, fr[2] + sz as f64)));
                     }
                 }
             }
         }
         return out;
     }
-    for (el, fr) in &f.atoms {
+    for (i, (_, fr)) in f.atoms.iter().enumerate() {
         let base = Vector3::new(fr[0].rem_euclid(1.0), fr[1].rem_euclid(1.0), fr[2].rem_euclid(1.0));
         let shifts = |x: f64| -> Vec<f64> {
             let mut s = vec![0.0];
@@ -557,16 +895,37 @@ pub(super) fn atom_spheres(f: &Field, crop: &CropState, scale: f64) -> Vec<(Stri
             }
             s
         };
-        let radius = get_atom_cov(el) * ATOM_SCALE * scale;
         for sx in shifts(base.x) {
             for sy in shifts(base.y) {
                 for sz in shifts(base.z) {
-                    out.push((el.clone(), m * (base + Vector3::new(sx, sy, sz)), radius));
+                    out.push((i, m * (base + Vector3::new(sx, sy, sz))));
                 }
             }
         }
     }
     out
+}
+
+/// Atom images as (element, position, radius); `styles` (per atom, may be
+/// empty) scale the radii.
+pub(super) fn atom_spheres(f: &Field, crop: &CropState, scale: f64, styles: &[AtomStyle]) -> Vec<(String, Vector3<f64>, f64)> {
+    atom_images(f, crop)
+        .into_iter()
+        .map(|(i, p)| {
+            let el = &f.atoms[i].0;
+            let s = styles.get(i).map_or(1.0, |s| s.scale);
+            (el.clone(), p, get_atom_cov(el) * ATOM_SCALE * scale * s)
+        })
+        .collect()
+}
+
+/// Colour of atom `i` as drawn.
+fn atom_color(f: &Field, v: &View, styles: &[AtomStyle], i: usize) -> [f32; 3] {
+    if let Some(c) = styles.get(i).and_then(|s| s.color) {
+        return c;
+    }
+    let c = get_element_color(&f.atoms[i].0, v.scheme);
+    [c.0 as f32, c.1 as f32, c.2 as f32]
 }
 
 /// Show the field or its negative. The caller remeshes.
@@ -642,7 +1001,7 @@ pub(super) fn remesh(view: &Rc<RefCell<View>>, ui: &Ui) {
     let (iso, lobes, ao_on) = (v.iso as f32, v.lobes, v.ao);
     let region = shown_region(f, &v.crop);
     let spheres: Vec<([f64; 3], f64)> = if v.show_atoms {
-        atom_spheres(f, &v.crop, v.atom_scale).into_iter().map(|(_, c, r)| ([c.x, c.y, c.z], r)).collect()
+        view_spheres(f, &v).into_iter().map(|(_, c, r)| ([c.x, c.y, c.z], r)).collect()
     } else {
         Vec::new()
     };
@@ -696,18 +1055,160 @@ pub(super) fn remesh(view: &Rc<RefCell<View>>, ui: &Ui) {
     ));
     drop(v);
     redraw(ui);
+    update_glyphs(view, ui);
+}
+
+/// Rebuild the orbital glyphs if anything they depend on changed.
+pub(super) fn update_glyphs(view: &Rc<RefCell<View>>, ui: &Ui) {
+    let mut v = view.borrow_mut();
+    let key = match (v.field.as_ref(), v.orbitals.as_ref()) {
+        (Some(f), Some(o)) if v.glyphs.mode != GlyphMode::Off => Some(GlyphKey {
+            mode: v.glyphs.mode,
+            threshold: v.glyphs.threshold,
+            fraction: v.glyphs.fraction,
+            size: v.glyphs.size,
+            crop: v.crop,
+            blocks: Arc::as_ptr(&o.blocks) as usize,
+            lattice: f.lattice,
+            atoms: f.atoms.len(),
+        }),
+        _ => None,
+    };
+    if key == v.glyph_key {
+        return;
+    }
+    v.glyph_key = key;
+    let (Some(_), Some(f), Some(o)) = (key, v.field.as_ref(), v.orbitals.as_ref()) else {
+        v.glyph_meshes = [None, None];
+        v.glyphs_dirty = true;
+        v.glyph_job = None;
+        v.glyph_busy = false;
+        drop(v);
+        redraw(ui);
+        return;
+    };
+    let blocks = o.blocks.clone();
+    if blocks.iter().any(|b| b.atom >= f.atoms.len()) {
+        console::log_warn("Orbitals: the OUTCAR has more atoms than the CHGCAR; is it from the same run?");
+    }
+    let names: Vec<String> = f.atoms.iter().map(|a| a.0.clone()).collect();
+    let placements = atom_images(f, &v.crop);
+    let g = v.glyphs;
+    let params = GlyphParams {
+        kind: if g.mode == GlyphMode::SpinDensity { GlyphKind::SpinDensity } else { GlyphKind::Orbitals },
+        threshold: g.threshold,
+        fraction: g.fraction,
+        size: g.size,
+    };
+    v.glyph_busy = true;
+    let weak = Rc::downgrade(view);
+    let ui2 = ui.clone();
+    v.glyph_job = Some(task::spawn(
+        move |cancel| build_glyph_set(&blocks, &names, &placements, &params, &cancel),
+        move |set| {
+            let Some(view) = weak.upgrade() else { return };
+            {
+                let mut v = view.borrow_mut();
+                let nonempty = |m: Mesh| (!m.is_empty()).then(|| Arc::new(m));
+                v.glyph_meshes = [nonempty(set.pos), nonempty(set.neg)];
+                v.glyph_label = set.label;
+                v.glyphs_dirty = true;
+                v.glyph_busy = false;
+                if v.fit_after_mesh && !v.busy {
+                    v.needs_fit = true;
+                }
+                if v.glyph_report != set.report {
+                    console::info_report(&set.report);
+                    v.glyph_report = set.report;
+                }
+            }
+            redraw(&ui2);
+        },
+    ));
+}
+
+/// Read the occupation matrices of `path` on a worker. `quiet`: an OUTCAR
+/// without them (no DFT+U) is not worth a message.
+pub(super) fn load_outcar(view: &Rc<RefCell<View>>, ui: &Ui, path: std::path::PathBuf, quiet: bool) {
+    let weak = Rc::downgrade(view);
+    let ui2 = ui.clone();
+    let worker_path = path.clone();
+    let n_atoms = view.borrow().field.as_ref().map_or(0, |f| f.atoms.len());
+    let job = task::spawn(
+        move |_cancel| {
+            let text = std::fs::read_to_string(&worker_path).map_err(|e| e.to_string());
+            // Site moments (the last "magnetization" table), for highlighting.
+            let moments = text.as_ref().ok().filter(|_| n_atoms > 0).and_then(|t| {
+                crate::io::magmom::parse_outcar(t, n_atoms, None).pop().map(|m| m.iter().map(|v| (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt()).collect::<Vec<f64>>())
+            });
+            Some((text.and_then(|t| ldau::parse_onsite(&t)), moments))
+        },
+        move |(result, moments)| {
+            let Some(view) = weak.upgrade() else { return };
+            {
+                // Moments from the OUTCAR's table, else the +U shells' own.
+                let shells = result.as_ref().ok().filter(|b| !b.is_empty()).map(|blocks| {
+                    let mut m = vec![0.0; n_atoms.max(blocks.iter().map(|b| b.atom + 1).max().unwrap_or(0))];
+                    for b in blocks {
+                        m[b.atom] = crate::physics::analysis::orbitals::shell_moment(b).abs();
+                    }
+                    m
+                });
+                let mut v = view.borrow_mut();
+                v.site_moments = moments.or(shells).map(Arc::new);
+                v.scene_dirty = true;
+            }
+            let name = path.display().to_string();
+            let status = match result {
+                Ok(blocks) if blocks.is_empty() => {
+                    if !quiet {
+                        console::log_warn(&format!("{name}: no DFT+U occupation matrices (set LDAUPRINT = 1 or 2)"));
+                    }
+                    view.borrow_mut().orbitals = None;
+                    "No DFT+U occupation matrices in the OUTCAR".to_string()
+                }
+                Ok(blocks) => {
+                    let l = blocks[0].l;
+                    let msg = format!(
+                        "{} DFT+U {}-shell{} from {}",
+                        blocks.len(),
+                        crate::physics::analysis::orbitals::shell_letter(l),
+                        if blocks.len() == 1 { "" } else { "s" },
+                        path.file_name().unwrap_or_default().to_string_lossy()
+                    );
+                    console::log_info(&format!("{name}: {msg}"));
+                    view.borrow_mut().orbitals = Some(Orbitals { blocks: Arc::new(blocks), source: path.clone() });
+                    msg
+                }
+                Err(e) => {
+                    if !quiet {
+                        console::log_error(&format!("{name}: {e}"));
+                    }
+                    view.borrow_mut().orbitals = None;
+                    format!("Could not read the OUTCAR: {e}")
+                }
+            };
+            if let Some(l) = ui2.orb_status.upgrade() {
+                l.set_text(&status);
+            }
+            view.borrow_mut().outcar_job = None;
+            update_glyphs(&view, &ui2);
+        },
+    );
+    view.borrow_mut().outcar_job = Some(job);
 }
 
 /// Atoms and the edges of the cell (or of the crop box).
 fn upload_scene(backend: &mut GlBackend, f: &Field, v: &View) {
     let mut atoms = Vec::new();
     if v.show_atoms {
-        for (el, c, r) in atom_spheres(f, &v.crop, v.atom_scale) {
-            let col = get_element_color(&el, v.scheme);
+        let styles = view_styles(f, v);
+        let images = atom_images(f, &v.crop);
+        for ((i, _), (_, c, r)) in images.into_iter().zip(atom_spheres(f, &v.crop, v.atom_scale, &styles)) {
             atoms.push(AtomInstance {
                 pos: [c.x as f32, c.y as f32, c.z as f32],
                 radius: r as f32,
-                color: [col.0 as f32, col.1 as f32, col.2 as f32],
+                color: atom_color(f, v, &styles, i),
             });
         }
     }
@@ -729,8 +1230,9 @@ fn upload_scene(backend: &mut GlBackend, f: &Field, v: &View) {
             }
         }
     }
-    // Markers: a cube with edges along the Cartesian axes.
-    for m in &v.markers {
+    // Cube markers: edges along the Cartesian axes. Rings, dots and labels
+    // are drawn over the picture (`marker_annotations`).
+    for m in v.markers.iter().filter(|m| m.style == MarkerStyle::Cube) {
         for p in marker_positions(f, &v.crop, m) {
             let corner = |k: u32| {
                 let d = |i: u32| if k & (1 << i) == 0 { -MARKER_HALF } else { MARKER_HALF };
@@ -791,6 +1293,19 @@ fn apply_section(backend: &mut GlBackend, v: &View) {
 
 fn draw_hud(cr: &gtk4::cairo::Context, w: f64, h: f64, v: &View) {
     let Some(f) = v.field.as_ref() else { return };
+    // Markers over the picture, as in exported figures.
+    if !v.markers.is_empty() && w > 0.0 && h > 0.0 {
+        let view = v.camera.view().cast::<f64>();
+        let (hw, hh) = v.camera.half_extents(w, h);
+        let project = |p: Vector3<f64>| {
+            let q = view * nalgebra::Vector4::new(p.x, p.y, p.z, 1.0);
+            ((q.x + hw) / (2.0 * hw) * w, (hh - q.y) / (2.0 * hh) * h, q.z)
+        };
+        let visible = |x: f64, y: f64| (0.0..=w).contains(&x) && (0.0..=h).contains(&y);
+        let ink = [0.08, 0.08, 0.1];
+        let a = marker_annotations(f, v, &project, &visible, w / (2.0 * hw), 12.0, ink, false);
+        crate::rendering::figure::draw_marks_and_labels(cr, &a.marks, &a.labels, 12.0, 1.3, ink);
+    }
     cr.select_font_face("Sans", gtk4::cairo::FontSlant::Normal, gtk4::cairo::FontWeight::Normal);
     cr.set_source_rgba(0.08, 0.08, 0.1, 0.9);
     cr.set_font_size(15.0);
@@ -981,6 +1496,8 @@ impl Handle {
         v.field.is_some()
             && v.backend.is_some()
             && !v.busy
+            && !v.glyph_busy
+            && v.outcar_job.is_none()
             && !self.scene_pending.get()
             && v.lobes_now.iter().any(Option::is_some)
     }
@@ -1067,6 +1584,9 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
         section: SectionState::default(),
         crop: CropState::default(),
         markers: Vec::new(),
+        highlights: Vec::new(),
+        highlight_magnetic: None,
+        site_moments: None,
         show_bonds: true,
         flip: false,
         atom_scale: 1.0,
@@ -1082,6 +1602,17 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
         job: None,
         stats: String::new(),
         busy: false,
+        show_surfaces: true,
+        orbitals: None,
+        glyphs: GlyphState::default(),
+        glyph_meshes: [None, None],
+        glyph_label: None,
+        glyph_key: None,
+        glyphs_dirty: false,
+        glyph_job: None,
+        outcar_job: None,
+        glyph_busy: false,
+        glyph_report: String::new(),
         export_frame: None,
     }));
 
@@ -1218,7 +1749,11 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
     let bonds = gtk4::CheckButton::with_label("Bonds");
     bonds.set_active(true);
     bonds.set_tooltip_text(Some("Bonds between the atoms shown, by the default bond rules"));
+    let surfaces = gtk4::CheckButton::with_label("Surfaces");
+    surfaces.set_active(true);
+    surfaces.set_tooltip_text(Some("The density isosurfaces (off to show only atoms and orbital glyphs)"));
     let toggles = gtk4::Box::new(Orientation::Horizontal, 12);
+    toggles.append(&surfaces);
     toggles.append(&atoms);
     toggles.append(&bonds);
     toggles.append(&cell);
@@ -1270,17 +1805,28 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
     atom_row.set_halign(Align::End);
     b_disp.append(&atom_row);
     let marker_entry = gtk4::Entry::new();
-    marker_entry.set_placeholder_text(Some("x y z label (fractional), e.g. 0.25 0.25 0.25 V_O"));
-    marker_entry.set_tooltip_text(Some("Mark a point without an atom (a vacancy, say): a small wire cube, labelled in exported figures"));
+    marker_entry.set_placeholder_text(Some("x y z label, or #N label (atom N)"));
+    marker_entry.set_tooltip_text(Some(
+        "Mark a point by fractional coordinates (\"0.25 0.25 0.25 V_O\") or an atom by its number in file order (\"#16 NN\"). \
+         _ starts a subscript in the label.",
+    ));
     marker_entry.set_hexpand(true);
     let marker_add = gtk4::Button::with_label("Mark");
     let marker_clear = gtk4::Button::with_label("Clear");
     marker_clear.set_tooltip_text(Some("Remove all markers"));
+    let marker_style = gtk4::DropDown::from_strings(&["Cube", "Label only", "Ring", "Dot"]);
+    marker_style.set_tooltip_text(Some(
+        "Cube: a wire cube for an empty site, label above. Ring, Dot, Label only: for atoms, label placed beside the point clear of the atoms in front.",
+    ));
     let marker_row = gtk4::Box::new(Orientation::Horizontal, 4);
     marker_row.append(&marker_entry);
+    marker_row.append(&marker_style);
     marker_row.append(&marker_add);
     marker_row.append(&marker_clear);
     b_disp.append(&marker_row);
+    let highlight_mag = gtk4::CheckButton::with_label("Highlight magnetic sites");
+    highlight_mag.set_tooltip_text(Some("Colour the atoms whose moment in the OUTCAR exceeds 0.5 μB (e.g. Ce³⁺ polarons)"));
+    b_disp.append(&highlight_mag);
     // Enabled only while cropping.
     let crop_deps: Vec<glib::WeakRef<gtk4::Widget>> =
         [centre_row.upcast_ref::<gtk4::Widget>(), crop_size.upcast_ref(), atom_row.upcast_ref()]
@@ -1307,6 +1853,45 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
     b_disp.append(&views);
     controls.append(&g_disp);
 
+    let (g_orb, b_orb) = section("Orbitals (DFT+U)");
+    let orb_status = gtk4::Label::new(Some("No OUTCAR loaded"));
+    orb_status.add_css_class("dim-label");
+    orb_status.set_wrap(true);
+    orb_status.set_xalign(0.0);
+    b_orb.append(&orb_status);
+    let orb_mode = gtk4::DropDown::from_strings(&["Off", "Occupied orbitals", "Shell spin density"]);
+    orb_mode.set_tooltip_text(Some(
+        "Occupied orbitals: eigenvectors of the on-site occupation matrices, coloured by the sign of ψ. \
+         Shell spin density: ρ↑ − ρ↓ of each +U shell, coloured by sign.",
+    ));
+    b_orb.append(&row("Show", &orb_mode));
+    let orb_thr = gtk4::SpinButton::with_range(0.0, 2.0, 0.05);
+    orb_thr.set_digits(2);
+    orb_thr.set_value(GlyphState::default().threshold);
+    orb_thr.set_tooltip_text(Some("Least occupation of an orbital, or least |moment| (μB) of a shell, to draw"));
+    b_orb.append(&row("Threshold", &orb_thr));
+    let orb_size = gtk4::SpinButton::with_range(0.3, 4.0, 0.1);
+    orb_size.set_digits(2);
+    orb_size.set_value(GlyphState::default().size);
+    orb_size.set_tooltip_text(Some("How far the largest lobe reaches from its atom"));
+    b_orb.append(&row("Size (Å)", &orb_size));
+    let orb_level = gtk4::SpinButton::with_range(0.05, 0.9, 0.05);
+    orb_level.set_digits(2);
+    orb_level.set_value(GlyphState::default().fraction);
+    orb_level.set_tooltip_text(Some("Isovalue as a fraction of the peak; lower gives fatter lobes"));
+    b_orb.append(&row("Lobe level", &orb_level));
+    let rgba = |c: [f32; 3]| gtk4::gdk::RGBA::new(c[0], c[1], c[2], 1.0);
+    let orb_cp = gtk4::ColorButton::with_rgba(&rgba(GlyphState::default().color_pos));
+    let orb_cn = gtk4::ColorButton::with_rgba(&rgba(GlyphState::default().color_neg));
+    let orb_colors = gtk4::Box::new(Orientation::Horizontal, 4);
+    orb_colors.append(&orb_cp);
+    orb_colors.append(&orb_cn);
+    b_orb.append(&row("Colours (+, −)", &orb_colors));
+    let orb_load = gtk4::Button::with_label("Load OUTCAR…");
+    orb_load.set_tooltip_text(Some("A VASP OUTCAR of a DFT+U run with LDAUPRINT = 1 or 2 (the one beside the CHGCAR is read automatically)"));
+    b_orb.append(&orb_load);
+    controls.append(&g_orb);
+
     let (g_out, b_out) = section("Report and export");
     let report = gtk4::Button::with_label("Report Enclosed Charge");
     let figure = gtk4::Button::with_label("Export Figure…");
@@ -1329,6 +1914,7 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
         lobes: lobes_dd.downgrade(),
         placeholder: placeholder.downgrade(),
         iso_unit: iso_unit.downgrade(),
+        orb_status: orb_status.downgrade(),
     };
     // Set while code moves controls itself, so handlers ignore it.
     let syncing = Rc::new(Cell::new(false));
@@ -1444,6 +2030,14 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
             }
             if let (Some(l), Some(f)) = (ui.iso_unit.upgrade(), view.borrow().field.as_ref()) {
                 l.set_text(f.unit());
+            }
+            // The OUTCAR beside a newly loaded CHGCAR, for orbital glyphs.
+            let sibling = state.borrow().path_a.as_deref().and_then(ldau::sibling_outcar);
+            if let Some(p) = sibling {
+                let known = view.borrow().orbitals.as_ref().is_some_and(|o| o.source == p);
+                if !known && view.borrow().outcar_job.is_none() {
+                    load_outcar(&view, &ui, p, true);
+                }
             }
             {
                 let v = view.borrow();
@@ -1783,13 +2377,100 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
         });
     }
 
+    // ---- surfaces toggle and orbital glyphs ----
+    {
+        let (view, ui, syncing) = (view.clone(), ui.clone(), syncing.clone());
+        surfaces.connect_toggled(move |c| {
+            if syncing.get() {
+                return;
+            }
+            let mut v = view.borrow_mut();
+            v.show_surfaces = c.is_active();
+            v.meshes_dirty = true;
+            drop(v);
+            redraw(&ui);
+        });
+    }
+    {
+        let read = {
+            let (m, t, sz, lv, cp, cn) =
+                (orb_mode.downgrade(), orb_thr.downgrade(), orb_size.downgrade(), orb_level.downgrade(), orb_cp.downgrade(), orb_cn.downgrade());
+            move || -> Option<GlyphState> {
+                let c = |b: &gtk4::ColorButton| {
+                    let r = b.rgba();
+                    [r.red(), r.green(), r.blue()]
+                };
+                Some(GlyphState {
+                    mode: match m.upgrade()?.selected() {
+                        1 => GlyphMode::Orbitals,
+                        2 => GlyphMode::SpinDensity,
+                        _ => GlyphMode::Off,
+                    },
+                    threshold: t.upgrade()?.value(),
+                    fraction: lv.upgrade()?.value(),
+                    size: sz.upgrade()?.value(),
+                    color_pos: c(&cp.upgrade()?),
+                    color_neg: c(&cn.upgrade()?),
+                })
+            }
+        };
+        let update = {
+            let (view, ui, syncing) = (view.clone(), ui.clone(), syncing.clone());
+            Rc::new(move || {
+                if syncing.get() {
+                    return;
+                }
+                let Some(g) = read() else { return };
+                {
+                    let mut v = view.borrow_mut();
+                    v.glyphs = g;
+                    v.glyphs_dirty = true;
+                }
+                update_glyphs(&view, &ui);
+                redraw(&ui);
+            })
+        };
+        let u = update.clone();
+        orb_mode.connect_selected_notify(move |_| u());
+        for s in [&orb_thr, &orb_size, &orb_level] {
+            let u = update.clone();
+            s.connect_value_changed(move |_| u());
+        }
+        for b in [&orb_cp, &orb_cn] {
+            let u = update.clone();
+            b.connect_color_set(move |_| u());
+        }
+        let (view, ui) = (view.clone(), ui.clone());
+        orb_load.connect_clicked(move |b| {
+            let parent = b.root().and_then(|r| r.downcast::<gtk4::Window>().ok());
+            let d = gtk4::FileChooserNative::new(Some("Open OUTCAR"), parent.as_ref(), gtk4::FileChooserAction::Open, Some("Open"), Some("Cancel"));
+            let (view, ui) = (view.clone(), ui.clone());
+            d.connect_response(move |d, r| {
+                if r == gtk4::ResponseType::Accept {
+                    if let Some(path) = d.file().and_then(|f| f.path()) {
+                        load_outcar(&view, &ui, path, false);
+                    }
+                }
+                d.destroy();
+            });
+            crate::utils::file_chooser::show(&d);
+        });
+    }
+
     // ---- markers ----
     {
-        let (view2, ui2, entry) = (view.clone(), ui.clone(), marker_entry.downgrade());
+        let (view2, ui2, entry, style_w) = (view.clone(), ui.clone(), marker_entry.downgrade(), marker_style.downgrade());
         let add = move || {
             let (view, ui) = (&view2, &ui2);
             let Some(e) = entry.upgrade() else { return };
-            match parse_marker(&e.text()) {
+            let style = match style_w.upgrade().map_or(0, |d| d.selected()) {
+                1 => MarkerStyle::None,
+                2 => MarkerStyle::Ring,
+                3 => MarkerStyle::Dot,
+                _ => MarkerStyle::Cube,
+            };
+            let atoms = view.borrow().field.as_ref().map(|f| f.atoms.clone()).unwrap_or_default();
+            match parse_marker(&e.text(), &atoms, style) {
                 Some(m) => {
                     let mut v = view.borrow_mut();
                     v.markers.push(m);
@@ -1798,13 +2479,27 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
                     e.set_text("");
                     redraw(ui);
                 }
-                None => console::log_warn("Marker: type three fractional coordinates and an optional label"),
+                None => console::log_warn("Marker: type three fractional coordinates or #N (an atom number), then an optional label"),
             }
         };
         let add = Rc::new(add);
         let a = add.clone();
         marker_add.connect_clicked(move |_| a());
         marker_entry.connect_activate(move |_| add());
+        let (view3, ui3, syncing3) = (view.clone(), ui.clone(), syncing.clone());
+        highlight_mag.connect_toggled(move |c| {
+            if syncing3.get() {
+                return;
+            }
+            let mut v = view3.borrow_mut();
+            v.highlight_magnetic = c.is_active().then(HighlightMagnetic::default);
+            if c.is_active() && v.site_moments.is_none() {
+                console::log_warn("Highlight magnetic sites: no moments yet (load the run's OUTCAR)");
+            }
+            v.scene_dirty = true;
+            drop(v);
+            redraw(&ui3);
+        });
         let (view, ui) = (view.clone(), ui.clone());
         marker_clear.connect_clicked(move |_| {
             let mut v = view.borrow_mut();
@@ -2006,6 +2701,14 @@ pub fn build(state: Rc<RefCell<ChargeDensityState>>, scheme: ColorScheme) -> Par
             atom_size: atom_size.downgrade(),
             bonds: bonds.downgrade(),
             flip: flip.downgrade(),
+            surfaces: surfaces.downgrade(),
+            highlight_mag: highlight_mag.downgrade(),
+            orb_mode: orb_mode.downgrade(),
+            orb_thr: orb_thr.downgrade(),
+            orb_size: orb_size.downgrade(),
+            orb_level: orb_level.downgrade(),
+            orb_cp: orb_cp.downgrade(),
+            orb_cn: orb_cn.downgrade(),
             crop_on: crop_on.downgrade(),
             crop_center: [cx.downgrade(), cy.downgrade(), cz.downgrade()],
             crop_size: crop_size.downgrade(),
@@ -2129,7 +2832,7 @@ fn prepare_with(backend: &mut GlBackend, v: &mut View) {
         for (slot, lobe) in v.lobes_now.iter().enumerate() {
             backend.set_mesh(
                 slot,
-                lobe.as_ref().map(|l| MeshData {
+                lobe.as_ref().filter(|_| v.show_surfaces).map(|l| MeshData {
                     positions: &l.mesh.positions,
                     normals: &l.mesh.normals,
                     indices: &l.mesh.indices,
@@ -2139,8 +2842,24 @@ fn prepare_with(backend: &mut GlBackend, v: &mut View) {
         }
         v.meshes_dirty = false;
     }
+    if v.glyphs_dirty {
+        for (k, mesh) in v.glyph_meshes.iter().enumerate() {
+            backend.set_mesh(
+                GLYPH_SLOT + k,
+                mesh.as_ref().filter(|_| v.glyphs.mode != GlyphMode::Off).map(|m| MeshData {
+                    positions: &m.positions,
+                    normals: &m.normals,
+                    indices: &m.indices,
+                    ao: None,
+                }),
+            );
+        }
+        v.glyphs_dirty = false;
+    }
     backend.set_mesh_material(0, Material { color: v.color_pos, opacity: v.opacity });
     backend.set_mesh_material(1, Material { color: v.color_neg, opacity: v.opacity });
+    backend.set_mesh_material(GLYPH_SLOT, Material { color: v.glyphs.color_pos, opacity: 1.0 });
+    backend.set_mesh_material(GLYPH_SLOT + 1, Material { color: v.glyphs.color_neg, opacity: 1.0 });
     backend.set_ao_strength(if v.ao { v.ao_strength } else { 0.0 });
     apply_section(backend, v);
 }
@@ -2196,16 +2915,39 @@ mod tests {
     }
 
     #[test]
+    fn markers_and_highlights_find_their_atom() {
+        let mut f = field(0.0, 1.0);
+        f.atoms = vec![("O".into(), [0.0, 0.0, 0.0]), ("Ce".into(), [0.5, 0.5, 0.5])];
+        // Exactly on, 0.2 Å off, across the cell edge, and 0.5 Å off (4 Å cell).
+        assert_eq!(atom_at(&f, [0.5, 0.5, 0.5]), Some(1));
+        assert_eq!(atom_at(&f, [0.55, 0.5, 0.5]), Some(1));
+        assert_eq!(atom_at(&f, [0.99, 0.0, 1.0]), Some(0));
+        assert_eq!(atom_at(&f, [0.625, 0.5, 0.5]), None);
+        // Magnetic switch, then an explicit highlight on top of it.
+        let mag = HighlightMagnetic { threshold: 0.5, color: [1.0, 0.0, 0.0], scale: 1.0 };
+        let hl = [Highlight { frac: Some([0.0, 0.0, 0.01]), index: None, color: None, scale: 1.5 }];
+        let s = atom_styles(&f, &hl, Some(&mag), Some(&[0.6, 0.98]));
+        assert_eq!(s[0], AtomStyle { color: Some([1.0, 0.0, 0.0]), scale: 1.5 });
+        assert_eq!(s[1], AtomStyle { color: Some([1.0, 0.0, 0.0]), scale: 1.0 });
+        let s = atom_styles(&f, &[Highlight { frac: None, index: Some(2), color: Some([0.0, 1.0, 0.0]), scale: 1.0 }], None, None);
+        assert_eq!((s[0], s[1].color), (AtomStyle::default(), Some([0.0, 1.0, 0.0])));
+        // Highlight scale reaches the drawn radius.
+        let r = atom_spheres(&f, &CropState::default(), 1.0, &[AtomStyle::default(), AtomStyle { color: None, scale: 2.0 }]);
+        let ce = r.iter().find(|a| a.0 == "Ce").unwrap().2;
+        assert!((ce - 2.0 * get_atom_cov("Ce") * ATOM_SCALE).abs() < 1e-12);
+    }
+
+    #[test]
     fn crop_box_meshes_and_shows_only_its_part() {
         let mut f = field(0.0, 1.0);
         f.dims = [40, 40, 40];
         f.atoms = vec![("O".into(), [0.0, 0.0, 0.0]), ("Ce".into(), [0.5, 0.5, 0.5])];
         // Whole cell: the corner atom appears at all 8 corners.
-        let all = atom_spheres(&f, &CropState::default(), 1.0);
+        let all = atom_spheres(&f, &CropState::default(), 1.0, &[]);
         assert_eq!(all.iter().filter(|a| a.0 == "O").count(), 8);
         // A 2 Å box around the cell corner: one O (its images meet there), no Ce.
         let crop = CropState { on: true, center: [1.0, 1.0, 1.0], size: 2.0 };
-        let some = atom_spheres(&f, &crop, 0.5);
+        let some = atom_spheres(&f, &crop, 0.5, &[]);
         assert_eq!(some.len(), 1);
         assert!((some[0].1 - Vector3::new(4.0, 4.0, 4.0)).norm() < 1e-9);
         // ±1 Å = ±0.25 of a 4 Å cell = ±10 grid steps, past the cell edge.
@@ -2218,9 +2960,16 @@ mod tests {
 
     #[test]
     fn markers_parse_and_repeat_inside_the_box() {
-        let m = parse_marker("0.25 0.5 1  V_O").unwrap();
+        let m = parse_marker("0.25 0.5 1  V_O", &[], MarkerStyle::Cube).unwrap();
         assert_eq!((m.frac, m.label.as_str()), ([0.25, 0.5, 1.0], "V_O"));
-        assert!(parse_marker("0.25 x 1").is_none());
+        assert_eq!((m.style, m.anchor), (MarkerStyle::Cube, Anchor::Above));
+        assert!(parse_marker("0.25 x 1", &[], MarkerStyle::Cube).is_none());
+        // By atom number; atoms get their label beside them.
+        let atoms = vec![("O".to_string(), [0.0; 3]), ("Ce".to_string(), [0.5, 0.25, 0.125])];
+        let on_atom = parse_marker("#2 Ce_NN", &atoms, MarkerStyle::Ring).unwrap();
+        assert_eq!((on_atom.frac, on_atom.label.as_str(), on_atom.anchor), ([0.5, 0.25, 0.125], "Ce_NN", Anchor::Auto));
+        assert!(parse_marker("#3 x", &atoms, MarkerStyle::Ring).is_none());
+        assert!(parse_marker("#0", &atoms, MarkerStyle::Ring).is_none());
         let f = field(0.0, 1.0);
         // Out of the box: wrapped into the cell.
         assert_eq!(marker_positions(&f, &CropState::default(), &m), vec![Vector3::new(1.0, 2.0, 0.0)]);

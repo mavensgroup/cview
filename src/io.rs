@@ -2,6 +2,7 @@
 pub mod chgcar;
 pub mod cif;
 pub mod lammps_dump;
+pub mod ldau;
 pub mod magmom;
 pub mod ovf;
 pub mod pdb;

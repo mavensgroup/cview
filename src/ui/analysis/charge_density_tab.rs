@@ -28,6 +28,8 @@ pub struct ChargeDensityState {
     pub chgcar_a: Option<ChgcarData>,
     pub chgcar_b: Option<ChgcarData>,
     pub difference_mode: bool,
+    /// Where the primary CHGCAR was read from (to find the OUTCAR beside it).
+    pub path_a: Option<std::path::PathBuf>,
     pub channel: DensityChannel,
     pub plane: SlicePlane,
     pub slice_pos: f64,
@@ -57,6 +59,7 @@ impl Default for ChargeDensityState {
             chgcar_a: None,
             chgcar_b: None,
             difference_mode: false,
+            path_a: None,
             channel: DensityChannel::Total,
             plane: SlicePlane::XY,
             slice_pos: 0.5,
@@ -1377,7 +1380,8 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
         let rd = radio_down.clone();
         let rm = radio_mag.clone();
         let da = drawing_area.clone();
-        Rc::new(move |data: ChgcarData, filename: String| {
+        Rc::new(move |data: ChgcarData, path: std::path::PathBuf| {
+            let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
             let spin = data.spin_polarized;
             let n_atoms = data.atoms.len();
             status.set_text(&format!(
@@ -1402,6 +1406,7 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
                     s.channel = DensityChannel::Total;
                 }
                 s.chgcar_a = Some(data);
+                s.path_a = Some(path);
                 s.recompute();
             }
             da.queue_draw();
@@ -1422,13 +1427,8 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
             native.connect_response(move |d, resp| {
                 if resp == ResponseType::Accept {
                     if let Some(path) = d.file().and_then(|f| f.path()) {
-                        let filename = path
-                            .file_name()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                            .to_string();
                         match chgcar::parse(path.to_str().unwrap_or("")) {
-                            Ok(data) => inject2(data, filename),
+                            Ok(data) => inject2(data, path.clone()),
                             Err(e) => {
                                 let parent_win = btn_weak
                                     .upgrade()
@@ -2051,9 +2051,8 @@ pub fn build_with(app_state: Option<Rc<RefCell<crate::state::AppState>>>, initia
     }
 
     if let Some(path) = initial {
-        let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
         match chgcar::parse(&path.to_string_lossy()) {
-            Ok(data) => inject_primary(data, name),
+            Ok(data) => inject_primary(data, path.to_path_buf()),
             Err(e) => crate::utils::console::log_error(&format!("Could not read {}: {e}", path.display())),
         }
         if let Some(out) = std::env::var_os("CVIEW_CD_FIGURE") {

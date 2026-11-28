@@ -59,7 +59,23 @@ Surfaces are watertight (no pinholes) and continue seamlessly across cell faces.
 * **Atom size** scales the spheres, so small atoms leave the surfaces around them visible.
 * **Reverse sign** shows −ρ. For a spin density this is the same state with every spin reversed, which a collinear calculation cannot tell apart, so a configuration that converged spin-down can be drawn in the same colours as a spin-up one.
 * **Crop to a box** shows only the atoms and surfaces inside a box around a point, for example a vacancy and the polarons next to it. Give the centre in fractional coordinates, or type an atom's number (in file order, as in VASP's OUTCAR) and press **Centre on atom**. **Box edge** is in Å; the box may reach past the cell, and periodic images fill it. With **Cell** ticked, the box's edges are drawn instead of the cell's. The view (and an exported figure) is framed on what the box contains, not on its corners.
-* **Markers** label a point that has no atom: type `x y z label` in fractional coordinates (e.g. `0.385 0.617 0.615 V_O`) and press **Mark**. Each marker is drawn as a small wire cube, and its label is written above it in exported figures; `_` starts a subscript, so `V_O` prints as V with a subscript O.
+* **Markers** label a point or an atom. Type `x y z label` in fractional coordinates (e.g. `0.385 0.617 0.615 V_O`), or `#N label` for atom N in file order (e.g. `#16 NN`). Then pick a style and press **Mark**. `_` starts a subscript, so `V_O` prints as V with a subscript O.
+  * **Cube**: a small wire cube with the label above it, for an empty site such as a vacancy.
+  * **Ring**: a thin circle around the point, 1.25 × the atom's radius when an atom sits there (within 0.3 Å), otherwise a small fixed radius.
+  * **Dot**: a small filled dot.
+  * **Label only**: just the text.
+
+  Ring, dot and label-only markers place their label beside the point, outside the atom drawn there, on the side that covers the fewest other labels and the fewest atoms in front of it. Rings, dots and labels are drawn over the picture on screen and, in exported PDF and SVG figures, as vector paths and text with a thin white halo. Cube markers keep the look they always had.
+* **Highlight magnetic sites** colours the atoms whose moment in the run's OUTCAR exceeds 0.5 μB, for example the Ce³⁺ of a polaron. The moments come from the OUTCAR's last magnetization table, or from the DFT+U shells when it has none. Individual atoms can be recoloured or resized in a scene file (see below).
+
+### Orbital glyphs (DFT+U)
+For a VASP DFT+U run written with `LDAUPRINT = 1` or `2`, CView reads the on-site occupation matrices from the OUTCAR and draws each +U shell's orbitals on its atom. The OUTCAR next to the CHGCAR is read automatically; **Load OUTCAR…** picks another one. Only collinear runs are supported.
+
+* **Occupied orbitals** diagonalises each spin's occupation matrix and draws every eigenvector with occupation at least the **Threshold** (0.5 by default). A localised electron, such as the 4f¹ of a Ce³⁺ polaron or an e_g electron of Mn³⁺, shows up as one occupation near 1. The two colours are the two signs of ψ.
+* **Shell spin density** draws ρ↑ − ρ↓ of each shell whose moment is at least the threshold (in μB), all at one isovalue, so weaker shells look smaller. Use it for orbital order when no single orbital stands out.
+* **Size** is how far the largest lobe reaches from its atom (Å). **Lobe level** is the isovalue as a fraction of the peak: lower values give fatter lobes, and higher values leave only the dominant ones.
+* The shapes use VASP's real spherical harmonics in the cell's Cartesian frame, with a Slater-type radial part, so they look like textbook orbitals. The orientation is exact, but the size is schematic. The orbitals drawn, with their occupations and coefficients, are listed in Structure Info.
+* Untick **Surfaces** (Display) to show the glyphs without the density isosurfaces. Exported figures list the glyph colours in the key, and scene files keep the glyph settings.
 
 ### Numbers
 The view lists the electrons and volume inside each lobe (the moment in μB for the magnetization density). **Report Enclosed Charge** writes them, the isovalue and ∫ρ dV over the cell to Structure Info.
@@ -71,7 +87,7 @@ The view lists the electrons and volume inside each lobe (the moment in μB for 
 * Fonts and lines are set in points at final size (Nature asks for 5–7 pt); the dialog warns if a Nature figure is taller than 170 mm.
 * **PDF / SVG** contain the picture at full resolution with the title, isovalue key, colour bar, axes, scale bar and panel letter as vector text, editable in Illustrator or Inkscape. **PNG / TIFF** carry the dpi, so they open at print size.
 * Transparency is rendered exactly, edges are supersampled, and the background can be transparent for assembling multi-panel figures.
-* A scene file (`.cview.json`) is saved next to every figure. **Load Scene…** restores the view, isovalue, density channel, sign, crop box, markers, bonds and all other settings, so a requested change is quick to make.
+* A scene file (`.cview.json`) is saved next to every figure. **Load Scene…** restores the view, isovalue, density channel, sign, crop box, markers, highlights, bonds and all other settings, so a requested change is quick to make.
 
 #### Figures from a script
 A scene file can also be rendered without clicking, which is useful for making the same figure from several calculations:
@@ -81,6 +97,30 @@ CVIEW_CD_FIGURE=spin.pdf CVIEW_CD_SCENE=spin.cview.json cview path/to/CHGCAR
 ```
 
 CView opens the CHGCAR on the 3D page, applies the scene (its channel, view, crop, markers and figure settings), writes the figure and its scene file, and quits. Scene files are JSON, so a script can write them; the `rotation` is a quaternion `[x, y, z, w]` that turns Cartesian coordinates into screen coordinates (x right, y down, z into the screen).
+
+Scene keys for labelling a figure. All of them are optional; a scene without them looks as it always did.
+
+| Key | Meaning |
+|---|---|
+| `markers[].frac`, `label` | Fractional position and text (`_` starts a subscript). |
+| `markers[].style` | `"cube"` (default), `"ring"`, `"dot"` or `"none"` (label only). |
+| `markers[].color` | `[r, g, b]` (0–1) for a ring or dot; the annotation ink by default. |
+| `markers[].anchor` | `"above"` (default), `"below"`, `"left"`, `"right"` or `"auto"`. |
+| `markers[].label_offset` | `[dx, dy]` in points, right and down, applied after anchoring. |
+| `highlight[]` | `{"index": N}` (from 1, file order) or `{"frac": [x, y, z]}` (the atom within 0.3 Å), with optional `"color": [r, g, b]` and `"scale"` (radius factor, default 1). |
+| `highlight_magnetic` | `{"threshold": 0.5, "color": [r, g, b], "scale": 1}`: every site with \|m\| above the threshold. |
+
+For example, to label the vacancy, the two Ce³⁺ of a polaron pair and one O ligand, with the Ce³⁺ drawn in gold:
+
+```json
+"markers": [
+  {"frac": [0.385, 0.617, 0.615], "label": "V_O"},
+  {"frac": [0.506, 0.758, 0.756], "label": "Ce_NN", "style": "ring", "anchor": "auto"},
+  {"frac": [0.244, 0.759, 0.494], "label": "Ce_NN", "style": "ring", "anchor": "auto"},
+  {"frac": [0.630, 0.880, 0.880], "label": "O_trans", "style": "ring", "anchor": "auto"}
+],
+"highlight_magnetic": {"threshold": 0.5, "color": [0.93, 0.68, 0.10]}
+```
 
 **Export Mesh** writes the surfaces as OBJ (with colours) or PLY for Blender or ParaView.
 

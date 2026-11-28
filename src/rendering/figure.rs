@@ -109,6 +109,150 @@ pub struct Annotations {
     pub color_bar: Option<ColorBar>,
     /// (text, x_pt, y_pt).
     pub labels: Vec<(String, f64, f64)>,
+    /// Rings and dots around marked points (drawn before `marker_labels`).
+    pub marks: Vec<Mark>,
+    /// Marker labels, placed beside their point by `place_labels`.
+    pub marker_labels: Vec<MarkerLabel>,
+}
+
+/// A circle drawn over the picture, in page points (y down).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Mark {
+    pub x: f64,
+    pub y: f64,
+    pub r: f64,
+    /// A filled dot, or a ring of the figure's line width.
+    pub filled: bool,
+    pub color: [f64; 3],
+}
+
+/// Where a marker label goes relative to its point.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Anchor {
+    #[default]
+    Above,
+    Below,
+    Left,
+    Right,
+    /// The side with the fewest overlaps with other labels and nearer atoms.
+    Auto,
+}
+
+/// A label for a marked point, in page points (y down).
+#[derive(Clone, Debug, PartialEq)]
+pub struct MarkerLabel {
+    pub text: String,
+    pub x: f64,
+    pub y: f64,
+    /// Radius around the point the label keeps clear of (the atom or ring).
+    pub clear: f64,
+    pub anchor: Anchor,
+    /// Shift after anchoring, (right, down).
+    pub offset: [f64; 2],
+    /// Discs (x, y, r) of atoms in front of the point: covering them counts
+    /// against a side when the anchor is `Auto`.
+    pub near: Vec<(f64, f64, f64)>,
+    /// Discs of the other atoms: a tie-breaker for `Auto`.
+    pub far: Vec<(f64, f64, f64)>,
+}
+
+/// Text box (x0, y0, x1, y1), y down.
+pub type LabelBox = [f64; 4];
+
+fn box_hits_disc(b: &LabelBox, (cx, cy, r): (f64, f64, f64)) -> bool {
+    let dx = cx - cx.clamp(b[0], b[2]);
+    let dy = cy - cy.clamp(b[1], b[3]);
+    dx * dx + dy * dy < r * r
+}
+
+fn boxes_overlap(a: &LabelBox, b: &LabelBox) -> bool {
+    a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]
+}
+
+/// Place `labels` in order (earlier ones are obstacles for later ones).
+/// `measure` gives a text's (width, height); `gap` separates a label from
+/// its point's clear radius.
+pub fn place_labels(labels: &[MarkerLabel], measure: &dyn Fn(&str) -> (f64, f64), gap: f64) -> Vec<LabelBox> {
+    let mut placed: Vec<LabelBox> = Vec::new();
+    for l in labels {
+        let (w, h) = measure(&l.text);
+        let d = l.clear + gap;
+        let side = |a: Anchor| -> LabelBox {
+            let (x0, y0) = match a {
+                Anchor::Above | Anchor::Auto => (l.x - w / 2.0, l.y - d - h),
+                Anchor::Below => (l.x - w / 2.0, l.y + d),
+                Anchor::Left => (l.x - d - w, l.y - h / 2.0),
+                Anchor::Right => (l.x + d, l.y - h / 2.0),
+            };
+            [x0, y0, x0 + w, y0 + h]
+        };
+        let b = if l.anchor == Anchor::Auto {
+            let score = |b: &LabelBox| {
+                let hard = placed.iter().filter(|p| boxes_overlap(p, b)).count() + l.near.iter().filter(|c| box_hits_disc(b, **c)).count();
+                let soft = l.far.iter().filter(|c| box_hits_disc(b, **c)).count();
+                (hard, soft)
+            };
+            [Anchor::Right, Anchor::Left, Anchor::Above, Anchor::Below]
+                .into_iter()
+                .map(side)
+                .enumerate()
+                .min_by_key(|(k, b)| (score(b), *k))
+                .map(|(_, b)| b)
+                .expect("four sides")
+        } else {
+            side(l.anchor)
+        };
+        let b = [b[0] + l.offset[0], b[1] + l.offset[1], b[2] + l.offset[0], b[3] + l.offset[1]];
+        placed.push(b);
+    }
+    placed
+}
+
+/// Width of a label with subscripts at `size`.
+fn label_width(cr: &cairo::Context, text: &str, size: f64) -> f64 {
+    subscript_runs(text).iter().map(|(t, sub)| text_width(cr, t, if *sub { size * SUB_SCALE } else { size })).sum()
+}
+
+/// Draw `text` with subscripts, starting at (x, baseline), over a thin
+/// white halo so it reads on top of surfaces and atoms (all vector).
+fn show_label(cr: &cairo::Context, text: &str, x: f64, baseline: f64, size: f64, ink: [f64; 3]) {
+    let mut x = x;
+    cr.new_path();
+    for (t, sub) in subscript_runs(text) {
+        let sz = if sub { size * SUB_SCALE } else { size };
+        set_font(cr, sz, false, false);
+        cr.move_to(x, baseline + if sub { size * 0.25 } else { 0.0 });
+        cr.text_path(&t);
+        x += text_width(cr, &t, sz);
+    }
+    cr.set_line_join(cairo::LineJoin::Round);
+    cr.set_line_width(size * 0.22);
+    cr.set_source_rgba(1.0, 1.0, 1.0, 0.85);
+    let _ = cr.stroke_preserve();
+    cr.set_source_rgb(ink[0], ink[1], ink[2]);
+    let _ = cr.fill();
+}
+
+/// Rings, dots and marker labels: shared by exported figures (points) and
+/// the on-screen overlay (pixels). `size` is the label font size.
+pub fn draw_marks_and_labels(cr: &cairo::Context, marks: &[Mark], labels: &[MarkerLabel], size: f64, line: f64, ink: [f64; 3]) {
+    for m in marks {
+        cr.new_path();
+        cr.arc(m.x, m.y, m.r, 0.0, std::f64::consts::TAU);
+        cr.set_source_rgb(m.color[0], m.color[1], m.color[2]);
+        if m.filled {
+            let _ = cr.fill();
+        } else {
+            cr.set_line_width(line);
+            let _ = cr.stroke();
+        }
+    }
+    // Clear of the ring's stroke, with a visible gap.
+    let boxes = place_labels(labels, &|t: &str| (label_width(cr, t, size), size), size * 0.4 + line);
+    for (l, b) in labels.iter().zip(&boxes) {
+        show_label(cr, &l.text, b[0], b[1] + 0.8 * size, size, ink);
+    }
 }
 
 /// Physical layout of the output.
@@ -289,6 +433,8 @@ pub fn draw_annotations(cr: &cairo::Context, a: &Annotations, page: &Page) {
         cr.move_to(x1 - bar / 2.0 - tw / 2.0, yb - f * 0.5);
         let _ = cr.show_text(&text);
     }
+
+    draw_marks_and_labels(cr, &a.marks, &a.marker_labels, f * 0.9, page.line_pt, ink);
 
     // Atom and marker labels; "V_O" sets the O as a subscript.
     for (text, lx, ly) in &a.labels {
@@ -572,6 +718,35 @@ fn write_tiff(path: &Path, surf: cairo::ImageSurface, dpi: f64) -> io::Result<()
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn label(x: f64, anchor: Anchor) -> MarkerLabel {
+        MarkerLabel { text: "Ce".into(), x, y: 50.0, clear: 5.0, anchor, offset: [0.0; 2], near: vec![], far: vec![] }
+    }
+
+    #[test]
+    fn labels_sit_on_their_anchor_side() {
+        let m = |t: &str| (t.len() as f64 * 4.0, 7.0);
+        let b = place_labels(&[label(10.0, Anchor::Above), label(10.0, Anchor::Right)], &m, 1.0);
+        assert_eq!(b[0], [6.0, 37.0, 14.0, 44.0]); // centred, 6 pt above the point
+        assert_eq!(b[1], [16.0, 46.5, 24.0, 53.5]);
+        let mut l = label(10.0, Anchor::Below);
+        l.offset = [2.0, -1.0];
+        assert_eq!(place_labels(&[l], &m, 1.0)[0], [8.0, 55.0, 16.0, 62.0]);
+    }
+
+    #[test]
+    fn auto_label_avoids_a_nearer_atom() {
+        let m = |t: &str| (t.len() as f64 * 4.0, 7.0);
+        // A nearer atom right of the point: the label must not go there.
+        let mut l = label(10.0, Anchor::Auto);
+        l.near = vec![(22.0, 50.0, 8.0)];
+        let b = place_labels(&[l.clone()], &m, 1.0)[0];
+        assert!(!box_hits_disc(&b, (22.0, 50.0, 8.0)), "{b:?}");
+        assert!(b[2] <= 10.0, "should go left: {b:?}");
+        // A second label at the same point avoids the first.
+        let b2 = place_labels(&[l.clone(), l], &m, 1.0);
+        assert!(!boxes_overlap(&b2[0], &b2[1]));
+    }
 
     #[test]
     fn labels_split_into_subscripts() {
