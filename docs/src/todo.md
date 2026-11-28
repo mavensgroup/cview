@@ -31,6 +31,11 @@ open an issue before starting on one so work isn't duplicated.
 - [x] **OVF snapshot series** play in the Trajectory Player, with moment
   arrows and a colour map.
 - [x] Topological charge Q and skyrmion radius per frame in the Trajectory Player.
+- [x] **DFT+U orbitals** in the 3D charge density window: occupied orbitals or
+  shell spin density from the OUTCAR occupation matrices, drawn on their atoms.
+- [x] **Defect figures** in the 3D charge density window: crop box, bonds,
+  markers (cube, ring, dot) with labels placed clear of the atoms, atom
+  highlights, and figures rendered from a scene file without the GUI.
 - [ ] Build skyrmion lattices; m_z = 0 isosurface for thick films.
 - [ ] Magnetic moment arrows in the 3D charge density window.
 - [ ] **Thermal ellipsoids** from anisotropic displacement parameters in CIF.
